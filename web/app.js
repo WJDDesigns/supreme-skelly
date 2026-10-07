@@ -1,5 +1,7 @@
 // Supreme Skelly web UI. No build step: plain ES modules talking to /api.
 
+import { skeletonSVG, updateSkeleton } from "./skeleton.js";
+
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, props = {}, ...kids) => {
   const n = Object.assign(document.createElement(tag), props);
@@ -7,7 +9,7 @@ const el = (tag, props = {}, ...kids) => {
   return n;
 };
 
-const state = { device: null, profile: null, moves: new Set(), light: "all", mode: null, eye: null, scene: null };
+const state = { device: null, profile: null, look: null, moves: new Set(), light: "all", mode: null, eye: null, scene: null };
 
 // One-tap looks. `effect` is matched to whatever this prop calls its modes.
 const SCENES = [
@@ -26,15 +28,6 @@ const EYE_EMOJI = {
   "Rainbow Swirl": "🌀", "Flames": "🔥", "Gold Star": "⭐", "Skull and Crossbones": "☠️", "Fireworks": "🎆",
   "American Flag": "🇺🇸", "Heart": "❤️", "Four-Leaf Clover": "🍀", "Snowflake": "❄️", "Confetti": "🎉",
   "Ice Eye": "🧊", "Peppermint Swirl": "🍬", "Cyber Eye": "🤖",
-};
-// What each eye looks like on the drawn Skelly: iris colour, plus a symbol for picture eyes.
-const EYE_LOOK = {
-  "Blue Eyes": ["#3fa9ff"], "Hazel Eyes": ["#9a7b3c"], "Green Eyes": ["#3ddc6b"], "Orange Eyes": ["#ff8a1a"],
-  "Red Eyes": ["#ff2b2b"], "Grey Eyes": ["#b9c0c8"], "Brown Eyes": ["#7a4a22"], "Yellow Reptile Eye": ["#ffd400"],
-  "Orange Reptile Eye": ["#ff7a00"], "Rainbow Swirl": ["#c04bff"], "Flames": ["#ff5a00"], "Gold Star": ["#ffd700"],
-  "Skull and Crossbones": ["#f4f4f4"], "Fireworks": ["#ff3fb4"], "American Flag": ["#3c5bd6"], "Heart": ["#ff2a55"],
-  "Four-Leaf Clover": ["#2fbf4a"], "Snowflake": ["#bfe9ff"], "Confetti": ["#ff9f1a"], "Ice Eye": ["#8fe3ff"],
-  "Peppermint Swirl": ["#ff3b3b"], "Cyber Eye": ["#00ffd5"],
 };
 const EFFECT_LABELS = { solid: ["Static"], pulse: ["Pulsing"], strobe: ["Strobe", "Flickering"], flicker: ["Flickering"] };
 
@@ -77,47 +70,41 @@ function toast(msg, error = false) {
 }
 
 // ---------- tabs ----------
-const TABS = ["home", "looks", "moves", "sounds", "settings"];
-document.querySelectorAll(".nav button").forEach((b) =>
+document.querySelectorAll(".tabs button").forEach((b) =>
   b.addEventListener("click", () => showTab(b.dataset.tab)),
 );
 function showTab(name) {
-  if (!TABS.includes(name)) name = "home";
-  document.querySelectorAll(".nav button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((s) => (s.hidden = s.id !== `tab-${name}`));
   try { localStorage.setItem("tab", name); } catch {}
-  window.scrollTo({ top: 0 });
 }
-let savedTab = "home";
-try { savedTab = localStorage.getItem("tab") || "home"; } catch {}
-showTab(savedTab);
-for (const id of [".look-card", "#tab-moves", "#tab-sounds"]) $(id)?.classList.add("disabled-when-offline");
-$("#conn-pill").addEventListener("click", () => showTab("home"));
+try { showTab(localStorage.getItem("tab") || "device"); } catch { showTab("device"); }
+$("#tab-controls").classList.add("disabled-when-offline");
+$("#tab-sounds").classList.add("disabled-when-offline");
+$("#conn-pill").addEventListener("click", () => showTab("device"));
 
-// Desktop: collapse the sidebar to icons.
-const setCollapsed = (on) => {
-  document.body.classList.toggle("collapsed", on);
-  try { localStorage.setItem("collapsed", on ? "1" : ""); } catch {}
-};
-try { setCollapsed(!!localStorage.getItem("collapsed")); } catch {}
-$("#side-toggle").addEventListener("click", () => setCollapsed(!document.body.classList.contains("collapsed")));
+// ---------- live skeleton ----------
+$("#skelly-preview").innerHTML = skeletonSVG();
+function renderPreview() {
+  const root = $("#skelly-preview");
+  updateSkeleton(root, { look: state.look, moves: state.moves, profile: state.profile });
+  const cs = getComputedStyle(root);
+  $("#lg-chest").style.background = cs.getPropertyValue("--chest");
+  $("#lg-chest").style.color = cs.getPropertyValue("--chest");
+  $("#lg-mouth").style.background = cs.getPropertyValue("--mouth");
+  $("#lg-mouth").style.color = cs.getPropertyValue("--mouth");
+  const eye = state.profile?.eyes?.find((e) => e.value === state.look?.eye);
+  $("#lg-eye").textContent = eye ? eye.label : "Eyes";
+  const fx = root.querySelector(".chest-fx").dataset.effect;
+  $("#preview-fx").textContent = fx === "cycle" ? "Party" : fx ? fx[0].toUpperCase() + fx.slice(1) : "Static";
+  const parts = [...state.moves].map((k) => state.profile?.movements?.find((m) => m.key === k)?.label).filter(Boolean);
+  $("#preview-sub").textContent = parts.length ? `Moving: ${parts.join(", ")}` : "What Skelly looks like right now";
+}
 
-// Greeting and the little bar charts on the stat cards.
+// ---------- header ----------
 const hour = new Date().getHours();
-$("#greeting").textContent = hour < 5 ? "Up past midnight? Spooky." : hour < 12 ? "Good morning, boneyard boss!"
-  : hour < 18 ? "Good afternoon, boneyard boss!" : "Good evening, boneyard boss!";
-document.querySelectorAll(".bars").forEach((b, n) => {
-  for (let i = 0; i < 9; i++) {
-    const h = 20 + ((i * 37 + n * 13) % 50) + i * 4;
-    b.append(Object.assign(document.createElement("i"), { style: `height:${Math.min(h, 100)}%` }));
-  }
-});
-
-// The look page shows a live copy of the drawn Skelly, zoomed in on him.
-const preview = $("#skelly-art").cloneNode(true);
-preview.removeAttribute("id");
-preview.setAttribute("viewBox", "148 6 164 196");
-$("#look-preview").append(preview);
+$("#greeting").textContent = `Good ${hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"}!`;
+$("#foot-host").textContent = location.host;
 
 // ---------- rendering ----------
 const STATUS_TEXT = {
@@ -136,51 +123,34 @@ function renderDevice() {
   $("#conn-text").textContent = online ? d.name || "Connected" : STATUS_TEXT[d.status] || d.status;
   $("#device-card").hidden = !(online || d.status === "reconnecting");
   $("#dev-name").textContent = d.name || "Device";
-  $("#dev-model").textContent = state.profile?.name ?? "Unknown model";
+  $("#dev-model").textContent = state.profile?.name ?? "–";
   $("#dev-version").textContent = d.version ?? "–";
   $("#dev-bt").textContent = d.bt_name ?? "–";
   $("#dev-free").textContent = d.free_kb != null ? `${(d.free_kb / 1024).toFixed(1)} MB` : "–";
-  $("#live-btn").textContent = d.live_mode ? "Live Mode is on" : "Turn on Live Mode";
+  $("#live-btn").lastChild.textContent = d.live_mode ? "Live Mode is on" : "Turn on Live Mode";
+  renderStats(d, online);
   $("#live-btn").disabled = !online || d.live_mode;
   if (d.volume != null && document.activeElement !== $("#vol")) {
     $("#vol").value = d.volume;
     $("#vol-out").textContent = d.volume;
   }
-  $("#stat-conn").textContent = online ? "Online" : d.status === "disconnected" ? "Offline" : "Waking…";
-  $("#stat-conn-sub").textContent = online ? (d.name || "Connected") : STATUS_TEXT[d.status] || d.status;
-  $("#stat-vol").textContent = d.volume ?? "–";
-  $("#stat-sounds").textContent = online ? (d.files?.length ?? 0) : "–";
-  $("#stat-free").textContent = d.free_kb != null ? `${(d.free_kb / 1024).toFixed(1)} MB` : "–";
-  $("#stat-fw").textContent = `Firmware ${d.version ?? "–"}`;
-  $("#side-status").textContent = online ? `${d.name || "Skelly"} is awake and listening.`
-    : d.status === "disconnected" ? "Skelly is resting in his crypt." : "Rattling the bones…";
   if (d.error) toast(d.error, true);
   renderFiles();
 }
 
-// ---------- drawn Skelly ----------
-function lightColor(look, key) {
-  const lights = look?.lights ?? {};
-  const e = { ...(lights.all ?? {}), ...(lights[key] ?? {}) };
-  if (!e.rgb || e.brightness === 0) return e.brightness === 0 ? "transparent" : null;
-  const a = (e.brightness ?? 255) / 255;
-  return `rgba(${e.rgb.join(",")},${Math.max(a, .25).toFixed(2)})`;
-}
-function renderLook(look) {
-  if (!look) return;
-  state.look = look;
-  const root = document.documentElement.style;
-  const chest = lightColor(look, "chest") ?? lightColor(look, "light") ?? lightColor(look, "lantern");
-  const head = lightColor(look, "head");
-  if (chest) root.setProperty("--glow", chest);
-  root.setProperty("--mouth", head ?? chest ?? "transparent");
-  const eye = state.profile?.eyes.find((x) => x.value === look.eye);
-  if (eye) {
-    state.eye = eye.value;
-    root.setProperty("--eye", (EYE_LOOK[eye.label] ?? ["#3ddc6b"])[0]);
-  }
-  const cyc = Object.values(look.lights ?? {}).some((e) => e.cycle);
-  document.body.classList.toggle("party-mode", cyc);
+function renderStats(d, online) {
+  const files = d.files ?? [];
+  $("#st-conn").textContent = online ? "Online" : d.status === "disconnected" ? "Offline" : "Waiting";
+  $("#st-conn-sub").textContent = online ? d.name || "Connected" : STATUS_TEXT[d.status] || d.status;
+  $("#st-vol").textContent = d.volume ?? "–";
+  $("#st-sounds").textContent = online ? files.length : "–";
+  $("#st-free").textContent = d.free_kb != null ? `${(d.free_kb / 1024).toFixed(1)} MB free` : "on Skelly";
+  $("#st-fw").textContent = d.version ?? "–";
+  $("#st-model").textContent = state.profile?.name ?? "No device";
+  document.querySelectorAll(".stat").forEach((s) => s.classList.toggle("off", !online));
+  $("#side-live").innerHTML = d.live_mode
+    ? "<b>On.</b> Skelly is a Bluetooth speaker right now."
+    : "Turns Skelly into a Bluetooth speaker for talking through him.";
 }
 
 function renderProfile() {
@@ -215,7 +185,6 @@ function renderProfile() {
           await api("/eye", { eye: e.value });
           state.eye = e.value;
           renderProfile();
-          renderLook({ ...(state.look ?? { lights: {} }), eye: e.value });
         }),
       );
       return b;
@@ -237,6 +206,7 @@ function renderProfile() {
     ),
   );
   renderScenes();
+  renderPreview();
 }
 
 function modeFor(effect) {
@@ -287,15 +257,19 @@ function renderFiles() {
     return;
   }
   list.replaceChildren(
-    ...files.map((f) => {
+    ...files.map((f, i) => {
       const playing = state.device.playing === f.serial;
-      const btn = el("button", { className: playing ? "btn" : "btn primary", textContent: playing ? "Stop" : "Play" });
+      const btn = el("button", { className: playing ? "btn outline" : "btn primary", textContent: playing ? "Stop" : "Play" });
       btn.addEventListener("click", () => run(btn, () => api(`/files/${f.serial}/play`, { play: !playing })));
+      const end = el("div", { className: "end" });
+      if (playing) end.append(el("span", { className: "badge orange", textContent: "Playing" }));
+      end.append(btn);
       const li = el("li", {},
-        el("span", { className: "num", textContent: String(f.serial).padStart(2, "0") }),
-        el("div", { className: "grow" }, el("div", { textContent: f.name || `Sound ${f.serial}` }),
-          el("div", { className: "meta", textContent: state.device.playing === f.serial ? "Playing…" : "Stored on Skelly" })),
-        btn);
+        el("div", { className: "who" },
+          el("span", { className: "num", textContent: String(i + 1).padStart(2, "0") }),
+          el("div", {}, el("div", { className: "name", textContent: f.name || `Sound ${f.serial}` }),
+            el("div", { className: "meta", textContent: `Sound #${f.serial}` }))),
+        end);
       li.classList.toggle("playing", playing);
       return li;
     }),
@@ -319,17 +293,24 @@ $("#scan-btn").addEventListener("click", (ev) =>
           run(b, async () => {
             await api("/connect", { address: f.address, name: f.name });
             list.replaceChildren();
-            showTab("looks");
+            showTab("controls");
           }, `Connected to ${f.name}`),
         );
+        const strength = f.rssi == null ? null : f.rssi > -65 ? ["Strong", "green"] : f.rssi > -80 ? ["Fair", "orange"] : ["Weak", "red"];
+        const end = el("div", { className: "end" });
+        if (strength) end.append(el("span", { className: `badge ${strength[1]}`, textContent: strength[0] }));
+        end.append(b);
         return el("li", {},
-          el("div", {}, el("div", { textContent: f.name }),
-            el("div", { className: "meta", textContent: `${f.address}${f.rssi != null ? ` · ${f.rssi} dBm` : ""}` })),
-          b);
+          el("div", { className: "who" },
+            el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-skull"/></svg>' }),
+            el("div", {}, el("div", { className: "name", textContent: f.name }),
+              el("div", { className: "meta", textContent: `${f.address}${f.rssi != null ? ` · ${f.rssi} dBm` : ""}` }))),
+          end);
       }),
     );
   }),
 );
+$("#head-scan").addEventListener("click", () => { showTab("device"); $("#scan-btn").click(); });
 $("#disconnect-btn").addEventListener("click", (ev) => run(ev.currentTarget, () => api("/disconnect", {})));
 $("#live-btn").addEventListener("click", (ev) => run(ev.currentTarget, () => api("/live-mode", {}), "Live Mode on"));
 
@@ -396,10 +377,10 @@ $("#files-refresh").addEventListener("click", (ev) => run(ev.currentTarget, () =
 function applySnapshot(s) {
   state.device = s.device;
   state.profile = s.profile;
+  state.look = s.look ?? null;
   renderSettings(s.settings);
   renderProfile();
   renderDevice();
-  renderLook(s.look);
 }
 
 function connectEvents() {
@@ -409,7 +390,7 @@ function connectEvents() {
     if (msg.type === "snapshot") applySnapshot(msg.data);
     else if (msg.type === "state") { state.device = msg.data; renderDevice(); }
     else if (msg.type === "settings") renderSettings(msg.data);
-    else if (msg.type === "look") renderLook(msg.data);
+    else if (msg.type === "look") { state.look = msg.data; renderPreview(); }
     else if (msg.type === "profile") { state.profile = msg.data; state.moves.clear(); state.mode = null; renderProfile(); }
   };
   ws.onclose = () => setTimeout(connectEvents, 1500);
