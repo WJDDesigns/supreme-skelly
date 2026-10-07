@@ -126,6 +126,11 @@ class Mic:
             yield pcm
 
 
+# How long Skelly's voice keeps coming out after the last chunk is handed to PipeWire:
+# the pacat buffer (80 ms) plus Bluetooth A2DP's own delay, which is often 200-400 ms.
+ECHO_TAIL_S = 0.7
+
+
 class Speaker:
     """Plays 16-bit mono PCM on a PipeWire sink and knows roughly when it's still talking."""
 
@@ -139,6 +144,12 @@ class Speaker:
     @property
     def speaking(self) -> bool:
         return time.monotonic() < self._busy_until
+
+    @property
+    def echoing(self) -> bool:
+        """Still audible in the room: speech written to the sink keeps playing for a while
+        after we've handed it over (PipeWire buffer plus Bluetooth delay)."""
+        return time.monotonic() < self._busy_until + ECHO_TAIL_S
 
     async def _open(self, rate: int) -> None:
         await _stop(self._proc)

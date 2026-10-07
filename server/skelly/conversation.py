@@ -119,6 +119,13 @@ class ConversationState:
     transcript: list[dict] = field(default_factory=list)
 
 
+# Interrupting Skelly: the mic must beat his own echo, after a moment to learn how loud it is.
+INTERRUPT_MIN = 0.03
+INTERRUPT_FRAMES = 5  # 100 ms of a louder voice, so a clatter doesn't count
+ECHO_LEARN_S = 0.6  # each time he starts talking, listen to his echo before allowing interruptions
+ECHO_HOLD_S = 0.4  # his echo level halves this fast once he goes quieter
+
+
 class MissingKey(ValueError):
     pass
 
@@ -285,30 +292,50 @@ class Conversation:
                 return
 
     async def _mic_frames(self, cfg: ConversationConfig, rate: int, speaker: Speaker) -> AsyncIterator[bytes]:
-        """Mic chunks, with Skelly's own voice blanked out if asked, and the level published."""
+        """Mic chunks, with Skelly's own voice blanked out if asked, and the level published.
+
+        While he talks (and for a moment after, while Bluetooth is still playing the tail of his
+        sentence) the mic is muted. With interruptions on, it opens only for someone clearly
+        louder than his own voice at the mic: his echo level is learned from the first moments
+        of each sentence and followed as it rises and falls, before anything may get through.
+        """
         last_pub = 0.0
-        echo = 0.0  # how loud Skelly's own voice is at the mic
+        echo = 0.0  # loudest recent level of Skelly's own voice at the mic
+        peak = 0.0  # loudest he's been this time he's talking
         loud = 0
         gate_until = 0.0
-        # 0 = only shouting gets through, 100 = normal talking does
-        factor = 4.0 - 3.0 * (cfg.interrupt_sensitivity / 100)
+        talk_started = 0.0
+        # 0 = only shouting gets through, 100 = talking a bit louder than him does
+        factor = 3.0 - 1.6 * (max(0, min(100, cfg.interrupt_sensitivity)) / 100)
+        frame_s = FRAME_MS / 1000
+        decay = 0.5 ** (frame_s / ECHO_HOLD_S)
         async with Mic(rate, cfg.mic or None, cfg.mic_gain / 100) as mic:
             async for pcm in mic:
                 now = time.monotonic()
-                deaf = cfg.ignore_mic_while_talking and speaker.speaking
-                if deaf and cfg.allow_interrupt:
-                    # Pass the mic through only when someone is clearly louder than Skelly's echo.
-                    if mic.level > max(0.02, echo * factor):
+                level = mic.level
+                hearing_self = cfg.ignore_mic_while_talking and speaker.echoing
+                if not hearing_self:
+                    deaf, echo, peak, loud, talk_started = False, 0.0, 0.0, 0, 0.0
+                elif not cfg.allow_interrupt:
+                    deaf = True
+                else:
+                    talk_started = talk_started or now
+                    gate_open = now < gate_until
+                    settled = now - talk_started > ECHO_LEARN_S
+                    # After a pause his echo estimate has fallen, but his next word will be as loud
+                    # as his loudest so far: never let the bar drop far below that.
+                    if settled and level > max(INTERRUPT_MIN, max(echo, peak * 0.8) * factor):
                         loud += 1
+                        if loud >= INTERRUPT_FRAMES:
+                            gate_until = now + 0.8
+                            gate_open = True
                     else:
                         loud = 0
-                        echo = 0.9 * echo + 0.1 * mic.level
-                    if loud >= 3:  # 60 ms of it: a person, not a click
-                        gate_until = now + 0.8
-                    deaf = now > gate_until
-                elif not speaker.speaking:
-                    echo, loud = echo * 0.98, 0
-                self.state.level = 0.0 if deaf else mic.level
+                    if not gate_open and not loud:  # follow his echo: jump up with it, fall back slowly
+                        echo = max(level, echo * decay)
+                        peak = max(peak, level)
+                    deaf = not gate_open
+                self.state.level = 0.0 if deaf else level
                 if now - last_pub > 0.15:
                     last_pub = now
                     self.svc.bus.publish("conversation_level", {"level": round(self.state.level, 3)})
@@ -395,6 +422,8 @@ class Conversation:
                         await speaker.play(pcm, out_rate)
                     elif kind == "agent_response":
                         self._say("skelly", msg["agent_response_event"]["agent_response"])
+                        # A reminder before every next turn; the rule fades as the chat grows.
+                        await ws.send(json.dumps({"type": "contextual_update", "text": f"Reminder: {rule}"}))
                     elif kind == "user_transcript":
                         self._say("user", msg["user_transcription_event"]["user_transcript"])
                         self._set("thinking")
