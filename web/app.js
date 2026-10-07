@@ -674,6 +674,8 @@ function connectEvents() {
     else if (msg.type === "vision_motion") setMotion(msg.data.motion);
     else if (msg.type === "visitor") onVisitor(msg.data);
     else if (msg.type === "meters") setMeters(msg.data);
+    else if (msg.type === "protect") renderProtectState(msg.data);
+    else if (msg.type === "protect_faces") msg.data.faces.filter((f) => f.name).forEach((f) => toast(`👋 Protect sees ${f.name}`));
     else if (msg.type === "faces") renderFaceBoxes(msg.data.faces);
     else if (msg.type === "face_learned") { toast(`🦴 Skelly will remember ${msg.data.name}`); loadPeople(); }
     else if (msg.type === "face_pending") toast(`Heard "${msg.data.name}". Step closer to the camera so Skelly can see your face.`);
@@ -934,6 +936,7 @@ document.querySelectorAll("#cam-source button").forEach((b) => b.addEventListene
 document.querySelectorAll("[data-vcfg]").forEach((i) =>
   i.addEventListener(i.type === "range" ? "input" : "change", () =>
     saveVisionCfg({ [i.dataset.vcfg]: i.type === "checkbox" ? i.checked : ["rotate", "sensitivity"].includes(i.dataset.vcfg) ? Number(i.value) : i.value })));
+document.querySelectorAll('input[type="text"][data-vcfg]').forEach((i) => i.addEventListener("input", () => saveVisionCfg({ [i.dataset.vcfg]: i.value.trim() })));
 $("#cam-toggle").addEventListener("click", (ev) =>
   run(ev.currentTarget, async () => renderVision(await api(ev.currentTarget.textContent.includes("Stop") ? "/vision/stop" : "/vision/start", {}))));
 $("#cam-describe").addEventListener("click", (ev) =>
@@ -1356,3 +1359,43 @@ $("#scene-file").addEventListener("change", async (e) => {
   $("#scene-hint").textContent = "Skelly will use these in his next conversation.";
 });
 loadScene();
+
+// ---------- UniFi Protect ----------
+let protectCams = [];
+function renderProtectState(p) {
+  const b = $("#protect-badge");
+  b.textContent = p.connected ? "Connected" : visionCfg.protect ? "Connecting…" : "Off";
+  b.className = `badge ${p.connected ? "green" : ""}`;
+  const last = p.recent?.at(-1);
+  $("#protect-sub").textContent = p.error && !p.connected ? `Problem: ${p.error}` : last ? `Last: ${last.objects.join(", ") || last.type} on ${last.camera}, ${ago(last.ts)}` : "Use Protect's own person and face detections";
+}
+function renderProtectCams() {
+  const on = new Set(visionCfg.protect_cameras ?? []);
+  $("#protect-cams").replaceChildren(...(protectCams.length ? protectCams.map((c) => {
+    const chip = el("button", { className: "chip", textContent: `${c.name}${c.faces ? " · face" : ""}` });
+    chip.setAttribute("aria-pressed", on.has(c.id));
+    chip.disabled = !c.online;
+    chip.addEventListener("click", () => {
+      on.has(c.id) ? on.delete(c.id) : on.add(c.id);
+      saveVisionCfg({ protect_cameras: [...on] });
+      renderProtectCams();
+    });
+    return chip;
+  }) : [el("span", { className: "muted", textContent: "Add the UniFi Protect API key in Settings and the console address above." })]));
+}
+async function loadProtect() {
+  try {
+    const p = await api("/protect");
+    protectCams = p.cameras;
+    renderProtectCams();
+    renderProtectState(p);
+    if (p.camera_error) $("#protect-sub").textContent = p.camera_error;
+  } catch {}
+}
+$("#protect-refresh").addEventListener("click", (ev) => run(ev.currentTarget, loadProtect));
+$("#protect-find").addEventListener("click", (ev) => run(ev.currentTarget, async () => {
+  const r = await api("/protect/find-skelly", {});
+  toast(`Found Skelly in ${r.found} of ${r.of} cameras; he's ignored there now`);
+}));
+loadProtect();
+setInterval(() => { if (!$("#tab-vision").hidden) loadProtect(); }, 20000);

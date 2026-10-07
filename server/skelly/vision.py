@@ -36,6 +36,10 @@ class VisionConfig:
     auto_converse: bool = False  # start a conversation when a visitor is confirmed
     cooldown_s: int = 90  # minimum gap between visitor events
     faces: bool = False  # recognise faces and remember people who say their name
+    # UniFi Protect: use its person/face detections on these cameras (sharper faces, no extra load)
+    protect: bool = False
+    protect_host: str = ""
+    protect_cameras: list = field(default_factory=list)
     # What shouldn't set Skelly off, checked by the AI (see IGNORABLE).
     ignore: list = field(default_factory=lambda: ["vehicles", "weather", "passers"])
     # Areas to ignore, per camera ("rtsp" or the USB device path): [[x, y, w, h], ...] as
@@ -330,6 +334,36 @@ class Vision:
                     last_pub = now
                     self.svc.bus.publish("vision_motion", {"motion": self.state.motion, "fps": self.state.fps})
             prev = thumb
+
+    def recognise_external(self, seen: list) -> None:
+        """Faces from another camera (a Protect snapshot): match them and offer unknowns for naming.
+
+        They don't replace the preview's face boxes, since they're from a different picture.
+        """
+        now = time.time()
+        for s in seen:
+            person, sim = self.memory.match(s.embedding)
+            s.similarity = sim
+            if person:
+                s.person_id, s.name = person["id"], person["name"]
+                if sim < 0.6:
+                    self.memory.add_sample(person, s)
+                if self.memory.seen_now(person) and self._on_known:
+                    asyncio.get_running_loop().create_task(self._on_known(person))
+        self._recent = [r for r in self._recent if now - r.ts < 12] + [s for s in seen if not s.person_id]
+        if seen:
+            self.svc.bus.publish("protect_faces", {"faces": [{"name": s.name, "thumb": s.thumb} for s in seen]})
+
+    async def maybe_visitor_from(self, jpeg: bytes, zones: list) -> None:
+        """A person spotted by another camera (Protect) counts as walking up, checked like motion."""
+        cfg = VisionConfig.from_dict(self._config())
+        keep = self.frame
+        self.frame = jpeg  # describe() and costume checks look at this picture
+        try:
+            await self._maybe_visitor(VisionConfig.from_dict({**vars(cfg), "zones": {cfg.camera_key: zones}}))
+        finally:
+            if keep is not None:
+                self.frame = keep
 
     async def _maybe_visitor(self, cfg: VisionConfig) -> None:
         now = time.time()

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio, audio_io, recorder, scene, speaker, system, voices
+from . import audio, audio_io, protect, recorder, scene, speaker, system, voices
 from . import protocol as proto
 from .conversation import (
     Conversation,
@@ -166,6 +166,9 @@ def create_app(
         name_task = asyncio.create_task(pending_name_watch())
         app.state.conv.on_started = start_recording
         app.state.conv.on_ended = stop_recording
+        app.state.protect = protect.Protect(svc, app.state.vault,
+                                            lambda: VisionConfig.from_dict(svc.settings.vision), on_protect_person)
+        app.state.protect.start()
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
                                   lambda: svc.settings.audio.get("mic_gain", 100) / 100)
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
@@ -179,6 +182,7 @@ def create_app(
         await app.state.conv.stop()
         await app.state.recorder.stop()
         await app.state.vision.stop()
+        await app.state.protect.stop()
         await app.state.meters.stop()
         await app.state.playlist.stop()
         await svc.stop()
@@ -396,6 +400,51 @@ def create_app(
                 await app.state.conv.start(context=ctx)
             except (MissingKey, ValueError) as exc:
                 log.info("visitor conversation not started: %s", exc)
+
+    # -- UniFi Protect -------------------------------------------------------------
+
+    async def on_protect_person(camera: str, jpeg: bytes, event: dict) -> None:
+        cfg = VisionConfig.from_dict(svc().settings.vision)
+        cam_id = event.get("device") or event.get("deviceId") or ""
+        zones = [z for z in cfg.zones.get(f"protect:{cam_id}", []) if len(z) == 4]
+        vision = app.state.vision
+        if cfg.faces and vision.engine.available():
+            seen = await asyncio.to_thread(vision.engine.process, jpeg, zones)
+            vision.recognise_external(seen)
+        if cfg.ai_check:
+            await vision.maybe_visitor_from(jpeg, zones)
+
+    @app.get("/api/protect")
+    async def protect_state():
+        p = app.state.protect
+        cams, err = [], None
+        if app.state.vault.get("protect_api_key") and p.host:
+            try:
+                cams = await p.cameras()
+            except Exception as exc:
+                err = f"Couldn't reach Protect: {exc}"
+        return {**p.snapshot_state(), "cameras": cams, "camera_error": err,
+                "key_set": bool(app.state.vault.get("protect_api_key"))}
+
+    @app.post("/api/protect/find-skelly")
+    async def protect_find_skelly():
+        """Find Skelly in each chosen Protect camera's picture and ignore him there."""
+        cfg = VisionConfig.from_dict(svc().settings.vision)
+        found = {}
+        for cam in cfg.protect_cameras:
+            try:
+                jpeg = await app.state.protect.snapshot(cam)
+                box = await find_skelly(app.state.vault, jpeg)
+            except Exception as exc:
+                log.info("find skelly on %s failed: %r", cam, exc)
+                continue
+            if box:
+                found[f"protect:{cam}"] = [box]
+        if found:
+            cfg.zones = {**cfg.zones, **found}
+            svc().settings.vision = vars(cfg)
+            svc().settings.save()
+        return {"found": len(found), "of": len(cfg.protect_cameras)}
 
     # -- faces ---------------------------------------------------------------
 
