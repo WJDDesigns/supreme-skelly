@@ -15,11 +15,11 @@ Everything the original Ultra Skelly Controller (v3.1 beta) does. Ticked items a
 - [x] Volume, Live Mode toggle (the Skelly becomes a Bluetooth speaker), standalone Idle Mode (plays a random checked sound on a timer).
 
 **Sounds tab (Sound Library)**
-- [ ] Sync the on-device sound list; playlist with checkboxes, drag-to-reorder, per-sound delay, hide factory sounds, preview, delete, restore factory sounds.
+- [x] Sync the on-device sound list; playlist with checkboxes, reorder (up/down), per-sound delay before/after, loop and shuffle, preview, delete. Hide factory sounds and restore factory sounds are still to do.
 - [x] Upload: import any audio file, loudness-normalise, encode to the Skelly's MP3 profile, chunked BLE upload with verification (spec: docs/sound-upload.md). Recording from the mic is still to do.
-- [ ] Per-sound "Live Performance": which movement, eyes, light colour/mode/speed fire when that sound plays.
+- [x] Per-sound "Live Performance": which movement, eyes, light colour/mode/speed fire when that sound plays (saved into the sound on Skelly and re-sent live when it starts).
 - [ ] Text-to-speech via ElevenLabs, then upload.
-- [ ] Play playlist with start watchdog and progression driven by device events.
+- [x] Play playlist with start watchdog (one retry, then skip) and progression driven by device events.
 
 **ElevenLabs tab**
 - [ ] API key, multiple saved agent profiles, verify agent, account/subscription status.

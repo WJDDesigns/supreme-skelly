@@ -224,10 +224,19 @@
           </div>
           <div class="card">
             <div class="card-head">
-              <div><h2>Sounds on Skelly</h2><p class="muted">Stored on the animatronic</p></div>
+              <div><h2>Sounds on Skelly</h2><p class="muted">Tick sounds for the playlist. Tap 🎭 to choose what Skelly does while one plays.</p></div>
               <button id="files-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>
             </div>
-            <ul id="files" class="list"></ul>
+            <div class="pl-bar">
+              <button id="pl-play" class="btn primary"><svg><use href="#i-play"/></svg>Play playlist</button>
+              <button id="pl-skip" class="btn outline" hidden>Skip</button>
+              <div class="seg" id="pl-modes">
+                <button id="pl-loop" title="Start again from the top when it ends">🔁 Loop</button>
+                <button id="pl-shuffle" title="Play the ticked sounds in a random order">🔀 Shuffle</button>
+              </div>
+              <span class="muted" id="pl-status"></span>
+            </div>
+            <ul id="files" class="list sounds"></ul>
           </div>
         </section>
 

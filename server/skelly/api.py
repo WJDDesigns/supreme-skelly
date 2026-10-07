@@ -28,6 +28,7 @@ from .conversation import (
 )
 from .link import BleakLink, Link, SimulatedLink
 from .meters import Meters
+from .playlist import Playlist
 from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings
@@ -67,6 +68,29 @@ class VolumeBody(BaseModel):
 
 class PlayBody(BaseModel):
     play: bool = True
+
+
+class PerformanceBody(BaseModel):
+    moves: list[str] = []
+    eye: int | None = Field(None, ge=0, le=255)
+    color: str | None = Field(None, pattern=r"^#?[0-9a-fA-F]{6}$")
+    mode: int | None = Field(None, ge=0, le=255)
+    brightness: int | None = Field(None, ge=0, le=255)
+    speed: int | None = Field(None, ge=0, le=254)
+    cycle: bool = False
+
+
+class PlaylistItem(BaseModel):
+    name: str
+    on: bool = True
+    before: float = Field(0.0, ge=0, le=600)
+    after: float = Field(1.5, ge=0, le=600)
+
+
+class PlaylistBody(BaseModel):
+    items: list[PlaylistItem]
+    loop: bool = False
+    shuffle: bool = False
 
 
 class KeepLookBody(BaseModel):
@@ -122,6 +146,7 @@ def create_app(
         if autoconnect if autoconnect is not None else os.environ.get("SKELLY_AUTOCONNECT", "1") == "1":
             svc.start_autoconnect()
         app.state.svc = svc
+        app.state.playlist = Playlist(svc)
         app.state.tasks = set()
         app.state.vault = vault or Vault()
         app.state.conv = Conversation(
@@ -146,6 +171,7 @@ def create_app(
         await app.state.recorder.stop()
         await app.state.vision.stop()
         await app.state.meters.stop()
+        await app.state.playlist.stop()
         await svc.stop()
 
     app = FastAPI(title="Supreme Skelly", lifespan=lifespan)
@@ -164,7 +190,8 @@ def create_app(
             raise HTTPException(504, "The device didn't answer in time") from exc
 
     def full_snapshot() -> dict:
-        return {**svc().snapshot(), "conversation": app.state.conv.snapshot(), "vision": app.state.vision.snapshot()}
+        return {**svc().snapshot(), "conversation": app.state.conv.snapshot(), "vision": app.state.vision.snapshot(),
+                "playlist": app.state.playlist.snapshot()}
 
     # -- Skelly's Live speaker ---------------------------------------------------
 
@@ -732,6 +759,42 @@ def create_app(
     @app.delete("/api/files/{serial}")
     async def delete_file(serial: int):
         return await guarded(svc().delete_sound(serial))
+
+    @app.put("/api/files/{serial}/performance")
+    async def set_performance(serial: int, body: PerformanceBody):
+        perf = body.model_dump()
+        if perf["color"]:
+            perf["color"] = "#" + perf["color"].lstrip("#").lower()
+        return await guarded(svc().set_performance(serial, perf))
+
+    @app.delete("/api/files/{serial}/performance")
+    async def clear_performance(serial: int):
+        try:
+            svc().clear_performance(serial)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True}
+
+    @app.get("/api/playlist")
+    async def playlist_state():
+        pl = app.state.playlist
+        return {"config": pl.config, "status": pl.snapshot()}
+
+    @app.put("/api/playlist")
+    async def playlist_config(body: PlaylistBody):
+        return app.state.playlist.set_config(body.model_dump())
+
+    @app.post("/api/playlist/play")
+    async def playlist_play():
+        return await guarded(app.state.playlist.play())
+
+    @app.post("/api/playlist/stop")
+    async def playlist_stop():
+        return await app.state.playlist.stop()
+
+    @app.post("/api/playlist/skip")
+    async def playlist_skip():
+        return app.state.playlist.skip()
 
     @app.post("/api/sounds/upload", status_code=202)
     async def upload_sound(file: Annotated[UploadFile, File()], name: Annotated[str, Form()] = "",

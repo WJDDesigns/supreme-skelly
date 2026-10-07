@@ -284,6 +284,8 @@ class SimulatedLink:
         # Mimic the firmware: playback resets the live colour to the sound's saved scene.
         self.live_rgb = (255, 0, 0)
         self.file_rgb: dict[str, tuple[int, int, int]] = {}
+        self.play_seconds = 5.0  # how long every pretend sound lasts
+        self._play_end: asyncio.TimerHandle | None = None
 
     @property
     def connected(self) -> bool:
@@ -392,7 +394,15 @@ class SimulatedLink:
                 self.live_rgb = rgb
         elif cmd == C.PLAY_FILE:
             serial = int.from_bytes(data[2:4], "big")
+            if self._play_end:
+                self._play_end.cancel()
+                self._play_end = None
+            secs = round(self.play_seconds)
             if data[4]:
                 name = next((n for n, s, _ in self.files if s == serial), "")
                 self.live_rgb = self.file_rgb.get(name, (255, 0, 0))
-            self._reply(cmd, data[2:5] + (5).to_bytes(2, "big"))
+                # Like the firmware, report "stopped" when the sound runs out.
+                end = bytes([0xBB, cmd]) + data[2:4] + b"\x00" + secs.to_bytes(2, "big") + b"\x00"
+                self._play_end = asyncio.get_running_loop().call_later(
+                    self.play_seconds, lambda: self.on_notify and self.on_notify(end))
+            self._reply(cmd, data[2:5] + secs.to_bytes(2, "big"))

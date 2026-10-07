@@ -31,6 +31,10 @@ class Settings:
     # "extra": [more PipeWire sinks, e.g. outdoor Bluetooth speakers]}
     audio: dict = field(default_factory=lambda: {"mic": "", "skelly": True, "extra": []})
     bt_adapter: str | None = None  # MAC of the Bluetooth radio to use; None = SKELLY_BT_ADAPTER or the default
+    # {"items": [{"name", "on", "before", "after"}], "loop": bool, "shuffle": bool}; see playlist.normalize
+    playlist: dict = field(default_factory=dict)
+    # Per-sound Live Performance, by sound name: {"moves", "eye", "color", "mode", "speed", "brightness", "cycle"}
+    performances: dict = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:

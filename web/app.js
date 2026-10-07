@@ -287,37 +287,215 @@ function segButton(label, pressed, onClick) {
   return b;
 }
 
+// ---------- sounds: playlist and per-sound performances ----------
+const DEFAULT_AFTER = 1.5;
+let filesKey = "";
+
+// Every sound on Skelly in playlist order: saved order first, new sounds (unticked) after.
+function playlistRows() {
+  const files = state.device?.files ?? [];
+  const items = state.settings?.playlist?.items ?? [];
+  const byName = new Map(files.map((f) => [f.name.toLowerCase(), f]));
+  const rows = [];
+  for (const it of items) {
+    const f = byName.get(it.name.toLowerCase());
+    if (f) { rows.push({ f, it }); byName.delete(it.name.toLowerCase()); }
+  }
+  for (const f of byName.values()) rows.push({ f, it: { name: f.name, on: false, before: 0, after: DEFAULT_AFTER } });
+  return rows;
+}
+
+function savePlaylist(rows, patch = {}) {
+  const cfg = state.settings?.playlist ?? {};
+  const body = { items: rows.map((r) => r.it), loop: !!cfg.loop, shuffle: !!cfg.shuffle, ...patch };
+  state.settings = { ...state.settings, playlist: body };
+  renderFiles();
+  return run(null, () => api("/playlist", body, "PUT"));
+}
+
+function perfSummary(perf) {
+  if (!perf) return "";
+  const p = state.profile;
+  const bits = [];
+  const moves = (perf.moves ?? []).map((k) => p?.movements.find((m) => m.key === k)?.label ?? k);
+  if (moves.length) bits.push(moves.join(", "));
+  const eye = p?.eyes.find((e) => e.value === perf.eye);
+  if (eye) bits.push(`${EYE_EMOJI[eye.label] ?? "👁"} ${eye.label}`);
+  const mode = p?.light_modes.find((m) => m.value === perf.mode);
+  if (perf.cycle) bits.push("🌈 Rainbow");
+  else if (perf.color || mode) bits.push([mode?.label, perf.color ? "light" : "lights"].filter(Boolean).join(" "));
+  return bits.length ? `🎭 ${bits.join(" · ")}` : "🎭 Stays still";
+}
+
+function renderPlaylistBar() {
+  const st = state.playlist ?? {};
+  const cfg = state.settings?.playlist ?? {};
+  const btn = $("#pl-play");
+  btn.className = st.running ? "btn outline" : "btn primary";
+  btn.innerHTML = st.running ? '<svg><use href="#i-stop"/></svg>Stop playlist' : '<svg><use href="#i-play"/></svg>Play playlist';
+  $("#pl-skip").hidden = !st.running;
+  $("#pl-loop").setAttribute("aria-pressed", !!cfg.loop);
+  $("#pl-shuffle").setAttribute("aria-pressed", !!cfg.shuffle);
+  const ticked = playlistRows().filter((r) => r.it.on).length;
+  $("#pl-status").textContent = st.running
+    ? st.waiting ? `Next in ${st.waiting}s` : `Playing ${st.position} of ${st.total}: ${st.name}`
+    : ticked ? `${ticked} sound${ticked === 1 ? "" : "s"} ticked` : "Tick the sounds you want to play";
+}
+
 function renderFiles() {
   const files = state.device?.files ?? [];
+  const key = JSON.stringify([files, state.device?.playing, state.settings?.playlist, state.settings?.performances,
+    state.playlist, state.editing?.name, state.profile?.key]);
+  if (key === filesKey) return;
+  filesKey = key;
+  renderPlaylistBar();
   const list = $("#files");
   if (!files.length) {
     list.replaceChildren(el("li", {}, el("span", { className: "muted", textContent: "No sounds loaded yet." })));
     return;
   }
+  const rows = playlistRows();
+  const perfs = state.settings?.performances ?? {};
   list.replaceChildren(
-    ...files.map((f, i) => {
+    ...rows.map(({ f, it }, i) => {
       const playing = state.device.playing === f.serial;
+      const perf = perfs[f.name];
+      const tick = el("input", { type: "checkbox", className: "tick", checked: it.on, title: "Play this in the playlist" });
+      tick.addEventListener("change", () => { it.on = tick.checked; savePlaylist(rows); });
       const btn = el("button", { className: playing ? "btn outline" : "btn primary", textContent: playing ? "Stop" : "Play" });
       btn.addEventListener("click", () => run(btn, () => api(`/files/${f.serial}/play`, { play: !playing })));
       const end = el("div", { className: "end" });
       if (playing) end.append(el("span", { className: "badge orange", textContent: "Playing" }));
+      const up = el("button", { className: "btn outline icon-only arrow", textContent: "↑", title: "Move up", disabled: i === 0 });
+      up.addEventListener("click", () => { [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; savePlaylist(rows); });
+      const down = el("button", { className: "btn outline icon-only arrow", textContent: "↓", title: "Move down",
+        disabled: i === rows.length - 1 });
+      down.addEventListener("click", () => { [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]]; savePlaylist(rows); });
+      const editing = state.editing?.name === f.name;
+      const perfBtn = el("button", { className: `btn outline icon-only${perf ? " set" : ""}`, textContent: "🎭",
+        title: "What Skelly does while this plays" });
+      perfBtn.setAttribute("aria-pressed", editing);
+      perfBtn.addEventListener("click", () => {
+        state.editing = editing ? null : { name: f.name, draft: structuredClone(perf ?? { moves: ["all"] }), it };
+        renderFiles();
+      });
       const del = el("button", { className: "btn outline icon-only", title: "Delete from Skelly" });
       del.innerHTML = '<svg><use href="#i-trash"/></svg>';
       del.addEventListener("click", () => {
         if (!confirm(`Delete "${f.name}" from Skelly?`)) return;
         run(del, () => api(`/files/${f.serial}`, undefined, "DELETE"), `Deleted ${f.name}`);
       });
-      end.append(btn, del);
-      const li = el("li", {},
-        el("div", { className: "who" },
+      end.append(btn, perfBtn, up, down, del);
+      const wait = it.before || it.after !== DEFAULT_AFTER
+        ? ` · ⏱ ${it.before ? `${it.before}s before, ` : ""}${it.after}s after` : "";
+      const li = el("li", { className: "sound" },
+        el("div", { className: "who" }, tick,
           el("span", { className: "num", textContent: String(i + 1).padStart(2, "0") }),
           el("div", {}, el("div", { className: "name", textContent: f.name || `Sound ${f.serial}` }),
-            el("div", { className: "meta", textContent: `Sound #${f.serial}` }))),
+            el("div", { className: "meta", textContent: (perfSummary(perf) || `Sound #${f.serial}`) + wait }))),
         end);
       li.classList.toggle("playing", playing);
+      li.classList.toggle("off", !it.on);
+      if (editing) li.append(perfEditor(f, rows));
       return li;
     }),
   );
+}
+
+function perfEditor(f, rows) {
+  const p = state.profile;
+  const d = state.editing.draft;
+  const it = rows.find((r) => r.f.name === f.name).it;
+  const box = el("div", { className: "perf" });
+  const redraw = () => box.replaceWith(perfEditor(f, rows));
+
+  const moves = el("div", { className: "chips" },
+    ...p.movements.map((m) => {
+      const c = el("button", { className: "chip", textContent: m.label });
+      c.setAttribute("aria-pressed", (d.moves ?? []).includes(m.key));
+      c.addEventListener("click", () => {
+        const on = new Set(d.moves ?? []);
+        if (m.key === "all") d.moves = on.has("all") ? [] : ["all"];
+        else {
+          on.delete("all");
+          on.has(m.key) ? on.delete(m.key) : on.add(m.key);
+          d.moves = [...on];
+        }
+        redraw();
+      });
+      return c;
+    }));
+
+  const eyes = el("select", {},
+    el("option", { value: "", textContent: "Don't change" }),
+    ...p.eyes.map((e) => el("option", { value: e.value, textContent: `${EYE_EMOJI[e.label] ?? ""} ${e.label}`, selected: d.eye === e.value })));
+  eyes.addEventListener("change", () => { d.eye = eyes.value ? Number(eyes.value) : null; });
+
+  const modes = el("div", { className: "seg" },
+    segButton("Don't change", d.mode == null && !d.color && !d.cycle, () => { d.mode = null; d.color = null; d.cycle = false; redraw(); }),
+    ...p.light_modes.map((m) => segButton(m.label, d.mode === m.value, () => {
+      d.mode = m.value;
+      d.color ??= "#ff6a00";
+      redraw();
+    })));
+  const color = el("input", { type: "color", value: d.color ?? "#ff6a00", ariaLabel: "Light colour" });
+  const dot = el("label", { className: "color-dot small", title: "Light colour" }, color);
+  dot.style.borderColor = d.color ?? "";
+  color.addEventListener("input", () => {
+    d.color = color.value;
+    d.cycle = false;
+    d.mode ??= p.light_modes[0]?.value ?? null;
+    dot.style.borderColor = d.color;
+    rainbow.setAttribute("aria-pressed", false);
+  });
+  const rainbow = el("button", { className: "chip", textContent: "🌈 Rainbow" });
+  rainbow.setAttribute("aria-pressed", !!d.cycle);
+  rainbow.addEventListener("click", () => { d.cycle = !d.cycle; if (d.cycle) { d.color ??= "#ff004c"; d.mode ??= p.light_modes[0]?.value ?? null; } redraw(); });
+  const slider = (label, keyName, max, dflt) => {
+    const out = el("output", { textContent: d[keyName] ?? dflt });
+    const input = el("input", { type: "range", min: 0, max, value: d[keyName] ?? dflt });
+    input.addEventListener("input", () => { d[keyName] = Number(input.value); out.textContent = input.value; });
+    return el("label", { className: "slider" }, `${label} `, out, input);
+  };
+  const secs = (label, keyName) => {
+    const input = el("input", { type: "number", min: 0, max: 600, step: 0.5, value: it[keyName] });
+    input.addEventListener("change", () => {
+      it[keyName] = Math.max(0, Math.min(600, Number(input.value) || 0));
+      savePlaylist(rows);
+    });
+    return el("label", { className: "secs" }, label, input, "s");
+  };
+
+  const save = async (andPlay) => {
+    await savePlaylist(rows);
+    await api(`/files/${f.serial}/performance`, d, "PUT");
+    if (andPlay) await api(`/files/${f.serial}/play`, { play: true });
+  };
+  const tryBtn = el("button", { className: "btn outline", innerHTML: '<svg><use href="#i-play"/></svg>Try it' });
+  tryBtn.addEventListener("click", () => run(tryBtn, () => save(true)));
+  const saveBtn = el("button", { className: "btn primary", textContent: "Save" });
+  saveBtn.addEventListener("click", () => run(saveBtn, async () => { await save(false); state.editing = null; renderFiles(); },
+    `🎭 Saved. Skelly will do this whenever ${f.name} plays.`));
+  const clear = el("button", { className: "btn outline", textContent: "Reset" });
+  clear.addEventListener("click", () => run(clear, async () => {
+    await api(`/files/${f.serial}/performance`, undefined, "DELETE");
+    state.editing = null;
+    renderFiles();
+  }, "Back to Skelly's own moves for this sound"));
+
+  box.append(
+    el("p", { className: "perf-title", textContent: `While ${f.name} plays` }),
+    el("div", { className: "field" }, el("span", { className: "muted", textContent: "Move" }), moves),
+    p.eyes.length ? el("label", { className: "field-row" }, "Eyes", eyes) : "",
+    el("div", { className: "field" }, el("span", { className: "muted", textContent: "Lights" }), modes),
+    el("div", { className: "row perf-color" }, dot, rainbow),
+    slider("Brightness", "brightness", 255, 255),
+    slider("Effect speed", "speed", 254, 127),
+    el("div", { className: "row perf-wait" }, el("span", { className: "muted", textContent: "In the playlist, wait" }),
+      secs("before", "before"), secs("after", "after")),
+    el("div", { className: "row split" }, clear, el("div", { className: "row" }, tryBtn, saveBtn)),
+  );
+  return box;
 }
 
 // ---------- device tab ----------
@@ -369,6 +547,7 @@ function renderSettings(st) {
   $("#set-auto-connect").checked = st.auto_connect;
   $("#set-auto-live").checked = st.auto_live_mode;
   $("#keep-look").checked = st.keep_look;
+  renderFiles();
 }
 for (const [id, key] of [["set-auto-connect", "auto_connect"], ["set-auto-live", "auto_live_mode"]]) {
   $(`#${id}`).addEventListener("change", (e) =>
@@ -455,6 +634,14 @@ $("#vol").addEventListener("input", (e) => {
 
 // ---------- sounds tab ----------
 $("#files-refresh").addEventListener("click", (ev) => run(ev.currentTarget, () => api("/files/refresh", {})));
+$("#pl-play").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => {
+    state.playlist = await api(state.playlist?.running ? "/playlist/stop" : "/playlist/play", {});
+    renderFiles();
+  }));
+$("#pl-skip").addEventListener("click", (ev) => run(ev.currentTarget, () => api("/playlist/skip", {})));
+$("#pl-loop").addEventListener("click", () => savePlaylist(playlistRows(), { loop: !state.settings?.playlist?.loop }));
+$("#pl-shuffle").addEventListener("click", () => savePlaylist(playlistRows(), { shuffle: !state.settings?.playlist?.shuffle }));
 
 // ---------- live events ----------
 function applySnapshot(s) {
@@ -466,6 +653,7 @@ function applySnapshot(s) {
   renderDevice();
   if (s.conversation) renderTalk(s.conversation);
   if (s.vision) renderVision(s.vision);
+  if (s.playlist) { state.playlist = s.playlist; renderFiles(); }
 }
 
 function connectEvents() {
@@ -476,6 +664,7 @@ function connectEvents() {
     else if (msg.type === "state") { state.device = msg.data; renderDevice(); }
     else if (msg.type === "settings") renderSettings(msg.data);
     else if (msg.type === "upload") renderUpload(msg.data);
+    else if (msg.type === "playlist") { state.playlist = msg.data; renderFiles(); }
     else if (msg.type === "look") { state.look = msg.data; renderPreview(); }
     else if (msg.type === "profile") { state.profile = msg.data; state.moves.clear(); state.mode = null; renderProfile(); }
     else if (msg.type === "conversation") renderTalk(msg.data);

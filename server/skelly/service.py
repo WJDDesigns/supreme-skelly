@@ -37,6 +37,7 @@ AUTOCONNECT_SCAN_S = 8.0
 # The firmware resets lights/eyes to the sound's stored scene when playback
 # starts, so a locked look is re-applied shortly after each START.
 REAPPLY_DELAY_S = 0.3
+REQUEST_MATCH_S = 5.0  # a playback start this soon after our play command is that sound
 
 
 class EventBus:
@@ -87,6 +88,8 @@ class SkellyService:
         self._autoconnector: asyncio.Task | None = None
         self._user_disconnected = False
         self._reapply: asyncio.Task | None = None
+        self._requested: tuple[str | None, float] = (None, 0.0)  # sound we last asked to play, and when
+        self._performing = False  # a sound with its own performance is playing
         self.look: dict = self.settings.look or {"lights": {}, "eye": None}
         self.state = DeviceState()
         if self.settings.bt_adapter and hasattr(link, "set_adapter"):
@@ -344,8 +347,17 @@ class SkellyService:
             self._set(live_mode=bool(d["status"]))
         elif ev.kind == "playback":
             self._set(playing=d["serial"] if d["playing"] else None)
-            if d["playing"] and self.settings.keep_look:
-                self._schedule_reapply()
+            if d["playing"]:
+                perf = self._performance_for(d["serial"])
+                self._performing = perf is not None
+                if perf is not None:
+                    self._schedule_reapply(perf)
+                elif self.settings.keep_look:
+                    self._schedule_reapply()
+            elif self._performing:
+                self._performing = False
+                if self.settings.keep_look:
+                    self._schedule_reapply()
         elif ev.kind == "file":
             self._files_buf[d["serial"]] = d
             if self._files_done and len(self._files_buf) >= d["total"]:
@@ -456,13 +468,21 @@ class SkellyService:
         self.bus.publish("settings", self.settings.public())
         return self.settings.public()
 
-    def _schedule_reapply(self) -> None:
+    def _schedule_reapply(self, perf: dict | None = None) -> None:
+        """Shortly after the firmware resets the scene, put back the kept look, or the
+        playing sound's own Live Performance when ``perf`` is given."""
         if self._reapply and not self._reapply.done():
             self._reapply.cancel()
 
         async def later() -> None:
             await asyncio.sleep(REAPPLY_DELAY_S)
-            await self._apply_look_safely()
+            if perf is None:
+                await self._apply_look_safely()
+                return
+            try:
+                await self.apply_performance(perf)
+            except (ConnectionError, ValueError) as exc:
+                log.info("couldn't apply the sound's performance: %s", exc)
 
         self._reapply = asyncio.create_task(later())
 
@@ -514,7 +534,63 @@ class SkellyService:
             self._set(live_mode=True)  # some firmware never acks; the speaker still appears
 
     async def play_file(self, serial: int, play: bool = True) -> None:
+        if play:
+            f = next((f for f in self.state.files if f["serial"] == serial), None)
+            self._requested = (f["name"] if f else None, time.monotonic())
         await self.send(proto.play_file(serial, play))
+
+    def file_named(self, name: str) -> dict | None:
+        return next((f for f in self.state.files if f.get("name", "").lower() == name.lower()), None)
+
+    # -- per-sound Live Performance ---------------------------------------------
+
+    def _performance_for(self, serial: int) -> dict | None:
+        # Trust the sound we just asked for over the event's serial, which the original
+        # controller found doesn't always match the sound list.
+        name, at = self._requested
+        self._requested = (None, 0.0)
+        if not name or time.monotonic() - at > REQUEST_MATCH_S:
+            f = next((f for f in self.state.files if f["serial"] == serial), None)
+            name = f["name"] if f else None
+        return self.settings.performances.get(name) if name else None
+
+    async def apply_performance(self, perf: dict, cluster: int = 0, filename: str = "") -> None:
+        """Send a performance live, or store it in one sound's scene when ``filename`` is given."""
+        if "moves" in perf:
+            await self.send(proto.movement(self.movement_mask(perf["moves"]), cluster, filename))
+        if perf.get("eye") and self.profile.eyes:
+            await self.send(proto.eye(perf["eye"], cluster, filename))
+        chans = [li.channel for li in self.profile.lights] if filename else [proto.ALL_CHANNELS]
+        for ch in chans:
+            if perf.get("mode") is not None:
+                await self.send(proto.light_mode(ch, perf["mode"], cluster, filename))
+            if perf.get("brightness") is not None:
+                await self.send(proto.brightness(ch, perf["brightness"], cluster, filename))
+            if perf.get("color"):
+                h = perf["color"].lstrip("#")
+                rgb = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+                await self.send(proto.color(ch, *rgb, cycle=bool(perf.get("cycle")), cluster=cluster,
+                                            filename=filename))
+            if perf.get("speed") is not None:
+                await self.send(proto.speed(ch, proto.ui_speed_to_device(perf["speed"]), cluster, filename))
+
+    async def set_performance(self, serial: int, perf: dict) -> dict:
+        """Save what Skelly does while this sound plays: here, and in the sound's scene on
+        Skelly, so it also happens when he plays the sound on his own."""
+        self._require_connected()
+        f = self._file(serial)
+        self.movement_mask(perf.get("moves", []))  # reject parts this prop doesn't have
+        await self.apply_performance(perf, f["cluster"], f["name"])
+        self.settings.performances[f["name"]] = perf
+        self.settings.save()
+        self.bus.publish("settings", self.settings.public())
+        return perf
+
+    def clear_performance(self, serial: int) -> None:
+        f = self._file(serial)
+        if self.settings.performances.pop(f["name"], None) is not None:
+            self.settings.save()
+            self.bus.publish("settings", self.settings.public())
 
     # -- sound library ----------------------------------------------------------
 
@@ -611,6 +687,8 @@ class SkellyService:
         res = await self.request(proto.delete_file(serial, f["cluster"]), "deleted", 6.0)
         if not res["ok"]:
             raise ValueError(f'Skelly couldn\'t delete "{f["name"]}"')
+        if self.settings.performances.pop(f["name"], None) is not None:
+            self.settings.save()
         await asyncio.sleep(DELETE_SETTLE_S)
         files = await self.refresh_files()
         # Like the original: re-commit the play order of the remaining sounds after a delete.
