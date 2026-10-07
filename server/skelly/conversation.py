@@ -559,6 +559,34 @@ async def elevenlabs_create_agent(key: str, cfg: ConversationConfig) -> dict:
     return {"id": r.json()["agent_id"], "name": "Skelly"}
 
 
+async def elevenlabs_agent(key: str, agent_id: str) -> dict:
+    """The agent's prompt, first message and voice, as this page uses them."""
+    async with httpx.AsyncClient(timeout=15) as http:
+        r = await http.get(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}", headers={"xi-api-key": key})
+        _raise_for(r, "ElevenLabs")
+    conf = r.json().get("conversation_config", {})
+    agent = conf.get("agent", {})
+    return {"id": agent_id, "name": r.json().get("name"), "prompt": (agent.get("prompt") or {}).get("prompt", ""),
+            "first_message": agent.get("first_message", ""), "voice_id": (conf.get("tts") or {}).get("voice_id")}
+
+
+async def elevenlabs_update_agent(key: str, agent_id: str, *, prompt: str | None = None,
+                                  first_message: str | None = None) -> None:
+    """Writes the page's personality and first line back to the agent, keeping its other prompt settings."""
+    async with httpx.AsyncClient(timeout=20) as http:
+        r = await http.get(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}", headers={"xi-api-key": key})
+        _raise_for(r, "ElevenLabs")
+        agent = dict(r.json().get("conversation_config", {}).get("agent", {}))
+        if prompt is not None:
+            agent["prompt"] = {**(agent.get("prompt") or {}), "prompt": prompt}
+        if first_message is not None:
+            agent["first_message"] = first_message
+        patch = {k: agent[k] for k in ("prompt", "first_message") if k in agent}
+        r = await http.patch(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}", headers={"xi-api-key": key},
+                             json={"conversation_config": {"agent": patch}})
+        _raise_for(r, "ElevenLabs")
+
+
 # -- helpers ------------------------------------------------------------------------
 
 

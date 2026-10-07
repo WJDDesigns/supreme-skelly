@@ -70,3 +70,29 @@ def test_elevenlabs_pickers(tmp_path, monkeypatch):
         assert c.get("/api/elevenlabs/agents").json() == [{"id": "agent_1", "name": "Skelly"}]
         assert c.post("/api/elevenlabs/agents").json()["id"] == "agent_new"
         assert c.get("/api/conversation").json()["config"]["elevenlabs_agent_id"] == "agent_new"
+
+
+def test_elevenlabs_prompt_sync(tmp_path, monkeypatch):
+    import skelly.api as api_mod
+
+    c, _ = make(tmp_path)
+    pushed = {}
+
+    async def agent(key, agent_id):
+        return {"id": agent_id, "name": "Spooky", "prompt": "From ElevenLabs", "first_message": "Boo!",
+                "voice_id": "v1"}
+
+    async def update(key, agent_id, *, prompt=None, first_message=None):
+        pushed.update(agent_id=agent_id, prompt=prompt, first_message=first_message)
+
+    monkeypatch.setattr(api_mod, "elevenlabs_agent", agent)
+    monkeypatch.setattr(api_mod, "elevenlabs_update_agent", update)
+    with c:
+        c.put("/api/vault/elevenlabs_api_key", json={"value": "sk_test_key_123456"})
+        r = c.put("/api/conversation/config", json={"provider": "elevenlabs", "elevenlabs_agent_id": "a1"}).json()
+        assert (r["prompt"], r["first_message"], r["elevenlabs_voice_id"]) == ("From ElevenLabs", "Boo!", "v1")
+        assert "Loaded Spooky" in r["sync"]
+
+        r = c.put("/api/conversation/config", json={"prompt": "Edited here"}).json()
+        assert r["sync"] == "Saved to ElevenLabs"
+        assert pushed == {"agent_id": "a1", "prompt": "Edited here", "first_message": "Boo!"}

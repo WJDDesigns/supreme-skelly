@@ -630,7 +630,13 @@ function saveTalkCfg(patch) {
   Object.assign(talkCfg, patch);
   renderTalkCfg();
   clearTimeout(cfgTimer);
-  cfgTimer = setTimeout(() => run(null, async () => { talkCfg = await api("/conversation/config", talkCfg, "PUT"); }), 400);
+  const slow = "prompt" in patch || "first_message" in patch;
+  cfgTimer = setTimeout(() => run(null, async () => {
+    const { sync, ...cfg } = await api("/conversation/config", talkCfg, "PUT");
+    talkCfg = cfg;
+    renderTalkCfg();
+    if (sync) toast(sync, sync.startsWith("Couldn't"));
+  }), slow ? 1200 : 400);
 }
 document.querySelectorAll("#provider-seg button").forEach((b) =>
   b.addEventListener("click", () => saveTalkCfg({ provider: b.dataset.provider })));
@@ -660,7 +666,11 @@ async function loadEleven() {
   fillSelect($("#voice-pick"), voices, talkCfg.elevenlabs_voice_id, "No voices found");
   if (!talkCfg.elevenlabs_agent_id && agents.length) saveTalkCfg({ elevenlabs_agent_id: agents[0].id });
 }
-$("#agents-refresh").addEventListener("click", (ev) => run(ev.currentTarget, loadEleven));
+$("#agents-refresh").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => {
+    await loadEleven();
+    if (talkCfg.elevenlabs_agent_id) { talkCfg = await api("/elevenlabs/pull", {}); renderTalkCfg(); }
+  }, "Up to date with ElevenLabs"));
 $("#agent-create").addEventListener("click", (ev) =>
   run(ev.currentTarget, async () => {
     const a = await api("/elevenlabs/agents", {});

@@ -20,8 +20,10 @@ from .conversation import (
     Conversation,
     ConversationConfig,
     MissingKey,
+    elevenlabs_agent,
     elevenlabs_agents,
     elevenlabs_create_agent,
+    elevenlabs_update_agent,
     elevenlabs_voices,
 )
 from .link import BleakLink, Link, SimulatedLink
@@ -209,7 +211,43 @@ def create_app(
 
     @app.put("/api/conversation/config")
     async def conversation_config(body: dict):
+        """Saves the page; with an ElevenLabs agent picked, its prompt and first line stay in sync.
+
+        Picking a different agent pulls its prompt, first line and voice into the page; editing
+        the personality or first line while on ElevenLabs writes them back to the agent.
+        """
+        old = ConversationConfig.from_dict(svc().settings.conversation)
         cfg = ConversationConfig.from_dict({**svc().settings.conversation, **body})
+        sync = None
+        key = app.state.vault.get("elevenlabs_api_key")
+        if key and cfg.elevenlabs_agent_id and cfg.provider == "elevenlabs":
+            try:
+                if cfg.elevenlabs_agent_id != old.elevenlabs_agent_id or old.provider != "elevenlabs":
+                    agent = await elevenlabs_agent(key, cfg.elevenlabs_agent_id)
+                    cfg.prompt = agent["prompt"] or cfg.prompt
+                    cfg.first_message = agent["first_message"]
+                    cfg.elevenlabs_voice_id = agent["voice_id"] or cfg.elevenlabs_voice_id
+                    sync = f"Loaded {agent['name'] or 'the agent'}'s prompt from ElevenLabs"
+                elif (cfg.prompt, cfg.first_message) != (old.prompt, old.first_message):
+                    await elevenlabs_update_agent(key, cfg.elevenlabs_agent_id, prompt=cfg.prompt,
+                                                  first_message=cfg.first_message)
+                    sync = "Saved to ElevenLabs"
+            except RuntimeError as exc:
+                sync = f"Couldn't sync with ElevenLabs: {exc}"
+        svc().settings.conversation = vars(cfg)
+        svc().settings.save()
+        return {**vars(cfg), "sync": sync}
+
+    @app.post("/api/elevenlabs/pull")
+    async def eleven_pull():
+        """Fetch the picked agent's current prompt, first line and voice into the page."""
+        cfg = ConversationConfig.from_dict(svc().settings.conversation)
+        if not cfg.elevenlabs_agent_id:
+            raise HTTPException(400, "Pick an ElevenLabs agent first")
+        agent = await eleven(elevenlabs_agent(eleven_key(), cfg.elevenlabs_agent_id))
+        cfg.prompt = agent["prompt"] or cfg.prompt
+        cfg.first_message = agent["first_message"]
+        cfg.elevenlabs_voice_id = agent["voice_id"] or cfg.elevenlabs_voice_id
         svc().settings.conversation = vars(cfg)
         svc().settings.save()
         return vars(cfg)
