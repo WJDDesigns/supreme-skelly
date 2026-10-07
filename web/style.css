@@ -236,7 +236,7 @@ main { width: 100%; max-width: 1400px; margin: 0 auto; padding: 22px 16px 110px;
   position: relative; aspect-ratio: 1 / 1; border-radius: 20px; border: 1.5px solid transparent;
   cursor: pointer; display: grid; place-items: center; align-content: center; gap: 6px;
   color: #fff; font-weight: 600; font-size: .85rem; text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
-  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--c) 85%, #fff 0%) 0%, color-mix(in srgb, var(--c) 25%, #000) 80%);
+  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--c) 85%, #fff 0%) 0%, color-mix(in srgb, var(--c) 25%, #000) 80%) border-box;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 10px 24px -14px var(--c);
   transition: transform .12s, box-shadow .2s;
 }
@@ -244,8 +244,9 @@ main { width: 100%; max-width: 1400px; margin: 0 auto; padding: 22px 16px 110px;
 .scene:hover { transform: translateY(-2px); }
 .scene:active { transform: scale(.95); }
 .scene[aria-pressed="true"] { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(255, 138, 0, .25), 0 0 26px -4px var(--c); }
-.scene.party { background: conic-gradient(from 0deg, #ff004c, #ffb700, #3dff00, #00d5ff, #8a2be2, #ff004c); }
-.scene.party:not([aria-pressed="true"]) .emoji { animation: spin 6s linear infinite; }
+/* origin border-box: the gradient starts under the border, so it doesn't repeat as a fringe at the edges. */
+.scene.party { background: conic-gradient(from 0deg, #ff004c, #ffb700, #3dff00, #00d5ff, #8a2be2, #ff004c) border-box;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 10px 24px -14px #8a2be2; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .custom { display: flex; align-items: center; gap: 16px; }
