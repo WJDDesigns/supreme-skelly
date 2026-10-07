@@ -19,9 +19,16 @@ services:
       - /run/dbus:/run/dbus:ro
       # Settings (last device, startup options) survive updates and reboots.
       - ./data:/data
+      # The mic and Skelly's Live speaker go through the host's PipeWire (user "skelly", uid 1000).
+      - /run/user/1000/pulse:/run/user/1000/pulse
+      # USB cameras appear here; the cgroup rule below allows video devices only.
+      - /dev:/dev
+    device_cgroup_rules:
+      - "c 81:* rmw"
     environment:
       - SKELLY_DATA_DIR=/data
       - SKELLY_LOG_LEVEL=INFO
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
       # Finds and connects to Skelly by itself at startup and after drops.
       - SKELLY_AUTOCONNECT=1
       # Set to 1 to try the UI without an animatronic.

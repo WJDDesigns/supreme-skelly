@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -24,6 +24,9 @@ class Settings:
     look: dict | None = None  # {"lights": {light_key: {...}}, "eye": int | None}
     last_address: str | None = None
     last_name: str | None = None
+    live_speaker: str | None = None  # MAC of Skelly's Live Mode (Classic) speaker once paired
+    conversation: dict = field(default_factory=dict)  # ConversationConfig fields
+    vision: dict = field(default_factory=dict)  # VisionConfig fields
     bt_adapter: str | None = None  # MAC of the Bluetooth radio to use; None = SKELLY_BT_ADAPTER or the default
 
     @classmethod

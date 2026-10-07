@@ -24,6 +24,11 @@
       <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
       <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
       <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.8 7L3 21l2-6.2A8 8 0 1 1 21 12Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M15 10l5-3v10l-5-3"/><rect x="2" y="6" width="13" height="12" rx="2"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M17 6l3 3M15 8l2 2"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8Z"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
       <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></symbol>
     </defs>
   </svg>
@@ -50,6 +55,11 @@
         <p class="nav-label">Control</p>
         <button role="tab" data-tab="controls"><span class="nav-ico"><svg><use href="#i-sliders"/></svg></span>Controls</button>
         <button role="tab" data-tab="sounds"><span class="nav-ico"><svg><use href="#i-music"/></svg></span>Sounds</button>
+        <p class="nav-label">AI</p>
+        <button role="tab" data-tab="talk"><span class="nav-ico"><svg><use href="#i-chat"/></svg></span>Conversation</button>
+        <button role="tab" data-tab="vision"><span class="nav-ico"><svg><use href="#i-camera"/></svg></span>Vision</button>
+        <p class="nav-label">System</p>
+        <button role="tab" data-tab="settings"><span class="nav-ico"><svg><use href="#i-gear"/></svg></span>Settings</button>
       </nav>
 
       <div class="side-card">
@@ -122,23 +132,6 @@
             </div>
           </div>
 
-          <div class="card">
-            <div class="card-head"><div><h2>Startup</h2><p class="muted">What happens when the mini PC boots</p></div></div>
-            <label class="switch-row"><span><strong>Connect automatically</strong>
-              <span class="muted">Finds Skelly on its own at startup and whenever the connection drops.</span></span>
-              <input type="checkbox" id="set-auto-connect" role="switch"></label>
-            <label class="switch-row"><span><strong>Turn on Live Mode after connecting</strong>
-              <span class="muted">Ready to talk as soon as Skelly is found.</span></span>
-              <input type="checkbox" id="set-auto-live" role="switch"></label>
-          </div>
-
-          <div class="card">
-            <div class="card-head">
-              <div><h2>Bluetooth radio</h2><p class="muted">Which radio on the mini PC talks to Skelly</p></div>
-              <button id="adapters-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>
-            </div>
-            <ul id="adapters" class="list"></ul>
-          </div>
         </section>
 
         <!-- Controls -->
@@ -235,6 +228,155 @@
               <button id="files-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>
             </div>
             <ul id="files" class="list"></ul>
+          </div>
+        </section>
+
+        <!-- Conversation -->
+        <section id="tab-talk" class="tab" hidden>
+          <div class="talk-grid">
+            <div class="card talk-card">
+              <div class="card-head">
+                <div><h2>Talk to Skelly</h2><p class="muted" id="talk-sub">Skelly listens through the mic and answers through his own speaker</p></div>
+                <span class="badge" id="talk-state">Idle</span>
+              </div>
+              <div class="talk-stage">
+                <button id="talk-toggle" class="talk-btn" data-on="false" aria-label="Start a conversation">
+                  <span class="ring" id="talk-ring"></span>
+                  <svg class="ico-start"><use href="#i-mic"/></svg><svg class="ico-stop"><use href="#i-stop"/></svg>
+                </button>
+                <p class="talk-hint" id="talk-hint">Tap to start a conversation</p>
+                <p class="talk-error" id="talk-error" hidden></p>
+              </div>
+              <ul id="transcript" class="transcript"></ul>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div><h2>AI brain</h2><p class="muted">Pick who does the talking</p></div></div>
+              <div class="seg wide provider-seg" id="provider-seg">
+                <button data-provider="elevenlabs">ElevenLabs</button>
+                <button data-provider="openai">OpenAI</button>
+                <button data-provider="claude">Claude</button>
+              </div>
+              <p class="key-warn" id="key-warn" hidden></p>
+
+              <div class="prov" data-for="elevenlabs">
+                <label class="field-row">Agent ID<input type="text" data-cfg="elevenlabs_agent_id" placeholder="agent_…" autocomplete="off"></label>
+              </div>
+              <div class="prov" data-for="openai">
+                <label class="field-row">Model<select data-cfg="openai_model">
+                  <option value="gpt-realtime">gpt-realtime</option><option value="gpt-realtime-mini">gpt-realtime-mini</option></select></label>
+                <label class="field-row">Voice<select data-cfg="openai_voice">
+                  <option>ash</option><option>ballad</option><option>coral</option><option>echo</option><option>sage</option><option>verse</option><option>marin</option><option>cedar</option><option>alloy</option><option>shimmer</option></select></label>
+              </div>
+              <div class="prov" data-for="claude">
+                <label class="field-row">Claude model<select data-cfg="claude_model">
+                  <option value="claude-haiku-4-5-20251001">Haiku 4.5 (fastest)</option>
+                  <option value="claude-sonnet-5-5">Sonnet 5.5</option>
+                  <option value="claude-opus-5-5">Opus 5.5</option></select></label>
+                <div class="field"><span class="muted">Hearing (speech to text)</span>
+                  <div class="seg" data-seg="stt"><button data-val="elevenlabs">ElevenLabs</button><button data-val="openai">OpenAI</button></div></div>
+                <div class="field"><span class="muted">Voice (text to speech)</span>
+                  <div class="seg" data-seg="tts"><button data-val="elevenlabs">ElevenLabs</button><button data-val="openai">OpenAI</button></div></div>
+                <label class="field-row" data-show-tts="elevenlabs">ElevenLabs voice ID<input type="text" data-cfg="elevenlabs_voice_id" autocomplete="off"></label>
+                <label class="field-row" data-show-tts="openai">OpenAI voice<select data-cfg="openai_tts_voice">
+                  <option>onyx</option><option>ash</option><option>ballad</option><option>coral</option><option>echo</option><option>fable</option><option>nova</option><option>sage</option><option>shimmer</option><option>verse</option></select></label>
+              </div>
+
+              <label class="field-row stack">Personality<textarea data-cfg="prompt" rows="4"></textarea></label>
+              <label class="field-row stack">First thing he says<input type="text" data-cfg="first_message"></label>
+
+              <label class="switch-row"><span><strong>Move while talking</strong>
+                <span class="muted">Head, arms and torso move while Skelly speaks.</span></span>
+                <input type="checkbox" data-cfg="move_while_talking" role="switch"></label>
+              <label class="switch-row"><span><strong>Don't listen while talking</strong>
+                <span class="muted">Stops Skelly hearing his own voice through the mic.</span></span>
+                <input type="checkbox" data-cfg="ignore_mic_while_talking" role="switch"></label>
+              <label class="field-row">End after silence (seconds)<input type="number" min="10" max="600" data-cfg="idle_timeout_s"></label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Vision -->
+        <section id="tab-vision" class="tab" hidden>
+          <div class="talk-grid">
+            <div class="card">
+              <div class="card-head">
+                <div><h2>Camera</h2><p class="muted" id="cam-sub">Off</p></div>
+                <button id="cam-toggle" class="btn primary"><svg><use href="#i-play"/></svg><span>Start camera</span></button>
+              </div>
+              <div class="cam-view" id="cam-view">
+                <img id="cam-img" alt="Camera preview" hidden>
+                <div class="cam-empty" id="cam-empty"><svg><use href="#i-camera"/></svg><span>Camera is off</span></div>
+                <span class="badge orange cam-visitor" id="cam-visitor" hidden>Visitor!</span>
+              </div>
+              <div class="meter-row"><span class="muted">Motion</span><div class="meter"><i id="motion-bar"></i></div><output id="motion-out">0%</output></div>
+              <p class="cam-desc" id="cam-desc" hidden></p>
+              <div class="row">
+                <button id="cam-describe" class="btn outline"><svg><use href="#i-eye"/></svg>What does Skelly see?</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div><h2>Source</h2><p class="muted">Where the picture comes from</p></div></div>
+              <div class="seg wide" id="cam-source">
+                <button data-val="usb">USB camera</button><button data-val="rtsp">Network camera (RTSP)</button>
+              </div>
+              <div class="prov" data-cam="usb">
+                <label class="field-row">Camera<select id="cam-device" data-vcfg="usb_device"></select></label>
+              </div>
+              <div class="prov" data-cam="rtsp">
+                <div class="vault-inline" id="rtsp-inline"></div>
+              </div>
+              <label class="field-row">Rotate<select data-vcfg="rotate"><option value="0">None</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label>
+              <label class="slider">Motion sensitivity <output id="sens-out">50</output>
+                <input type="range" min="0" max="100" data-vcfg="sensitivity"></label>
+              <label class="switch-row"><span><strong>Check with AI</strong>
+                <span class="muted">Confirms motion is a person and describes them for Skelly.</span></span>
+                <input type="checkbox" data-vcfg="ai_check" role="switch"></label>
+              <label class="switch-row"><span><strong>Talk to visitors</strong>
+                <span class="muted">Starts a conversation when someone walks up.</span></span>
+                <input type="checkbox" data-vcfg="auto_converse" role="switch"></label>
+              <label class="switch-row"><span><strong>Camera on at startup</strong>
+                <span class="muted">Starts watching when the mini PC boots.</span></span>
+                <input type="checkbox" data-vcfg="start_on_boot" role="switch"></label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section id="tab-settings" class="tab" hidden>
+          <div class="card">
+            <div class="card-head"><div><h2>Startup</h2><p class="muted">What happens when the mini PC boots</p></div></div>
+            <label class="switch-row"><span><strong>Connect automatically</strong>
+              <span class="muted">Finds Skelly on its own at startup and whenever the connection drops.</span></span>
+              <input type="checkbox" id="set-auto-connect" role="switch"></label>
+            <label class="switch-row"><span><strong>Turn on Live Mode after connecting</strong>
+              <span class="muted">Ready to talk as soon as Skelly is found.</span></span>
+              <input type="checkbox" id="set-auto-live" role="switch"></label>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Bluetooth radio</h2><p class="muted">Which radio on the mini PC talks to Skelly</p></div>
+              <button id="adapters-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>
+            </div>
+            <ul id="adapters" class="list"></ul>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Skelly's speaker</h2><p class="muted" id="spk-sub">Live Mode turns Skelly into a Bluetooth speaker for his AI voice</p></div>
+              <button id="spk-connect" class="btn primary"><svg><use href="#i-bt"/></svg>Connect speaker</button>
+            </div>
+            <div class="facts two">
+              <div><dt>Speaker</dt><dd id="spk-out">–</dd></div>
+              <div><dt>Microphone</dt><dd id="mic-out">–</dd></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div><h2>API keys</h2><p class="muted">Stored only on the mini PC; only the last 4 characters are ever shown</p></div></div>
+            <ul id="vault" class="list"></ul>
           </div>
         </section>
       </main>

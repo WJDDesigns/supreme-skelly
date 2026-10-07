@@ -10,16 +10,19 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio
+from . import audio, audio_io, speaker
 from . import protocol as proto
+from .conversation import Conversation, ConversationConfig, MissingKey
 from .link import BleakLink, Link, SimulatedLink
 from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings
+from .vault import Vault
+from .vision import Vision, VisionConfig, describe, list_cameras
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 log = logging.getLogger(__name__)
@@ -64,6 +67,10 @@ class AdapterBody(BaseModel):
     address: str
 
 
+class SecretBody(BaseModel):
+    value: str
+
+
 class SettingsBody(BaseModel):
     auto_connect: bool | None = None
     auto_live_mode: bool | None = None
@@ -74,7 +81,8 @@ def make_link() -> Link:
 
 
 def create_app(
-    link: Link | None = None, settings: Settings | None = None, *, autoconnect: bool | None = None
+    link: Link | None = None, settings: Settings | None = None, *, autoconnect: bool | None = None,
+    vault: Vault | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -84,7 +92,17 @@ def create_app(
             svc.start_autoconnect()
         app.state.svc = svc
         app.state.tasks = set()
+        app.state.vault = vault or Vault()
+        app.state.conv = Conversation(svc, app.state.vault, lambda: svc.settings.conversation, skelly_sink)
+        app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor)
+        if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
+            try:
+                await app.state.vision.start()
+            except ValueError as exc:
+                log.info("camera not started: %s", exc)
         yield
+        await app.state.conv.stop()
+        await app.state.vision.stop()
         await svc.stop()
 
     app = FastAPI(title="Supreme Skelly", lifespan=lifespan)
@@ -102,6 +120,158 @@ def create_app(
         except TimeoutError as exc:
             raise HTTPException(504, "The device didn't answer in time") from exc
 
+    def full_snapshot() -> dict:
+        return {**svc().snapshot(), "conversation": app.state.conv.snapshot(), "vision": app.state.vision.snapshot()}
+
+    # -- Skelly's Live speaker ---------------------------------------------------
+
+    async def skelly_sink() -> str | None:
+        """Make sure Live Mode is on and its speaker is paired and connected; return its sink."""
+        s = svc()
+        if os.environ.get("SKELLY_SIMULATE") == "1":
+            return None
+        if not s.link.connected:
+            raise ConnectionError("Connect to Skelly first, so he can talk")
+        if not s.state.live_mode:
+            await s.enable_live_mode()
+            await asyncio.sleep(3)
+        names = tuple(dict.fromkeys([*s.profile.live_audio_names, *([s.state.bt_name] if s.state.bt_name else [])]))
+        adapter = getattr(s.link, "adapter_in_use", None) or "hci0"
+        info = await speaker.connect_speaker(adapter, names, s.state.pin or "1234")
+        if info.get("address") and s.settings.live_speaker != info["address"]:
+            s.settings.live_speaker = info["address"]
+            s.settings.save()
+        sink = audio_io.skelly_sink_name(info.get("address"))
+        for _ in range(20):  # PipeWire takes a moment to publish the new speaker
+            if any(d["name"] == sink for d in (await audio_io.list_devices())["speakers"]):
+                break
+            await asyncio.sleep(0.5)
+        return sink
+
+    async def on_visitor(description: str | None, cfg: VisionConfig) -> None:
+        svc().bus.publish("visitor", {"description": description, "ts": __import__("time").time()})
+        if cfg.auto_converse:
+            ctx = f"Someone just walked up. What the camera sees: {description}" if description else None
+            try:
+                await app.state.conv.start(context=ctx)
+            except (MissingKey, ValueError) as exc:
+                log.info("visitor conversation not started: %s", exc)
+
+    @app.post("/api/speaker/connect")
+    async def connect_live_speaker():
+        try:
+            sink = await skelly_sink()
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(502, f"Pairing failed: {exc}") from exc
+        return {"sink": sink, "address": svc().settings.live_speaker}
+
+    @app.get("/api/audio/devices")
+    async def audio_devices():
+        return await audio_io.list_devices()
+
+    # -- API key vault -----------------------------------------------------------
+
+    @app.get("/api/vault")
+    async def vault_list():
+        return app.state.vault.public()
+
+    @app.put("/api/vault/{name}")
+    async def vault_set(name: str, body: SecretBody):
+        try:
+            app.state.vault.set(name, body.value)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return app.state.vault.public()
+
+    @app.delete("/api/vault/{name}")
+    async def vault_delete(name: str):
+        try:
+            app.state.vault.set(name, None)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return app.state.vault.public()
+
+    # -- conversation ----------------------------------------------------------
+
+    @app.get("/api/conversation")
+    async def conversation_state():
+        return {"state": app.state.conv.snapshot(),
+                "config": {**vars(ConversationConfig()), **svc().settings.conversation}}
+
+    @app.put("/api/conversation/config")
+    async def conversation_config(body: dict):
+        cfg = ConversationConfig.from_dict({**svc().settings.conversation, **body})
+        svc().settings.conversation = vars(cfg)
+        svc().settings.save()
+        return vars(cfg)
+
+    @app.post("/api/conversation/start")
+    async def conversation_start():
+        try:
+            return await app.state.conv.start()
+        except ValueError as exc:  # MissingKey included
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/conversation/stop")
+    async def conversation_stop():
+        return await app.state.conv.stop()
+
+    # -- vision ------------------------------------------------------------------
+
+    @app.get("/api/vision")
+    async def vision_state():
+        return {"state": app.state.vision.snapshot(), "cameras": list_cameras(),
+                "config": {**vars(VisionConfig()), **svc().settings.vision}}
+
+    @app.put("/api/vision/config")
+    async def vision_config(body: dict):
+        cfg = VisionConfig.from_dict({**svc().settings.vision, **body})
+        svc().settings.vision = vars(cfg)
+        svc().settings.save()
+        if app.state.vision.state.running:  # pick up the new source/settings straight away
+            await app.state.vision.stop()
+            await app.state.vision.start()
+        return vars(cfg)
+
+    @app.post("/api/vision/start")
+    async def vision_start():
+        try:
+            return await app.state.vision.start()
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/vision/stop")
+    async def vision_stop():
+        return await app.state.vision.stop()
+
+    @app.get("/api/vision/snapshot.jpg")
+    async def vision_snapshot():
+        if not app.state.vision.frame:
+            raise HTTPException(404, "No picture yet")
+        return Response(app.state.vision.frame, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/vision/stream")
+    async def vision_stream():
+        async def body():
+            async for jpg in app.state.vision.frames():
+                yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n"
+        return StreamingResponse(body(), media_type="multipart/x-mixed-replace; boundary=frame",
+                                 headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/vision/describe")
+    async def vision_describe():
+        if not app.state.vision.frame:
+            raise HTTPException(409, "Start the camera first")
+        try:
+            verdict = await describe(app.state.vault, app.state.vision.frame)
+        except Exception as exc:
+            raise HTTPException(502, f"The AI couldn't look: {exc}") from exc
+        if verdict is None:
+            raise HTTPException(400, "Add an Anthropic or OpenAI API key in Settings > API keys first.")
+        return verdict
+
     @app.get("/api/health")
     async def health():
         return {"ok": True}
@@ -112,7 +282,7 @@ def create_app(
 
     @app.get("/api/state")
     async def state():
-        return svc().snapshot()
+        return full_snapshot()
 
     @app.get("/api/settings")
     async def get_settings():
@@ -247,7 +417,7 @@ def create_app(
         bus = svc().bus
         q = bus.subscribe()
         try:
-            await ws.send_json({"type": "snapshot", "data": svc().snapshot()})
+            await ws.send_json({"type": "snapshot", "data": full_snapshot()})
             while True:
                 try:
                     msg = await asyncio.wait_for(q.get(), 25)

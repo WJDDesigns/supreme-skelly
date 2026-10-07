@@ -471,3 +471,87 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 .progress.error .bar i { background: #ff5d6c; }
 .icon-only { padding: 8px; }
 .icon-only svg { margin: 0; }
+
+/* ---------- conversation ---------- */
+.talk-grid { display: grid; gap: 18px; }
+@media (min-width: 1280px) { .talk-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; } }
+.provider-seg button { white-space: nowrap; padding: 8px 10px; }
+.badge:not(.orange):not(.green):not(.red) { color: var(--muted); background: rgba(255, 255, 255, .06); }
+.talk-stage { display: grid; justify-items: center; gap: 12px; padding: 18px 0 8px; }
+.talk-btn {
+  --size: 132px; position: relative; width: var(--size); height: var(--size); border-radius: 50%; cursor: pointer;
+  border: 1px solid rgba(255, 138, 0, .45); color: var(--accent-ink);
+  background: radial-gradient(circle at 50% 35%, #ffb547, var(--accent) 60%, #b85a00);
+  box-shadow: 0 18px 40px -16px rgba(255, 138, 0, .9), inset 0 2px 0 rgba(255, 255, 255, .35);
+  display: grid; place-items: center; transition: transform .1s;
+}
+.talk-btn:active { transform: scale(.96); }
+.talk-btn svg { width: 46px; height: 46px; stroke-width: 2; }
+.talk-btn .ico-stop, .talk-btn[data-on="true"] .ico-start { display: none; }
+.talk-btn[data-on="true"] .ico-stop { display: block; }
+.talk-btn[data-on="true"] { background: radial-gradient(circle at 50% 35%, #2a2a2a, #121212); color: var(--accent-2); }
+.talk-btn .ring {
+  --lvl: 0; position: absolute; inset: -10px; border-radius: 50%; pointer-events: none;
+  border: 2px solid rgba(255, 138, 0, calc(.15 + var(--lvl) * .8));
+  transform: scale(calc(1 + var(--lvl) * .18)); transition: transform .12s, border-color .12s;
+}
+.talk-btn[data-state="speaking"] .ring { animation: talk-pulse 1s ease-in-out infinite; border-color: rgba(255, 181, 71, .8); }
+.talk-btn[data-state="connecting"] .ring, .talk-btn[data-state="thinking"] .ring { border-style: dashed; animation: spin 3s linear infinite; }
+@keyframes talk-pulse { 50% { transform: scale(1.12); opacity: .4; } }
+.talk-hint { margin: 0; color: var(--bone); font-weight: 550; }
+.talk-error { margin: 0; color: var(--bad); text-align: center; font-size: .9rem; max-width: 46ch; }
+.transcript { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; max-height: 340px; overflow-y: auto; }
+.transcript li { display: grid; gap: 2px; padding: 10px 14px; border-radius: 16px; max-width: 88%; line-height: 1.4; }
+.transcript li.you { justify-self: end; background: rgba(255, 255, 255, .06); border-bottom-right-radius: 4px; }
+.transcript li.skelly { justify-self: start; background: var(--accent-soft); border: 1px solid rgba(255, 138, 0, .25); border-bottom-left-radius: 4px; }
+.transcript .who-tag { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.transcript li.skelly .who-tag { color: var(--accent-2); }
+.seg.wide { display: flex; width: 100%; margin-bottom: 14px; }
+.seg.wide button { flex: 1; }
+.prov { display: grid; gap: 12px; margin-bottom: 12px; }
+.prov[hidden] { display: none; }
+.field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); align-items: center; gap: 12px; color: var(--muted); font-size: .9rem; margin: 6px 0; }
+.field-row.stack { grid-template-columns: 1fr; gap: 6px; }
+.field-row[hidden] { display: none; }
+.field-row input, .field-row select, .field-row textarea, .secret-edit input {
+  width: 100%; min-width: 0; font: inherit; color: var(--text); background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px;
+}
+.field-row textarea { resize: vertical; line-height: 1.45; }
+.field-row input:focus, .field-row select:focus, .field-row textarea:focus, .secret-edit input:focus { outline: none; border-color: var(--accent); }
+.field-row select option { background: #161616; }
+.key-warn { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 14px; padding: 10px 12px; border-radius: 12px; color: var(--accent-2); background: var(--accent-soft); font-size: .9rem; }
+.key-warn[hidden] { display: none; }
+.btn.small { padding: 6px 12px; font-size: .85rem; }
+
+/* ---------- vision ---------- */
+.cam-view { position: relative; aspect-ratio: 16 / 9; border-radius: 16px; overflow: hidden; background: #050505; border: 1px solid var(--line); }
+.cam-view img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.cam-view img[hidden] { display: none; }
+.cam-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--muted); text-align: center; padding: 16px; }
+.cam-empty[hidden] { display: none; }
+.cam-empty svg { width: 40px; height: 40px; color: rgba(234, 223, 198, .35); }
+.cam-visitor { position: absolute; top: 12px; left: 12px; font-size: .9rem; animation: talk-pulse 1.2s ease-in-out infinite; }
+.cam-visitor[hidden] { display: none; }
+.meter-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; font-size: .9rem; }
+.meter { flex: 1; height: 8px; border-radius: 99px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
+.meter-row output { width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--bone); }
+.cam-desc { margin: 12px 0 0; padding: 10px 14px; border-radius: 14px; background: var(--accent-soft); color: var(--bone); }
+.cam-desc[hidden] { display: none; }
+.vault-inline .list li { border-top: 0; padding-top: 0; }
+
+/* ---------- settings ---------- */
+.facts.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.list li.secret { flex-wrap: wrap; }
+.list li.secret .who { flex: 1 1 220px; }
+.secret-edit { display: flex; gap: 8px; flex: 1 1 260px; min-width: 0; }
+.secret-edit input { flex: 1; }
+@media (max-width: 639px) {
+  .field-row { grid-template-columns: 1fr; gap: 6px; }
+  .facts.two { grid-template-columns: 1fr; }
+  .talk-btn { --size: 112px; }
+  .tabs button { font-size: .66rem; padding: 6px 2px; gap: 3px; min-width: 0; }
+  .tabs .nav-ico { width: 30px; height: 30px; }
+}

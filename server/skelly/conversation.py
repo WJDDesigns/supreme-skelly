@@ -1,0 +1,578 @@
+"""Live AI conversations through Skelly: the USB mic in, Skelly's Live speaker out.
+
+Three interchangeable brains, picked on the Conversation page:
+
+* ElevenLabs Conversational AI: one WebSocket does listening, thinking and the voice.
+* OpenAI Realtime: the same idea with OpenAI's speech-to-speech model.
+* Claude: a pipeline. The mic is cut into utterances, transcribed (ElevenLabs or OpenAI),
+  answered by Claude with streaming text, and each sentence is spoken (ElevenLabs or
+  OpenAI voices) while the next one is still being written.
+
+While Skelly talks his head, arms and torso move at random, and by default the mic is
+ignored so he doesn't hear himself and interrupt his own sentences.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import io
+import json
+import logging
+import random
+import re
+import time
+import wave
+from collections.abc import AsyncIterator, Callable
+from dataclasses import asdict, dataclass, field
+
+import httpx
+
+from .audio_io import FRAME_MS, Mic, Speaker, rms
+
+log = logging.getLogger(__name__)
+
+PROVIDERS = ("elevenlabs", "openai", "claude")
+
+DEFAULT_PROMPT = (
+    "You are Skelly, a friendly, funny six-foot Halloween skeleton standing in Wayne's yard. "
+    "Visitors talk to you out loud. Keep every reply short: one or two spoken sentences. "
+    "Be spooky but family friendly, make bone puns sparingly, and ask visitors questions back."
+)
+
+
+@dataclass
+class ConversationConfig:
+    provider: str = "elevenlabs"
+    prompt: str = DEFAULT_PROMPT
+    first_message: str = "Well hello there! Come closer, I don't bite... much."
+    # ElevenLabs Conversational AI
+    elevenlabs_agent_id: str = ""
+    # OpenAI Realtime
+    openai_model: str = "gpt-realtime"
+    openai_voice: str = "ash"
+    # Claude pipeline
+    claude_model: str = "claude-haiku-4-5-20251001"
+    stt: str = "elevenlabs"  # elevenlabs | openai
+    tts: str = "elevenlabs"  # elevenlabs | openai
+    elevenlabs_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"  # "George"; any voice from your library works
+    openai_tts_voice: str = "onyx"
+    # Behaviour
+    move_while_talking: bool = True
+    ignore_mic_while_talking: bool = True
+    idle_timeout_s: int = 45  # end the conversation after this long with nobody talking
+    mic: str = ""  # PipeWire source; empty = default
+    speaker: str = ""  # PipeWire sink; empty = Skelly's Live speaker when paired, else default
+
+    @classmethod
+    def from_dict(cls, d: dict | None) -> ConversationConfig:
+        known = {f for f in cls.__dataclass_fields__}
+        return cls(**{k: v for k, v in (d or {}).items() if k in known})
+
+
+@dataclass
+class ConversationState:
+    state: str = "idle"  # idle | connecting | listening | thinking | speaking | error
+    provider: str | None = None
+    level: float = 0.0
+    error: str | None = None
+    started_at: float | None = None
+    transcript: list[dict] = field(default_factory=list)
+
+
+class MissingKey(ValueError):
+    pass
+
+
+class Conversation:
+    """Runs one provider at a time and reports what's happening on the event bus."""
+
+    def __init__(self, svc, vault, settings_getter: Callable[[], dict], sink_for_skelly):
+        self.svc = svc
+        self.vault = vault
+        self._config = settings_getter
+        self._sink_for_skelly = sink_for_skelly
+        self.state = ConversationState()
+        self._task: asyncio.Task | None = None
+        self._last_heard = 0.0
+        self._context: list[str] = []
+
+    # -- public ---------------------------------------------------------------
+
+    @property
+    def running(self) -> bool:
+        return bool(self._task and not self._task.done())
+
+    def snapshot(self) -> dict:
+        return asdict(self.state)
+
+    async def start(self, context: str | None = None) -> dict:
+        if self.running:
+            if context:
+                self._context.append(context)
+            return self.snapshot()
+        cfg = ConversationConfig.from_dict(self._config())
+        self._check_keys(cfg)
+        self._context = [context] if context else []
+        self.state = ConversationState(state="connecting", provider=cfg.provider, started_at=time.time())
+        self._publish()
+        self._task = asyncio.create_task(self._run(cfg), name="skelly-conversation")
+        return self.snapshot()
+
+    async def stop(self) -> dict:
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except (asyncio.CancelledError, Exception):
+                pass
+        self._task = None
+        if self.state.state != "error":
+            self.state.state = "idle"
+        self.state.level = 0.0
+        self._publish()
+        return self.snapshot()
+
+    def add_context(self, text: str) -> None:
+        """Something worth knowing mid-conversation (e.g. what the camera sees)."""
+        self._context.append(text)
+
+    # -- plumbing ---------------------------------------------------------------
+
+    def _check_keys(self, cfg: ConversationConfig) -> None:
+        if cfg.provider not in PROVIDERS:
+            raise ValueError(f"Unknown AI '{cfg.provider}'")
+        need = {
+            "elevenlabs": ["elevenlabs_api_key"] if not cfg.elevenlabs_agent_id else [],
+            "openai": ["openai_api_key"],
+            "claude": ["anthropic_api_key", f"{cfg.stt}_api_key", f"{cfg.tts}_api_key"],
+        }[cfg.provider]
+        if cfg.provider == "elevenlabs" and not cfg.elevenlabs_agent_id:
+            raise MissingKey("Add your ElevenLabs agent ID on the Conversation page first.")
+        missing = [n for n in dict.fromkeys(need) if not self.vault.get(n)]
+        if missing:
+            names = ", ".join(n.replace("_api_key", "").replace("openai", "OpenAI").replace("elevenlabs", "ElevenLabs")
+                              .replace("anthropic", "Anthropic") for n in missing)
+            raise MissingKey(f"Add your {names} API key in Settings > API keys first.")
+
+    def _publish(self) -> None:
+        self.svc.bus.publish("conversation", self.snapshot())
+
+    def _set(self, state: str) -> None:
+        if self.state.state != state:
+            self.state.state = state
+            self._publish()
+
+    def _say(self, role: str, text: str) -> None:
+        text = (text or "").strip()
+        if not text:
+            return
+        entry = {"role": role, "text": text, "ts": time.time()}
+        self.state.transcript = (self.state.transcript + [entry])[-60:]
+        self.svc.bus.publish("transcript", entry)
+        if role == "user":
+            self._last_heard = time.monotonic()
+
+    def _take_context(self) -> str:
+        ctx, self._context = " ".join(self._context), []
+        return ctx
+
+    async def _run(self, cfg: ConversationConfig) -> None:
+        speaker: Speaker | None = None
+        mover: asyncio.Task | None = None
+        self._last_heard = time.monotonic()
+        try:
+            sink = cfg.speaker or await self._sink_for_skelly()
+            speaker = Speaker(sink)
+            mover = asyncio.create_task(self._body(cfg, speaker))
+            runner = {"elevenlabs": self._elevenlabs, "openai": self._openai, "claude": self._claude}[cfg.provider]
+            await runner(cfg, speaker)
+        except asyncio.CancelledError:
+            raise
+        except MissingKey as exc:
+            self.state.error = str(exc)
+            self._set("error")
+        except Exception as exc:
+            log.exception("conversation failed")
+            self.state.error = _friendly(exc)
+            self._set("error")
+        else:
+            self._set("idle")
+        finally:
+            if mover:
+                mover.cancel()
+            if speaker:
+                await speaker.close()
+            await self._still()
+
+    async def _idle_watch(self, cfg: ConversationConfig, speaker: Speaker) -> None:
+        """Ends the conversation once nobody has spoken for a while."""
+        while True:
+            await asyncio.sleep(1)
+            if speaker.speaking:
+                self._last_heard = time.monotonic()
+            elif time.monotonic() - self._last_heard > cfg.idle_timeout_s:
+                log.info("conversation idle for %ss; ending", cfg.idle_timeout_s)
+                return
+
+    async def _mic_frames(self, cfg: ConversationConfig, rate: int, speaker: Speaker) -> AsyncIterator[bytes]:
+        """Mic chunks, with Skelly's own voice blanked out if asked, and the level published."""
+        last_pub = 0.0
+        async with Mic(rate, cfg.mic or None) as mic:
+            async for pcm in mic:
+                deaf = cfg.ignore_mic_while_talking and speaker.speaking
+                self.state.level = 0.0 if deaf else mic.level
+                now = time.monotonic()
+                if now - last_pub > 0.15:
+                    last_pub = now
+                    self.svc.bus.publish("conversation_level", {"level": round(self.state.level, 3)})
+                yield bytes(len(pcm)) if deaf else pcm
+
+    async def _body(self, cfg: ConversationConfig, speaker: Speaker) -> None:
+        """Random head/arm/torso movement while Skelly is speaking."""
+        if not cfg.move_while_talking:
+            return
+        moving = False
+        parts = [m["key"] for m in self.svc.profile.to_dict().get("movements", []) if m["key"] != "all"]
+        while True:
+            await asyncio.sleep(random.uniform(1.2, 3.0))
+            if not self.svc.link.connected or not parts:
+                continue
+            try:
+                if speaker.speaking:
+                    pick = random.sample(parts, k=random.randint(1, len(parts)))
+                    await self.svc.set_movement(pick)
+                    moving = True
+                elif moving:
+                    await self.svc.set_movement([])
+                    moving = False
+            except Exception as exc:  # movement is decoration; never end the chat over it
+                log.debug("movement failed: %r", exc)
+
+    async def _still(self) -> None:
+        try:
+            if self.svc.link.connected:
+                await self.svc.set_movement([])
+        except Exception:
+            pass
+
+    # -- ElevenLabs Conversational AI ------------------------------------------
+
+    async def _elevenlabs(self, cfg: ConversationConfig, speaker: Speaker) -> None:
+        from websockets.asyncio.client import connect
+
+        key = self.vault.get("elevenlabs_api_key")
+        url = f"wss://api.elevenlabs.io/v1/convai/conversation?agent_id={cfg.elevenlabs_agent_id}"
+        if key:  # private agents need a signed URL; public ones work either way
+            async with httpx.AsyncClient(timeout=15) as http:
+                r = await http.get("https://api.elevenlabs.io/v1/convai/conversation/get-signed-url",
+                                   params={"agent_id": cfg.elevenlabs_agent_id}, headers={"xi-api-key": key})
+                _raise_for(r, "ElevenLabs")
+                url = r.json()["signed_url"]
+        async with connect(url, max_size=None, open_timeout=15) as ws:
+            init = {"type": "conversation_initiation_client_data"}
+            overrides = {}
+            if cfg.prompt:
+                overrides.setdefault("agent", {})["prompt"] = {"prompt": cfg.prompt}
+            if cfg.first_message:
+                overrides.setdefault("agent", {})["first_message"] = cfg.first_message
+            if overrides:
+                init["conversation_config_override"] = overrides
+            await ws.send(json.dumps(init))
+            in_rate = out_rate = 16000
+            self._set("listening")
+
+            async def send_mic():
+                async for pcm in self._mic_frames(cfg, in_rate, speaker):
+                    if ctx := self._take_context():
+                        await ws.send(json.dumps({"type": "contextual_update", "text": ctx}))
+                    await ws.send(json.dumps({"user_audio_chunk": base64.b64encode(pcm).decode()}))
+
+            async def receive():
+                nonlocal out_rate
+                async for raw in ws:
+                    msg = json.loads(raw)
+                    kind = msg.get("type")
+                    if kind == "conversation_initiation_metadata":
+                        meta = msg.get("conversation_initiation_metadata_event", {})
+                        out_rate = _pcm_rate(meta.get("agent_output_audio_format"), 16000)
+                    elif kind == "audio":
+                        pcm = base64.b64decode(msg["audio_event"]["audio_base_64"])
+                        self._set("speaking")
+                        await speaker.play(pcm, out_rate)
+                    elif kind == "agent_response":
+                        self._say("skelly", msg["agent_response_event"]["agent_response"])
+                    elif kind == "user_transcript":
+                        self._say("user", msg["user_transcription_event"]["user_transcript"])
+                        self._set("thinking")
+                    elif kind == "interruption":
+                        await speaker.interrupt()
+                        self._set("listening")
+                    elif kind == "ping":
+                        ev = msg.get("ping_event", {})
+                        await ws.send(json.dumps({"type": "pong", "event_id": ev.get("event_id")}))
+                    if kind != "audio" and not speaker.speaking and self.state.state == "speaking":
+                        self._set("listening")
+
+            await _first_done(send_mic(), receive(), self._idle_watch(cfg, speaker), self._speaking_watch(speaker))
+
+    # -- OpenAI Realtime --------------------------------------------------------
+
+    async def _openai(self, cfg: ConversationConfig, speaker: Speaker) -> None:
+        from websockets.asyncio.client import connect
+
+        rate = 24000
+        url = f"wss://api.openai.com/v1/realtime?model={cfg.openai_model}"
+        headers = {"Authorization": f"Bearer {self.vault.get('openai_api_key')}"}
+        async with connect(url, additional_headers=headers, max_size=None, open_timeout=15) as ws:
+            await ws.send(json.dumps({"type": "session.update", "session": {
+                "type": "realtime",
+                "instructions": cfg.prompt,
+                "audio": {
+                    "input": {"format": {"type": "audio/pcm", "rate": rate},
+                              "turn_detection": {"type": "server_vad"},
+                              "transcription": {"model": "gpt-4o-mini-transcribe"}},
+                    "output": {"format": {"type": "audio/pcm", "rate": rate}, "voice": cfg.openai_voice},
+                },
+            }}))
+            if cfg.first_message:
+                await ws.send(json.dumps({"type": "response.create", "response": {
+                    "instructions": f"Greet the visitor by saying: {cfg.first_message}"}}))
+            self._set("listening")
+
+            async def send_mic():
+                async for pcm in self._mic_frames(cfg, rate, speaker):
+                    if ctx := self._take_context():
+                        await ws.send(json.dumps({"type": "conversation.item.create", "item": {
+                            "type": "message", "role": "system",
+                            "content": [{"type": "input_text", "text": ctx}]}}))
+                    await ws.send(json.dumps({"type": "input_audio_buffer.append",
+                                              "audio": base64.b64encode(pcm).decode()}))
+
+            async def receive():
+                async for raw in ws:
+                    msg = json.loads(raw)
+                    kind = msg.get("type", "")
+                    if kind in ("response.output_audio.delta", "response.audio.delta"):
+                        self._set("speaking")
+                        await speaker.play(base64.b64decode(msg["delta"]), rate)
+                    elif kind in ("response.output_audio_transcript.done", "response.audio_transcript.done"):
+                        self._say("skelly", msg.get("transcript", ""))
+                    elif kind == "conversation.item.input_audio_transcription.completed":
+                        self._say("user", msg.get("transcript", ""))
+                    elif kind == "input_audio_buffer.speech_started":
+                        if not (cfg.ignore_mic_while_talking and speaker.speaking):
+                            await speaker.interrupt()
+                        self._last_heard = time.monotonic()
+                    elif kind == "input_audio_buffer.speech_stopped":
+                        self._set("thinking")
+                    elif kind == "error":
+                        err = msg.get("error", {})
+                        raise RuntimeError(f"OpenAI: {err.get('message') or err}")
+
+            await _first_done(send_mic(), receive(), self._idle_watch(cfg, speaker), self._speaking_watch(speaker))
+
+    async def _speaking_watch(self, speaker: Speaker) -> None:
+        """Flip back to "listening" once buffered speech has actually finished playing."""
+        while True:
+            await asyncio.sleep(0.1)
+            if self.state.state == "speaking" and not speaker.speaking:
+                self._set("listening")
+
+    # -- Claude pipeline ------------------------------------------------------------
+
+    async def _claude(self, cfg: ConversationConfig, speaker: Speaker) -> None:
+        rate = 16000
+        history: list[dict] = []
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30, read=60)) as http:
+            if cfg.first_message:
+                self._set("speaking")
+                self._say("skelly", cfg.first_message)
+                history += [{"role": "user", "content": "(A visitor has walked up.)"},
+                            {"role": "assistant", "content": cfg.first_message}]
+                await self._speak(http, cfg, speaker, cfg.first_message)
+            self._set("listening")
+
+            async def turns():
+                async for utterance in self._utterances(cfg, rate, speaker):
+                    self._set("thinking")
+                    text = await self._transcribe(http, cfg, utterance, rate)
+                    if not text:
+                        self._set("listening")
+                        continue
+                    self._say("user", text)
+                    ctx = self._take_context()
+                    history.append({"role": "user", "content": f"{text}\n\n(Context: {ctx})" if ctx else text})
+                    reply = await self._answer(http, cfg, speaker, history)
+                    history.append({"role": "assistant", "content": reply or "..."})
+                    del history[:-24]
+                    await speaker.wait_done()
+                    self._set("listening")
+
+            await _first_done(turns(), self._idle_watch(cfg, speaker))
+
+    async def _utterances(self, cfg: ConversationConfig, rate: int, speaker: Speaker) -> AsyncIterator[bytes]:
+        """Energy-based voice activity detection: yields one buffer per thing someone said."""
+        floor, voiced, quiet = 0.004, 0, 0
+        buf = bytearray()
+        start_frames, end_frames = 3, 700 // FRAME_MS
+        min_bytes = rate * 2 * 300 // 1000
+        async for pcm in self._mic_frames(cfg, rate, speaker):
+            level = rms(pcm)
+            if not buf:
+                floor = 0.95 * floor + 0.05 * min(level, 0.05)  # learn the background noise
+            loud = level > max(0.012, floor * 3)
+            if loud:
+                voiced += 1
+                quiet = 0
+            else:
+                quiet += 1
+                voiced = 0 if not buf else voiced
+            if buf or voiced >= start_frames:
+                buf += pcm
+                if quiet >= end_frames:
+                    if len(buf) >= min_bytes:
+                        self._last_heard = time.monotonic()
+                        yield bytes(buf)
+                    buf.clear()
+                    voiced = quiet = 0
+                elif len(buf) > rate * 2 * 20:  # 20 s monologue: hand it over anyway
+                    yield bytes(buf)
+                    buf.clear()
+
+    async def _transcribe(self, http: httpx.AsyncClient, cfg: ConversationConfig, pcm: bytes, rate: int) -> str:
+        wav = _wav(pcm, rate)
+        if cfg.stt == "openai":
+            r = await http.post("https://api.openai.com/v1/audio/transcriptions",
+                                headers={"Authorization": f"Bearer {self.vault.get('openai_api_key')}"},
+                                data={"model": "gpt-4o-mini-transcribe"},
+                                files={"file": ("speech.wav", wav, "audio/wav")})
+            _raise_for(r, "OpenAI speech-to-text")
+            return r.json().get("text", "").strip()
+        r = await http.post("https://api.elevenlabs.io/v1/speech-to-text",
+                            headers={"xi-api-key": self.vault.get("elevenlabs_api_key")},
+                            data={"model_id": "scribe_v1"}, files={"file": ("speech.wav", wav, "audio/wav")})
+        _raise_for(r, "ElevenLabs speech-to-text")
+        return r.json().get("text", "").strip()
+
+    async def _answer(self, http: httpx.AsyncClient, cfg: ConversationConfig, speaker: Speaker,
+                      history: list[dict]) -> str:
+        """Streams Claude's reply and speaks it sentence by sentence as it arrives."""
+        body = {"model": cfg.claude_model, "max_tokens": 300, "system": cfg.prompt,
+                "messages": history, "stream": True}
+        headers = {"x-api-key": self.vault.get("anthropic_api_key"), "anthropic-version": "2023-06-01",
+                   "content-type": "application/json"}
+        full, pending = "", ""
+        speaking = asyncio.Queue()
+
+        async def voice():
+            while (sentence := await speaking.get()) is not None:
+                self._set("speaking")
+                await self._speak(http, cfg, speaker, sentence)
+
+        voicer = asyncio.create_task(voice())
+        try:
+            async with http.stream("POST", "https://api.anthropic.com/v1/messages", json=body, headers=headers) as r:
+                if r.status_code >= 400:
+                    await r.aread()
+                    _raise_for(r, "Claude")
+                async for line in r.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    ev = json.loads(line[5:].strip() or "{}")
+                    if ev.get("type") == "content_block_delta" and ev["delta"].get("type") == "text_delta":
+                        chunk = ev["delta"]["text"]
+                        full += chunk
+                        pending += chunk
+                        *done, pending = re.split(r"(?<=[.!?])\s+", pending)
+                        for sentence in done:
+                            await speaking.put(sentence)
+            if pending.strip():
+                await speaking.put(pending)
+            await speaking.put(None)
+            await voicer
+        finally:
+            voicer.cancel()
+        self._say("skelly", full)
+        return full
+
+    async def _speak(self, http: httpx.AsyncClient, cfg: ConversationConfig, speaker: Speaker, text: str) -> None:
+        if cfg.tts == "openai":
+            rate = 24000
+            req = http.stream("POST", "https://api.openai.com/v1/audio/speech",
+                              headers={"Authorization": f"Bearer {self.vault.get('openai_api_key')}"},
+                              json={"model": "gpt-4o-mini-tts", "voice": cfg.openai_tts_voice, "input": text,
+                                    "response_format": "pcm", "instructions": "Speak like a playful, spooky skeleton."})
+            name = "OpenAI voice"
+        else:
+            rate = 16000
+            req = http.stream("POST", f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.elevenlabs_voice_id}/stream",
+                              params={"output_format": "pcm_16000"},
+                              headers={"xi-api-key": self.vault.get("elevenlabs_api_key")},
+                              json={"text": text, "model_id": "eleven_flash_v2_5"})
+            name = "ElevenLabs voice"
+        async with req as r:
+            if r.status_code >= 400:
+                await r.aread()
+                _raise_for(r, name)
+            carry = b""
+            async for chunk in r.aiter_bytes():
+                chunk = carry + chunk
+                cut = len(chunk) - len(chunk) % 2
+                carry = chunk[cut:]
+                await speaker.play(chunk[:cut], rate)
+
+
+# -- helpers ------------------------------------------------------------------------
+
+
+async def _first_done(*coros) -> None:
+    """Run side by side; when any one finishes (or fails), stop the rest."""
+    tasks = [asyncio.ensure_future(c) for c in coros]
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for t in done:
+            t.result()
+    finally:
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _pcm_rate(fmt: str | None, default: int) -> int:
+    m = re.match(r"pcm_(\d+)", fmt or "")
+    return int(m.group(1)) if m else default
+
+
+def _wav(pcm: bytes, rate: int) -> bytes:
+    out = io.BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm)
+    return out.getvalue()
+
+
+def _raise_for(r: httpx.Response, who: str) -> None:
+    if r.status_code < 400:
+        return
+    try:
+        detail = r.json()
+        detail = detail.get("detail") or detail.get("error") or detail
+        if isinstance(detail, dict):
+            detail = detail.get("message") or detail.get("status") or json.dumps(detail)
+    except ValueError:
+        detail = r.text[:200]
+    if r.status_code in (401, 403):
+        raise RuntimeError(f"{who} rejected the API key ({r.status_code}). Check it in Settings > API keys.")
+    raise RuntimeError(f"{who} error {r.status_code}: {detail}")
+
+
+def _friendly(exc: Exception) -> str:
+    text = str(exc) or exc.__class__.__name__
+    if "401" in text or "403" in text:
+        return "The AI service rejected the API key. Check it in Settings > API keys."
+    if isinstance(exc, (OSError, httpx.ConnectError)) and "pa" not in text:
+        return f"Couldn't reach the AI service: {text}"
+    return text

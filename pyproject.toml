@@ -10,6 +10,8 @@ dependencies = [
     "python-multipart>=0.0.9",
     "numpy>=1.26",
     "lameenc>=1.7",
+    "httpx>=0.27",
+    "websockets>=13",
 ]
 
 [project.optional-dependencies]

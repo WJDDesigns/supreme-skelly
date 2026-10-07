@@ -464,6 +464,8 @@ function applySnapshot(s) {
   renderSettings(s.settings);
   renderProfile();
   renderDevice();
+  if (s.conversation) renderTalk(s.conversation);
+  if (s.vision) renderVision(s.vision);
 }
 
 function connectEvents() {
@@ -476,6 +478,12 @@ function connectEvents() {
     else if (msg.type === "upload") renderUpload(msg.data);
     else if (msg.type === "look") { state.look = msg.data; renderPreview(); }
     else if (msg.type === "profile") { state.profile = msg.data; state.moves.clear(); state.mode = null; renderProfile(); }
+    else if (msg.type === "conversation") renderTalk(msg.data);
+    else if (msg.type === "conversation_level") setTalkLevel(msg.data.level);
+    else if (msg.type === "transcript") addLine(msg.data);
+    else if (msg.type === "vision") renderVision(msg.data);
+    else if (msg.type === "vision_motion") setMotion(msg.data.motion);
+    else if (msg.type === "visitor") onVisitor(msg.data);
   };
   ws.onclose = () => setTimeout(connectEvents, 1500);
 }
@@ -543,3 +551,198 @@ function renderUpload(u) {
     $("#upload-btn").disabled = true;
   }
 }
+
+// ---------- conversation ----------
+const TALK_TEXT = { idle: "Idle", connecting: "Connecting…", listening: "Listening", thinking: "Thinking…",
+  speaking: "Speaking", error: "Problem" };
+const TALK_HINT = { idle: "Tap to start a conversation", connecting: "Waking Skelly's voice…",
+  listening: "Skelly is listening. Say hello!", thinking: "Skelly is thinking…", speaking: "Skelly is talking",
+  error: "Tap to try again" };
+let talkCfg = {};
+let vault = [];
+
+function renderTalk(c) {
+  const on = ["connecting", "listening", "thinking", "speaking"].includes(c.state);
+  $("#talk-toggle").dataset.on = on;
+  $("#talk-toggle").dataset.state = c.state;
+  $("#talk-toggle").setAttribute("aria-label", on ? "Stop the conversation" : "Start a conversation");
+  const b = $("#talk-state");
+  b.textContent = TALK_TEXT[c.state] ?? c.state;
+  b.className = `badge ${c.state === "error" ? "red" : on ? "green" : ""}`;
+  $("#talk-hint").textContent = TALK_HINT[c.state] ?? "";
+  $("#talk-error").hidden = c.state !== "error" || !c.error;
+  $("#talk-error").textContent = c.error ?? "";
+  if (!on) setTalkLevel(0);
+  if (c.transcript && !$("#transcript").children.length) c.transcript.forEach(addLine);
+}
+function setTalkLevel(level) {
+  $("#talk-ring").style.setProperty("--lvl", Math.min(1, level * 12).toFixed(2));
+}
+function addLine(t) {
+  const ul = $("#transcript");
+  const li = el("li", { className: t.role === "user" ? "you" : "skelly" },
+    el("span", { className: "who-tag", textContent: t.role === "user" ? "Visitor" : "Skelly" }),
+    el("span", { textContent: t.text }));
+  ul.append(li);
+  while (ul.children.length > 60) ul.firstChild.remove();
+  ul.scrollTop = ul.scrollHeight;
+}
+$("#talk-toggle").addEventListener("click", (ev) => {
+  const on = ev.currentTarget.dataset.on === "true";
+  if (!on) $("#transcript").replaceChildren();
+  run(ev.currentTarget, async () => renderTalk(await api(on ? "/conversation/stop" : "/conversation/start", {})));
+});
+
+const KEY_NEEDS = {
+  elevenlabs: () => (talkCfg.elevenlabs_agent_id ? [] : ["agent"]),
+  openai: () => ["openai_api_key"],
+  claude: () => [...new Set(["anthropic_api_key", `${talkCfg.stt}_api_key`, `${talkCfg.tts}_api_key`])],
+};
+function renderTalkCfg() {
+  const p = talkCfg.provider || "elevenlabs";
+  document.querySelectorAll("#provider-seg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.provider === p));
+  document.querySelectorAll(".prov[data-for]").forEach((d) => (d.hidden = d.dataset.for !== p));
+  document.querySelectorAll("[data-cfg]").forEach((i) => {
+    if (document.activeElement === i) return;
+    const v = talkCfg[i.dataset.cfg];
+    if (i.type === "checkbox") i.checked = !!v; else if (v != null) i.value = v;
+  });
+  document.querySelectorAll("[data-seg]").forEach((seg) =>
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", talkCfg[seg.dataset.seg] === b.dataset.val)));
+  document.querySelectorAll("[data-show-tts]").forEach((l) => (l.hidden = l.dataset.showTts !== talkCfg.tts));
+  const have = new Set(vault.filter((v) => v.set).map((v) => v.name));
+  const missing = KEY_NEEDS[p]().filter((n) => n === "agent" || !have.has(n));
+  const warn = $("#key-warn");
+  warn.hidden = !missing.length;
+  warn.replaceChildren();
+  if (missing.length) {
+    const names = missing.map((n) => n === "agent" ? "an agent ID below" : vault.find((v) => v.name === n)?.label ?? n);
+    warn.append(el("span", { textContent: `Needs ${names.join(", ")}.` }));
+    if (missing.some((n) => n !== "agent")) {
+      const go = el("button", { className: "btn outline small", textContent: "Open API keys" });
+      go.addEventListener("click", () => showTab("settings"));
+      warn.append(go);
+    }
+  }
+}
+let cfgTimer;
+function saveTalkCfg(patch) {
+  Object.assign(talkCfg, patch);
+  renderTalkCfg();
+  clearTimeout(cfgTimer);
+  cfgTimer = setTimeout(() => run(null, async () => { talkCfg = await api("/conversation/config", talkCfg, "PUT"); }), 400);
+}
+document.querySelectorAll("#provider-seg button").forEach((b) =>
+  b.addEventListener("click", () => saveTalkCfg({ provider: b.dataset.provider })));
+document.querySelectorAll("[data-seg] button").forEach((b) =>
+  b.addEventListener("click", () => saveTalkCfg({ [b.parentElement.dataset.seg]: b.dataset.val })));
+document.querySelectorAll("[data-cfg]").forEach((i) =>
+  i.addEventListener(i.type === "checkbox" || i.tagName === "SELECT" ? "change" : "input", () =>
+    saveTalkCfg({ [i.dataset.cfg]: i.type === "checkbox" ? i.checked : i.type === "number" ? Number(i.value) : i.value })));
+api("/conversation").then((r) => { talkCfg = r.config; renderTalkCfg(); renderTalk(r.state); }).catch(() => {});
+
+// ---------- vision ----------
+let visionCfg = {};
+let cams = [];
+function renderVision(v) {
+  $("#cam-toggle").lastElementChild.textContent = v.running ? "Stop camera" : "Start camera";
+  $("#cam-toggle").firstElementChild.innerHTML = `<use href="#i-${v.running ? "stop" : "play"}"/>`;
+  $("#cam-toggle").className = v.running ? "btn outline" : "btn primary";
+  const img = $("#cam-img");
+  if (v.running && img.hidden) { img.src = `/api/vision/stream?t=${Date.now()}`; img.hidden = false; }
+  if (!v.running && !img.hidden) { img.removeAttribute("src"); img.hidden = true; }
+  $("#cam-empty").hidden = v.running && !v.error;
+  $("#cam-empty").lastElementChild.textContent = v.error ? `Camera problem: ${v.error}` : v.running ? "Connecting…" : "Camera is off";
+  $("#cam-sub").textContent = v.running ? (v.error ? "Retrying…" : `Watching${v.fps ? ` · ${v.fps} fps` : ""}`) : "Off";
+  $("#cam-visitor").hidden = !v.visitor;
+  if (v.description) { $("#cam-desc").hidden = false; $("#cam-desc").textContent = v.description; }
+  if (!v.running) setMotion(0);
+}
+function setMotion(m) {
+  const pct = Math.min(100, Math.round(m * 400));
+  $("#motion-bar").style.width = `${pct}%`;
+  $("#motion-out").textContent = `${pct}%`;
+}
+function onVisitor(v) {
+  toast(v.description ? `👀 Visitor: ${v.description}` : "👀 Someone walked up");
+}
+function renderVisionCfg() {
+  const src = visionCfg.source || "usb";
+  document.querySelectorAll("#cam-source button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.val === src));
+  document.querySelectorAll(".prov[data-cam]").forEach((d) => (d.hidden = d.dataset.cam !== src));
+  const sel = $("#cam-device");
+  sel.replaceChildren(...(cams.length ? cams : [{ device: visionCfg.usb_device || "/dev/video0", label: "No USB camera found" }])
+    .map((c) => el("option", { value: c.device, textContent: `${c.label} (${c.device})` })));
+  document.querySelectorAll("[data-vcfg]").forEach((i) => {
+    const v = visionCfg[i.dataset.vcfg];
+    if (i.type === "checkbox") i.checked = !!v; else if (v != null) i.value = v;
+  });
+  $("#sens-out").textContent = visionCfg.sensitivity ?? 50;
+}
+let vTimer;
+function saveVisionCfg(patch) {
+  Object.assign(visionCfg, patch);
+  renderVisionCfg();
+  clearTimeout(vTimer);
+  vTimer = setTimeout(() => run(null, async () => { visionCfg = await api("/vision/config", visionCfg, "PUT"); }), 400);
+}
+document.querySelectorAll("#cam-source button").forEach((b) => b.addEventListener("click", () => saveVisionCfg({ source: b.dataset.val })));
+document.querySelectorAll("[data-vcfg]").forEach((i) =>
+  i.addEventListener(i.type === "range" ? "input" : "change", () =>
+    saveVisionCfg({ [i.dataset.vcfg]: i.type === "checkbox" ? i.checked : ["rotate", "sensitivity"].includes(i.dataset.vcfg) ? Number(i.value) : i.value })));
+$("#cam-toggle").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => renderVision(await api(ev.currentTarget.textContent.includes("Stop") ? "/vision/stop" : "/vision/start", {}))));
+$("#cam-describe").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => {
+    const r = await api("/vision/describe", {});
+    $("#cam-desc").hidden = false;
+    $("#cam-desc").textContent = `${r.people ? `${r.people} ${r.people === 1 ? "person" : "people"}. ` : "Nobody there. "}${r.description ?? ""}`;
+  }));
+api("/vision").then((r) => { visionCfg = r.config; cams = r.cameras; renderVisionCfg(); renderVision(r.state); }).catch(() => {});
+
+// ---------- settings: speaker, vault ----------
+async function loadAudio() {
+  try {
+    const d = await api("/audio/devices");
+    const spk = d.speakers.find((x) => x.bluetooth);
+    $("#spk-out").textContent = spk ? `${spk.label} · connected` : "Not connected";
+    $("#mic-out").textContent = d.mics.find((m) => /usb/i.test(m.name))?.label ?? d.mics[0]?.label ?? "None found";
+  } catch { $("#spk-out").textContent = "Audio isn't set up on this machine"; }
+}
+$("#spk-connect").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => { await api("/speaker/connect", {}); await loadAudio(); }, "Skelly's speaker is connected"));
+loadAudio();
+
+function secretRow(v) {
+  const input = el("input", { type: "password", placeholder: v.set ? `Saved (${v.hint})` : "Paste here", autocomplete: "off" });
+  const save = el("button", { className: "btn primary", textContent: v.set ? "Replace" : "Save" });
+  save.addEventListener("click", () =>
+    run(save, async () => {
+      if (!input.value.trim()) throw new Error("Paste the value first");
+      vault = await api(`/vault/${v.name}`, { value: input.value.trim() }, "PUT");
+      renderVault();
+    }, `${v.label} saved`));
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") save.click(); });
+  const end = el("div", { className: "end" });
+  if (v.set) {
+    end.append(el("span", { className: "badge green", textContent: v.hint }));
+    const del = el("button", { className: "btn outline", textContent: "Remove" });
+    del.addEventListener("click", () => {
+      if (!confirm(`Remove the ${v.label}?`)) return;
+      run(del, async () => { vault = await api(`/vault/${v.name}`, undefined, "DELETE"); renderVault(); }, "Removed");
+    });
+    end.append(del);
+  }
+  return el("li", { className: "secret" },
+    el("div", { className: "who" },
+      el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-key"/></svg>' }),
+      el("div", {}, el("div", { className: "name", textContent: v.label }), el("div", { className: "meta", textContent: v.used_for }))),
+    el("div", { className: "secret-edit" }, input, save), end);
+}
+function renderVault() {
+  $("#vault").replaceChildren(...vault.filter((v) => v.name !== "rtsp_url").map(secretRow));
+  const rtsp = vault.find((v) => v.name === "rtsp_url");
+  if (rtsp) $("#rtsp-inline").replaceChildren(el("ul", { className: "list" }, secretRow(rtsp)));
+  renderTalkCfg();
+}
+api("/vault").then((v) => { vault = v; renderVault(); }).catch(() => {});
