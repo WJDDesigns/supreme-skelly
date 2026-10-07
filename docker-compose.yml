@@ -20,7 +20,13 @@ services:
       # Settings (last device, startup options) survive updates and reboots.
       - ./data:/data
       # The mic and Skelly's Live speaker go through the host's PipeWire (user "skelly", uid 1000).
-      - /run/user/1000/pulse:/run/user/1000/pulse
+      # The whole of /run/user, following new mounts, so a restarted sound session is picked up
+      # without restarting this container (mounting just .../pulse goes stale when PipeWire restarts).
+      - type: bind
+        source: /run/user
+        target: /run/user
+        bind:
+          propagation: rslave
       # USB cameras appear here; the cgroup rule below allows video devices only.
       - /dev:/dev
     device_cgroup_rules:

@@ -205,6 +205,8 @@ def create_app(
         if not s.state.live_mode:
             await s.enable_live_mode()
             await asyncio.sleep(3)
+        if not await audio_io.sound_server_ok():
+            raise RuntimeError(audio_io.NO_SOUND_SERVER)
         names = tuple(dict.fromkeys([*s.profile.live_audio_names, *([s.state.bt_name] if s.state.bt_name else [])]))
         adapter = getattr(s.link, "adapter_in_use", None) or "hci0"
         info = await speaker.connect_speaker(adapter, names, s.state.pin or "1234")

@@ -70,6 +70,20 @@ async def list_devices() -> dict:
     }
 
 
+async def sound_server_ok() -> bool:
+    """Whether the host's PipeWire answers on the pulse socket."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "pactl", "info", stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        return await asyncio.wait_for(proc.wait(), 5) == 0
+    except (FileNotFoundError, TimeoutError):
+        return False
+
+
+NO_SOUND_SERVER = ("Can't reach the mini PC's sound service, so the mic and Skelly's speaker are unavailable."
+                   " Restart the mini PC, then try again.")
+
+
 def skelly_sink_name(mac: str | None) -> str | None:
     return f"bluez_output.{mac.replace(':', '_').upper()}.1" if mac else None
 
