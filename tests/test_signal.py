@@ -1,6 +1,9 @@
 import asyncio
 import socket
 import struct
+import sys
+
+import pytest
 
 from skelly import rssi as rssi_mod
 from skelly.link import SimulatedLink
@@ -29,6 +32,7 @@ def _reply(ours: socket.socket, addr_type_ok: int, rssi: int) -> None:
             return
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="needs Linux SOCK_SEQPACKET socketpairs")
 def test_conn_info_reply_is_parsed():
     import threading
 

@@ -40,7 +40,7 @@ def _open() -> socket.socket:
     global _libc
     if _libc is None:
         _libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6", use_errno=True)
-    s = socket.socket(AF_BLUETOOTH, socket.SOCK_RAW | socket.SOCK_CLOEXEC, BTPROTO_HCI)
+    s = socket.socket(AF_BLUETOOTH, socket.SOCK_RAW | getattr(socket, "SOCK_CLOEXEC", 0), BTPROTO_HCI)
     addr = _SockaddrHci(AF_BLUETOOTH, HCI_DEV_NONE, HCI_CHANNEL_CONTROL)
     if _libc.bind(s.fileno(), ctypes.byref(addr), ctypes.sizeof(addr)) != 0:
         err = ctypes.get_errno()
@@ -76,7 +76,7 @@ def read_rssi(address: str, index: int = 0, timeout: float = 1.0) -> int | None:
     global _warned
     try:
         s = _open()
-    except OSError as exc:
+    except (OSError, AttributeError) as exc:  # no Bluetooth sockets on macOS/Windows
         if not _warned:
             log.info("Live Bluetooth signal strength unavailable: %s", exc)
             _warned = True
