@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0f14">
+  <title>Supreme Skelly</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true">☠</span> Supreme Skelly</div>
+    <button id="conn-pill" class="pill" data-status="disconnected">
+      <span class="dot"></span><span id="conn-text">Not connected</span>
+    </button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="device" aria-selected="true">Device</button>
+    <button role="tab" data-tab="controls">Controls</button>
+    <button role="tab" data-tab="sounds">Sounds</button>
+  </nav>
+
+  <main>
+    <!-- Device -->
+    <section id="tab-device" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <h2>Find your animatronic</h2>
+          <button id="scan-btn" class="btn primary">Scan</button>
+        </div>
+        <p class="muted" id="scan-hint">Turn Skelly on, then scan. Supported: Ultra Skelly v2, Animated Skelly, 12ft Skelly, Lethal Lily, Ultra Santa.</p>
+        <ul id="scan-list" class="list"></ul>
+      </div>
+
+      <div class="card" id="device-card" hidden>
+        <div class="card-head">
+          <h2 id="dev-name">Device</h2>
+          <button id="disconnect-btn" class="btn ghost">Disconnect</button>
+        </div>
+        <dl class="facts">
+          <div><dt>Model</dt><dd id="dev-model">–</dd></div>
+          <div><dt>Firmware</dt><dd id="dev-version">–</dd></div>
+          <div><dt>Speaker name</dt><dd id="dev-bt">–</dd></div>
+          <div><dt>Free space</dt><dd id="dev-free">–</dd></div>
+        </dl>
+        <div class="row">
+          <button id="live-btn" class="btn">Turn on Live Mode</button>
+          <span class="muted" id="live-hint">Makes Skelly a Bluetooth speaker for Live AI and mic passthrough.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Controls -->
+    <section id="tab-controls" class="tab" hidden>
+      <div class="card">
+        <h2>Movement</h2>
+        <div id="moves" class="chips"></div>
+        <div class="row end"><button id="moves-apply" class="btn primary">Apply movement</button></div>
+      </div>
+
+      <div class="card" id="eyes-card">
+        <h2>Eyes</h2>
+        <div id="eyes" class="grid"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Lights</h2>
+          <div id="light-targets" class="seg"></div>
+        </div>
+        <div id="light-modes" class="seg wide"></div>
+        <div class="color-row">
+          <input type="color" id="color" value="#ff4400" aria-label="Light colour">
+          <div class="swatches" id="swatches"></div>
+          <label class="toggle"><input type="checkbox" id="cycle"> Colour cycle</label>
+        </div>
+        <label class="slider">Brightness <output id="bright-out">255</output>
+          <input type="range" id="bright" min="0" max="255" value="255"></label>
+        <label class="slider">Effect speed <output id="speed-out">127</output>
+          <input type="range" id="speed" min="0" max="254" value="127"></label>
+        <div class="row end">
+          <button id="lights-off" class="btn ghost">Lights off</button>
+          <button id="lights-apply" class="btn primary">Apply lights</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Volume</h2>
+        <label class="slider">Speaker volume <output id="vol-out">–</output>
+          <input type="range" id="vol" min="0" max="255" value="128"></label>
+      </div>
+    </section>
+
+    <!-- Sounds -->
+    <section id="tab-sounds" class="tab" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Sounds on Skelly</h2>
+          <button id="files-refresh" class="btn ghost">Refresh</button>
+        </div>
+        <ul id="files" class="list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

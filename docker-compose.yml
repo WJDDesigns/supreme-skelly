@@ -1,0 +1,16 @@
+# Run on a Linux mini PC with Bluetooth: `docker compose up -d`, then open http://<mini-pc>:8420
+services:
+  skelly:
+    build: .
+    image: supreme-skelly:latest
+    container_name: supreme-skelly
+    restart: unless-stopped
+    # Host networking keeps BLE and the web UI simple; the UI listens on port 8420.
+    network_mode: host
+    volumes:
+      # BLE goes through the host's BlueZ daemon over D-Bus.
+      - /run/dbus:/run/dbus:ro
+    environment:
+      - SKELLY_LOG_LEVEL=INFO
+      # Set to 1 to try the UI without an animatronic.
+      - SKELLY_SIMULATE=0
