@@ -89,3 +89,8 @@ def test_a_loud_word_after_a_pause_is_still_him(monkeypatch):
     echo = [0.4] * 40 + [0.01] * 100 + [0.45] * 30  # talks, pauses 2 s, says something loud
     frames = _frames(monkeypatch, echo, talk_frames=170)
     assert all(f == SILENT for f in frames)
+
+
+def test_resume_prompt_carries_what_he_had_left_to_say():
+    p = c.resume_prompt("the spiders are friendly, mostly.")
+    assert p.startswith(c.RESUME_MARK) and "As I was saying" in p and "spiders are friendly" in p

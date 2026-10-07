@@ -126,6 +126,17 @@ ECHO_LEARN_S = 0.6  # each time he starts talking, listen to his echo before all
 ECHO_HOLD_S = 0.4  # his echo level halves this fast once he goes quieter
 
 
+# Cut off by a noise rather than a person: after this long with nothing said, he carries on.
+RESUME_AFTER_S = 3.0
+RESUME_MARK = "(Nobody said anything"
+
+
+def resume_prompt(unsaid: str) -> str:
+    return (f"{RESUME_MARK}; that was just a noise.) Carry on where you were cut off. Start with a quick "
+            "\"As I was saying...\" or a playful variation, then finish your point in your own words. "
+            f"What you hadn't said yet: \"{unsaid[:400]}\"")
+
+
 class MissingKey(ValueError):
     pass
 
@@ -408,6 +419,20 @@ class Conversation:
                 await ws.send(json.dumps({"type": "contextual_update", "text": f"Speaking style: {rule}"}))
             in_rate = out_rate = 16000
             self._set("listening")
+            last_said = ""  # what Skelly was saying, for picking up after a false interruption
+            cut_off: dict = {}  # {"at": time, "text": what he didn't get to say}
+
+            async def resume_watch():
+                """Cut off but nobody followed up: carry on with "as I was saying"."""
+                while True:
+                    await asyncio.sleep(0.25)
+                    if cut_off and time.monotonic() - cut_off["at"] > RESUME_AFTER_S:
+                        text = cut_off.get("text", "")
+                        cut_off.clear()
+                        if not text or speaker.speaking:
+                            continue
+                        log.info("interrupted with nothing said; resuming")
+                        await ws.send(json.dumps({"type": "user_message", "text": resume_prompt(text)}))
 
             async def send_mic():
                 async for pcm in self._mic_frames(cfg, in_rate, speaker):
@@ -416,7 +441,7 @@ class Conversation:
                     await ws.send(json.dumps({"user_audio_chunk": base64.b64encode(pcm).decode()}))
 
             async def receive():
-                nonlocal out_rate
+                nonlocal out_rate, last_said
                 async for raw in ws:
                     msg = json.loads(raw)
                     kind = msg.get("type")
@@ -428,22 +453,36 @@ class Conversation:
                         self._set("speaking")
                         await speaker.play(pcm, out_rate)
                     elif kind == "agent_response":
-                        self._say("skelly", msg["agent_response_event"]["agent_response"])
+                        last_said = msg["agent_response_event"]["agent_response"]
+                        self._say("skelly", last_said)
                         # A reminder before every next turn; the rule fades as the chat grows.
                         await ws.send(json.dumps({"type": "contextual_update", "text": f"Reminder: {rule}"}))
+                    elif kind == "agent_response_correction":
+                        ev = msg.get("agent_response_correction_event", {})
+                        said = ev.get("corrected_agent_response") or ""
+                        whole = ev.get("original_agent_response") or last_said
+                        if cut_off:  # what he didn't get to say
+                            cut_off["text"] = whole[len(said):].strip() if whole.startswith(said) else whole
                     elif kind == "user_transcript":
-                        self._say("user", msg["user_transcription_event"]["user_transcript"])
+                        heard = msg["user_transcription_event"]["user_transcript"]
+                        if heard.startswith(RESUME_MARK):
+                            continue  # our own nudge, not the visitor
+                        if len(heard.strip(" .…-")) >= 2:
+                            cut_off.clear()  # they did say something; the agent answers that
+                        self._say("user", heard)
                         self._set("thinking")
                     elif kind == "interruption":
                         await speaker.interrupt()
                         self._set("listening")
+                        cut_off.update(at=time.monotonic(), text=cut_off.get("text") or last_said)
                     elif kind == "ping":
                         ev = msg.get("ping_event", {})
                         await ws.send(json.dumps({"type": "pong", "event_id": ev.get("event_id")}))
                     if kind != "audio" and not speaker.speaking and self.state.state == "speaking":
                         self._set("listening")
 
-            await _first_done(send_mic(), receive(), self._idle_watch(cfg, speaker), self._speaking_watch(speaker))
+            await _first_done(send_mic(), receive(), resume_watch(), self._idle_watch(cfg, speaker),
+                              self._speaking_watch(speaker))
 
     # -- OpenAI Realtime --------------------------------------------------------
 
