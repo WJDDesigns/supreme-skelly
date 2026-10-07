@@ -35,6 +35,7 @@ class VisionConfig:
     ai_check: bool = True  # ask an AI whether the motion is a person, and what they look like
     auto_converse: bool = False  # start a conversation when a visitor is confirmed
     cooldown_s: int = 90  # minimum gap between visitor events
+    faces: bool = False  # recognise faces and remember people who say their name
     # Areas to ignore, per camera ("rtsp" or the USB device path): [[x, y, w, h], ...] as
     # fractions of the picture. Skelly himself goes here so his moving doesn't count.
     zones: dict = field(default_factory=dict)
@@ -62,6 +63,7 @@ class VisionState:
     last_visitor_at: float | None = None
     description: str | None = None
     fps: float = 0.0
+    faces: list = field(default_factory=list)  # faces in view right now (Seen.public)
 
 
 def list_cameras() -> list[dict]:
@@ -78,11 +80,18 @@ def list_cameras() -> list[dict]:
 
 
 class Vision:
-    def __init__(self, svc, vault, config_getter, on_visitor) -> None:
+    def __init__(self, svc, vault, config_getter, on_visitor, on_known=None) -> None:
+        from .faces import FaceEngine, FaceMemory
+
         self.svc = svc
         self.vault = vault
         self._config = config_getter
         self._on_visitor = on_visitor
+        self._on_known = on_known
+        self.engine = FaceEngine()
+        self.memory = FaceMemory()
+        self.seen: list = []  # Seen objects in the latest face frame
+        self._recent: list = []  # unknown faces from the last few seconds, for naming
         self.state = VisionState()
         self.frame: bytes | None = None
         self._frame_event = asyncio.Event()
@@ -130,18 +139,23 @@ class Vision:
 
     # -- capture ----------------------------------------------------------------
 
-    def _ffmpeg_args(self, cfg: VisionConfig, thumb_fd: int) -> list[str]:
+    def _ffmpeg_args(self, cfg: VisionConfig, thumb_fd: int, face_fd: int | None = None) -> list[str]:
         if cfg.source == "rtsp":
             src = ["-rtsp_transport", "tcp", "-i", self.vault.get("rtsp_url")]
         else:
             src = ["-f", "v4l2", "-i", cfg.usb_device]
         rot = {90: "transpose=1,", 180: "transpose=1,transpose=1,", 270: "transpose=2,"}.get(cfg.rotate, "")
         fps = max(1, min(cfg.fps, 15))
-        return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-fflags", "nobuffer", *src,
-                "-filter_complex", f"[0:v]fps={fps},{rot}split=2[a][b];[a]scale=640:-2[preview];"
-                                   f"[b]scale={THUMB_W}:{THUMB_H},format=gray[thumb]",
-                "-map", "[preview]", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "7", "pipe:1",
+        graph = (f"[0:v]fps={fps},{rot}split={3 if face_fd else 2}[a][b]{'[c]' if face_fd else ''};"
+                 f"[a]scale=640:-2[preview];[b]scale={THUMB_W}:{THUMB_H},format=gray[thumb]")
+        outs = ["-map", "[preview]", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "7", "pipe:1",
                 "-map", "[thumb]", "-f", "rawvideo", f"pipe:{thumb_fd}"]
+        if face_fd:
+            # Faces need detail: a sharper 1280-wide frame twice a second.
+            graph += ";[c]fps=2,scale='min(1280,iw)':-2[faces]"
+            outs += ["-map", "[faces]", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "3", f"pipe:{face_fd}"]
+        return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-fflags", "nobuffer", *src,
+                "-filter_complex", graph, *outs]
 
     async def _run(self, cfg: VisionConfig) -> None:
         backoff = 2
@@ -160,17 +174,26 @@ class Vision:
 
     async def _capture(self, cfg: VisionConfig) -> None:
         rfd, wfd = os.pipe()
+        use_faces = cfg.faces and self.engine.available()
+        frfd, fwfd = os.pipe() if use_faces else (None, None)
         proc = await asyncio.create_subprocess_exec(
-            *self._ffmpeg_args(cfg, wfd), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            pass_fds=(wfd,))
+            *self._ffmpeg_args(cfg, wfd, fwfd), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            pass_fds=tuple(fd for fd in (wfd, fwfd) if fd is not None))
         os.close(wfd)
         loop = asyncio.get_running_loop()
         thumbs = asyncio.StreamReader()
         transport, _ = await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(thumbs), os.fdopen(rfd, "rb"))
-        jpeg_task = asyncio.create_task(self._read_jpegs(proc.stdout))
-        motion_task = asyncio.create_task(self._read_motion(cfg, thumbs))
+        tasks = [asyncio.create_task(self._read_jpegs(proc.stdout)),
+                 asyncio.create_task(self._read_motion(cfg, thumbs))]
+        face_transport = None
+        if use_faces:
+            os.close(fwfd)
+            face_stream = asyncio.StreamReader(limit=8 * 1024 * 1024)
+            face_transport, _ = await loop.connect_read_pipe(
+                lambda: asyncio.StreamReaderProtocol(face_stream), os.fdopen(frfd, "rb"))
+            tasks.append(asyncio.create_task(self._read_faces(cfg, face_stream)))
         try:
-            done, _ = await asyncio.wait([jpeg_task, motion_task, asyncio.create_task(proc.wait())],
+            done, _ = await asyncio.wait([*tasks, asyncio.create_task(proc.wait())],
                                          return_when=asyncio.FIRST_COMPLETED)
             err = (await proc.stderr.read()).decode(errors="replace").strip() if proc.stderr else ""
             for t in done:
@@ -178,9 +201,11 @@ class Vision:
                     raise t.exception()
             raise ConnectionError(err.splitlines()[-1] if err else "The camera stream ended")
         finally:
-            jpeg_task.cancel()
-            motion_task.cancel()
+            for t in tasks:
+                t.cancel()
             transport.close()
+            if face_transport:
+                face_transport.close()
             if proc.returncode is None:
                 proc.kill()
                 await proc.wait()
@@ -203,6 +228,68 @@ class Vision:
             if (now := time.monotonic()) - since > 5:
                 self.state.fps = round(count / (now - since), 1)
                 count, since = 0, now
+
+    async def _read_faces(self, cfg: VisionConfig, stream: asyncio.StreamReader) -> None:
+        """Find and recognise faces in the sharp frames; announce returning people."""
+        buf = b""
+        busy = False
+        while chunk := await stream.read(262144):
+            buf += chunk
+            frame = None
+            while (end := buf.find(b"\xff\xd9")) != -1:
+                start = buf.find(b"\xff\xd8")
+                if 0 <= start < end:
+                    frame = buf[start:end + 2]
+                buf = buf[end + 2:]
+            if frame is None or busy:
+                continue  # still working on the last one: skip rather than fall behind
+            busy = True
+            try:
+                seen = await asyncio.to_thread(self.engine.process, frame, cfg.active_zones)
+                self._recognise(seen)
+            except Exception as exc:
+                log.warning("face check failed: %r", exc)
+            finally:
+                busy = False
+
+    def _recognise(self, seen: list) -> None:
+        now = time.time()
+        for s in seen:
+            person, sim = self.memory.match(s.embedding)
+            s.similarity = sim
+            if person:
+                s.person_id, s.name = person["id"], person["name"]
+                if sim < 0.6:  # a less-certain match is a new angle worth keeping
+                    self.memory.add_sample(person, s)
+                if self.memory.seen_now(person) and self._on_known:
+                    asyncio.get_running_loop().create_task(self._on_known(person))
+        self.seen = seen
+        self._recent = [r for r in self._recent if now - r.ts < 12] + [s for s in seen if not s.person_id]
+        faces = [s.public(i) for i, s in enumerate(seen)]
+        if faces != self.state.faces:
+            self.state.faces = faces
+            self.svc.bus.publish("faces", {"faces": faces})
+
+    def learn_name(self, name: str, index: int | None = None) -> dict | None:
+        """Save a face under a name: the one picked, else the nearest unknown face just seen.
+
+        "Nearest" is the biggest face in the last few seconds, which in a crowd is usually
+        the person standing right in front of Skelly doing the talking.
+        """
+        if index is not None:
+            pick = self.seen[index] if 0 <= index < len(self.seen) else None
+        else:
+            now = time.time()
+            pool = [s for s in self._recent if now - s.ts < 10] or [s for s in self.seen if not s.person_id]
+            pick = max(pool, key=lambda s: s.area, default=None)
+        if pick is None:
+            return None
+        person = self.memory.remember(name, pick)
+        self.memory.seen_now(person)
+        self._recent = [r for r in self._recent if r is not pick]
+        self.svc.bus.publish("face_learned", {"id": person["id"], "name": person["name"], "thumb": pick.thumb})
+        self._recognise(self.seen)
+        return person
 
     async def _read_motion(self, cfg: VisionConfig, stream: asyncio.StreamReader) -> None:
         size = THUMB_W * THUMB_H

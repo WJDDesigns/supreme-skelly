@@ -485,6 +485,9 @@ function connectEvents() {
     else if (msg.type === "vision_motion") setMotion(msg.data.motion);
     else if (msg.type === "visitor") onVisitor(msg.data);
     else if (msg.type === "meters") setMeters(msg.data);
+    else if (msg.type === "faces") renderFaceBoxes(msg.data.faces);
+    else if (msg.type === "face_learned") { toast(`🦴 Skelly will remember ${msg.data.name}`); loadPeople(); }
+    else if (msg.type === "known_visitor") toast(`👋 ${msg.data.name} is here`);
   };
   ws.onclose = () => setTimeout(connectEvents, 1500);
 }
@@ -963,3 +966,57 @@ document.querySelectorAll("[data-gain]").forEach((r) =>
     gainTimer = setTimeout(() => run(null, () => api("/audio/config", { [r.dataset.gain]: Number(r.value) }, "PUT")), 250);
   }));
 renderGains();
+
+// ---------- faces ----------
+let people = [];
+function renderFaceBoxes(faces = []) {
+  $("#face-boxes").replaceChildren(...faces.map((f) => {
+    const tag = el("button", { className: "face-tag", textContent: f.name ?? "Who's this?" });
+    if (!f.name) tag.addEventListener("click", () => nameFace(f.index));
+    const d = el("div", { className: `face-box${f.name ? " known" : ""}` }, tag);
+    Object.assign(d.style, { left: `${f.box[0] * 100}%`, top: `${f.box[1] * 100}%`, width: `${f.box[2] * 100}%`, height: `${f.box[3] * 100}%` });
+    return d;
+  }));
+}
+function nameFace(index) {
+  const name = prompt("What's this person's name?");
+  if (!name?.trim()) return;
+  run(null, async () => { people = await api("/faces/name", { name: name.trim(), index }); renderPeople(); }, `Skelly will remember ${name.trim()}`);
+}
+const ago = (t) => {
+  if (!t) return "";
+  const m = Math.round((Date.now() / 1000 - t) / 60);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
+function renderPeople() {
+  $("#people-sub").textContent = people.length ? `${people.length} ${people.length === 1 ? "person" : "people"}` : "Nobody yet. People who tell Skelly their name show up here.";
+  $("#people-forget-all").disabled = !people.length;
+  $("#people").replaceChildren(...people.map((p) => {
+    const rename = el("button", { className: "btn outline small", textContent: "Rename" });
+    rename.addEventListener("click", () => {
+      const n = prompt("New name", p.name);
+      if (n?.trim()) run(rename, async () => { people = await api(`/faces/${p.id}`, { name: n.trim() }, "PUT"); renderPeople(); });
+    });
+    const forget = el("button", { className: "btn outline small", textContent: "Forget" });
+    forget.addEventListener("click", () => {
+      if (confirm(`Forget ${p.name}'s face?`)) run(forget, async () => { people = await api(`/faces/${p.id}`, undefined, "DELETE"); renderPeople(); }, "Forgotten");
+    });
+    return el("li", {},
+      p.thumb ? el("img", { src: `data:image/jpeg;base64,${p.thumb}`, alt: "" }) : el("span", { className: "no-thumb" }),
+      el("div", { className: "p-name", textContent: p.name }),
+      el("div", { className: "meta", textContent: `${p.visits || 1} ${p.visits === 1 ? "visit" : "visits"} · ${ago(p.last_seen)}` }),
+      el("div", { className: "p-actions" }, rename, forget));
+  }));
+}
+async function loadPeople() {
+  try {
+    const r = await api("/faces");
+    people = r.people;
+    renderPeople();
+    renderFaceBoxes(r.seen);
+  } catch {}
+}
+$("#people-forget-all").addEventListener("click", (ev) => {
+  if (confirm("Forget every face Skelly knows? This can't be undone.")) run(ev.currentTarget, async () => { people = await api("/faces", undefined, "DELETE"); renderPeople(); }, "Forgot everyone");
+});
+loadPeople();

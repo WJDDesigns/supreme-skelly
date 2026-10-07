@@ -129,7 +129,8 @@ def create_app(
                                            "mic_gain": svc.settings.audio.get("mic_gain", 100),
                                            "out_gain": svc.settings.audio.get("out_gain", 100)},
             resolve_output)
-        app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor)
+        app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor, on_known)
+        app.state.conv.on_user_text = on_user_text
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
                                   lambda: svc.settings.audio.get("mic_gain", 100) / 100)
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
@@ -305,6 +306,69 @@ def create_app(
             except (MissingKey, ValueError) as exc:
                 log.info("visitor conversation not started: %s", exc)
 
+    # -- faces ---------------------------------------------------------------
+
+    def known_here() -> list[str]:
+        return sorted({f.name for f in app.state.vision.seen if f.name})
+
+    async def on_known(person: dict) -> None:
+        """Someone Skelly has met before just showed up."""
+        name = person["name"]
+        svc().bus.publish("known_visitor", {"id": person["id"], "name": name, "visits": person.get("visits")})
+        conv = app.state.conv
+        if conv.running:
+            conv.add_context(f"{name} just joined; you've met them before ({person.get('visits', 1)} visits).")
+        elif VisionConfig.from_dict(svc().settings.vision).auto_converse:
+            try:
+                await conv.start(context=f"Your friend {name} just walked up; you've met before. Greet them by name.")
+            except (MissingKey, ValueError) as exc:
+                log.info("greeting %s not started: %s", name, exc)
+
+    def on_user_text(text: str) -> None:
+        """Visitor said something: if they gave their name, remember their face."""
+        from .faces import heard_name
+
+        if not VisionConfig.from_dict(svc().settings.vision).faces or not app.state.vision.state.running:
+            return
+        name = heard_name(text)
+        if not name:
+            return
+        person = app.state.vision.learn_name(name)
+        if person:
+            app.state.conv.add_context(f"(You can now recognise {name} by their face next time.)")
+            log.info("learned the face of %s", name)
+
+    @app.get("/api/faces")
+    async def faces():
+        v = app.state.vision
+        return {"available": v.engine.available(), "people": v.memory.public(), "seen": v.state.faces}
+
+    @app.post("/api/faces/name")
+    async def faces_name(body: dict):
+        name = str(body.get("name", "")).strip()
+        if not name:
+            raise HTTPException(400, "Give a name")
+        index = body.get("index")
+        person = app.state.vision.learn_name(name, int(index) if index is not None else None)
+        if not person:
+            raise HTTPException(404, "No face to name right now")
+        return app.state.vision.memory.public()
+
+    @app.put("/api/faces/{person_id}")
+    async def faces_rename(person_id: str, body: dict):
+        app.state.vision.memory.rename(person_id, str(body.get("name", "")))
+        return app.state.vision.memory.public()
+
+    @app.delete("/api/faces/{person_id}")
+    async def faces_forget(person_id: str):
+        app.state.vision.memory.forget(person_id)
+        return app.state.vision.memory.public()
+
+    @app.delete("/api/faces")
+    async def faces_forget_all():
+        app.state.vision.memory.forget(None)
+        return []
+
     @app.post("/api/speaker/connect")
     async def connect_live_speaker():
         try:
@@ -421,8 +485,10 @@ def create_app(
 
     @app.post("/api/conversation/start")
     async def conversation_start():
+        here = known_here()
         try:
-            return await app.state.conv.start()
+            return await app.state.conv.start(
+                context=f"People you recognise standing here: {', '.join(here)}." if here else None)
         except ValueError as exc:  # MissingKey included
             raise HTTPException(400, str(exc)) from exc
 

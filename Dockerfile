@@ -16,6 +16,9 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY server ./server
 RUN pip install --no-cache-dir .
+# Face models (OpenCV Zoo): YuNet finds faces, SFace fingerprints them. ~40 MB, fetched once at build.
+RUN mkdir -p /app/models && python -c "import urllib.request as u; b='https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/'; \
+    [u.urlretrieve(b + p, '/app/models/' + p.split('/')[-1]) for p in ('face_detection_yunet/face_detection_yunet_2023mar.onnx', 'face_recognition_sface/face_recognition_sface_2021dec.onnx')]"
 COPY web ./web
 
 # Runs as root so it can talk to the host's BlueZ over the mounted D-Bus socket.

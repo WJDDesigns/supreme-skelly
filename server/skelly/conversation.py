@@ -116,6 +116,7 @@ class Conversation:
         self._last_heard = 0.0
         self._context: list[str] = []
         self.output_sink: str | None = None  # where his voice is playing, for the speaker meter
+        self.on_user_text: Callable[[str], None] | None = None  # e.g. listening for names
 
     # -- public ---------------------------------------------------------------
 
@@ -192,6 +193,11 @@ class Conversation:
         self.svc.bus.publish("transcript", entry)
         if role == "user":
             self._last_heard = time.monotonic()
+            if self.on_user_text:
+                try:
+                    self.on_user_text(text)
+                except Exception as exc:
+                    log.info("on_user_text failed: %r", exc)
 
     def _take_context(self) -> str:
         ctx, self._context = " ".join(self._context), []

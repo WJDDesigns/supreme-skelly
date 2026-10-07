@@ -318,6 +318,7 @@
                 <img id="cam-img" alt="Camera preview" hidden>
                 <div class="cam-empty" id="cam-empty"><svg><use href="#i-camera"/></svg><span>Camera is off</span></div>
                 <div class="zones" id="zones"></div>
+                <div class="face-boxes" id="face-boxes"></div>
                 <span class="badge orange cam-visitor" id="cam-visitor" hidden>Visitor!</span>
               </div>
               <div class="meter-row"><span class="muted">Motion</span><div class="meter"><i id="motion-bar"></i></div><output id="motion-out">0%</output></div>
@@ -352,6 +353,9 @@
               <label class="switch-row"><span><strong>Check with AI</strong>
                 <span class="muted">Confirms motion is a person and describes them for Skelly.</span></span>
                 <input type="checkbox" data-vcfg="ai_check" role="switch"></label>
+              <label class="switch-row"><span><strong>Remember faces</strong>
+                <span class="muted">When someone tells Skelly their name, he remembers their face. Stays on the mini PC.</span></span>
+                <input type="checkbox" data-vcfg="faces" role="switch"></label>
               <label class="switch-row"><span><strong>Talk to visitors</strong>
                 <span class="muted">Starts a conversation when someone walks up.</span></span>
                 <input type="checkbox" data-vcfg="auto_converse" role="switch"></label>
@@ -359,6 +363,13 @@
                 <span class="muted">Starts watching when the mini PC boots.</span></span>
                 <input type="checkbox" data-vcfg="start_on_boot" role="switch"></label>
             </div>
+          </div>
+          <div class="card" id="people-card">
+            <div class="card-head">
+              <div><h2>People Skelly knows</h2><p class="muted" id="people-sub">Nobody yet</p></div>
+              <button id="people-forget-all" class="btn outline small">Forget everyone</button>
+            </div>
+            <ul id="people" class="people"></ul>
           </div>
         </section>
 
