@@ -594,7 +594,7 @@ $("#talk-toggle").addEventListener("click", (ev) => {
 });
 
 const KEY_NEEDS = {
-  elevenlabs: () => (talkCfg.elevenlabs_agent_id ? [] : ["agent"]),
+  elevenlabs: () => ["elevenlabs_api_key", ...(talkCfg.elevenlabs_agent_id ? [] : ["agent"])],
   openai: () => ["openai_api_key"],
   claude: () => [...new Set(["anthropic_api_key", `${talkCfg.stt}_api_key`, `${talkCfg.tts}_api_key`])],
 };
@@ -616,7 +616,7 @@ function renderTalkCfg() {
   warn.hidden = !missing.length;
   warn.replaceChildren();
   if (missing.length) {
-    const names = missing.map((n) => n === "agent" ? "an agent ID below" : vault.find((v) => v.name === n)?.label ?? n);
+    const names = missing.map((n) => n === "agent" ? "an agent (pick or create one below)" : vault.find((v) => v.name === n)?.label ?? n);
     warn.append(el("span", { textContent: `Needs ${names.join(", ")}.` }));
     if (missing.some((n) => n !== "agent")) {
       const go = el("button", { className: "btn outline small", textContent: "Open API keys" });
@@ -639,7 +639,35 @@ document.querySelectorAll("[data-seg] button").forEach((b) =>
 document.querySelectorAll("[data-cfg]").forEach((i) =>
   i.addEventListener(i.type === "checkbox" || i.tagName === "SELECT" ? "change" : "input", () =>
     saveTalkCfg({ [i.dataset.cfg]: i.type === "checkbox" ? i.checked : i.type === "number" ? Number(i.value) : i.value })));
-api("/conversation").then((r) => { talkCfg = r.config; renderTalkCfg(); renderTalk(r.state); }).catch(() => {});
+api("/conversation").then((r) => { talkCfg = r.config; renderTalkCfg(); renderTalk(r.state); loadEleven(); }).catch(() => {});
+
+// ElevenLabs pickers: agents in the account and voices in the library.
+function fillSelect(sel, items, current, empty) {
+  const opts = items.map((i) => el("option", { value: i.id, textContent: i.name }));
+  if (current && !items.some((i) => i.id === current)) opts.unshift(el("option", { value: current, textContent: `${current} (not in this account)` }));
+  if (!opts.length) opts.push(el("option", { value: "", textContent: empty }));
+  sel.replaceChildren(...opts);
+  sel.value = current || items[0]?.id || "";
+}
+async function loadEleven() {
+  if (!vault.find((v) => v.name === "elevenlabs_api_key")?.set) {
+    fillSelect($("#agent-pick"), [], talkCfg.elevenlabs_agent_id, "Add your ElevenLabs key first");
+    fillSelect($("#voice-pick"), [], talkCfg.elevenlabs_voice_id, "Add your ElevenLabs key first");
+    return;
+  }
+  const [agents, voices] = await Promise.all([api("/elevenlabs/agents").catch(() => []), api("/elevenlabs/voices").catch(() => [])]);
+  fillSelect($("#agent-pick"), agents, talkCfg.elevenlabs_agent_id, "No agents yet: create one below");
+  fillSelect($("#voice-pick"), voices, talkCfg.elevenlabs_voice_id, "No voices found");
+  if (!talkCfg.elevenlabs_agent_id && agents.length) saveTalkCfg({ elevenlabs_agent_id: agents[0].id });
+}
+$("#agents-refresh").addEventListener("click", (ev) => run(ev.currentTarget, loadEleven));
+$("#agent-create").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => {
+    const a = await api("/elevenlabs/agents", {});
+    talkCfg.elevenlabs_agent_id = a.id;
+    await loadEleven();
+    renderTalkCfg();
+  }, "Created a Skelly agent in your ElevenLabs account"));
 
 // ---------- vision ----------
 let visionCfg = {};
@@ -721,6 +749,7 @@ function secretRow(v) {
       if (!input.value.trim()) throw new Error("Paste the value first");
       vault = await api(`/vault/${v.name}`, { value: input.value.trim() }, "PUT");
       renderVault();
+      if (v.name === "elevenlabs_api_key") loadEleven();
     }, `${v.label} saved`));
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") save.click(); });
   const end = el("div", { className: "end" });
@@ -748,4 +777,4 @@ function renderVault() {
   if (rtsp) $("#rtsp-inline").replaceChildren(el("ul", { className: "list" }, secretRow(rtsp)));
   renderTalkCfg();
 }
-api("/vault").then((v) => { vault = v; renderVault(); }).catch(() => {});
+api("/vault").then((v) => { vault = v; renderVault(); loadEleven(); }).catch(() => {});

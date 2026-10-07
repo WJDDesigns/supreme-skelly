@@ -16,7 +16,14 @@ from pydantic import BaseModel, Field
 
 from . import audio, audio_io, speaker
 from . import protocol as proto
-from .conversation import Conversation, ConversationConfig, MissingKey
+from .conversation import (
+    Conversation,
+    ConversationConfig,
+    MissingKey,
+    elevenlabs_agents,
+    elevenlabs_create_agent,
+    elevenlabs_voices,
+)
 from .link import BleakLink, Link, SimulatedLink
 from .profiles import PROFILES
 from .service import SkellyService
@@ -206,6 +213,34 @@ def create_app(
         svc().settings.conversation = vars(cfg)
         svc().settings.save()
         return vars(cfg)
+
+    def eleven_key() -> str:
+        key = app.state.vault.get("elevenlabs_api_key")
+        if not key:
+            raise HTTPException(400, "Add your ElevenLabs API key in Settings > API keys first.")
+        return key
+
+    async def eleven(coro):
+        try:
+            return await coro
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+    @app.get("/api/elevenlabs/agents")
+    async def eleven_agents():
+        return await eleven(elevenlabs_agents(eleven_key()))
+
+    @app.get("/api/elevenlabs/voices")
+    async def eleven_voices():
+        return await eleven(elevenlabs_voices(eleven_key()))
+
+    @app.post("/api/elevenlabs/agents")
+    async def eleven_create_agent():
+        cfg = ConversationConfig.from_dict(svc().settings.conversation)
+        agent = await eleven(elevenlabs_create_agent(eleven_key(), cfg))
+        svc().settings.conversation = {**vars(cfg), "elevenlabs_agent_id": agent["id"]}
+        svc().settings.save()
+        return agent
 
     @app.post("/api/conversation/start")
     async def conversation_start():

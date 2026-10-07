@@ -260,7 +260,11 @@
               <p class="key-warn" id="key-warn" hidden></p>
 
               <div class="prov" data-for="elevenlabs">
-                <label class="field-row">Agent ID<input type="text" data-cfg="elevenlabs_agent_id" placeholder="agent_…" autocomplete="off"></label>
+                <label class="field-row">Agent<select data-cfg="elevenlabs_agent_id" id="agent-pick"><option value="">Add your ElevenLabs key first</option></select></label>
+                <div class="row tight">
+                  <button id="agents-refresh" class="btn outline small"><svg><use href="#i-refresh"/></svg>Refresh list</button>
+                  <button id="agent-create" class="btn outline small">Create a Skelly agent</button>
+                </div>
               </div>
               <div class="prov" data-for="openai">
                 <label class="field-row">Model<select data-cfg="openai_model">
@@ -277,7 +281,7 @@
                   <div class="seg" data-seg="stt"><button data-val="elevenlabs">ElevenLabs</button><button data-val="openai">OpenAI</button></div></div>
                 <div class="field"><span class="muted">Voice (text to speech)</span>
                   <div class="seg" data-seg="tts"><button data-val="elevenlabs">ElevenLabs</button><button data-val="openai">OpenAI</button></div></div>
-                <label class="field-row" data-show-tts="elevenlabs">ElevenLabs voice ID<input type="text" data-cfg="elevenlabs_voice_id" autocomplete="off"></label>
+                <label class="field-row" data-show-tts="elevenlabs">ElevenLabs voice<select data-cfg="elevenlabs_voice_id" id="voice-pick"></select></label>
                 <label class="field-row" data-show-tts="openai">OpenAI voice<select data-cfg="openai_tts_voice">
                   <option>onyx</option><option>ash</option><option>ballad</option><option>coral</option><option>echo</option><option>fable</option><option>nova</option><option>sage</option><option>shimmer</option><option>verse</option></select></label>
               </div>

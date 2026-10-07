@@ -270,14 +270,10 @@ class Conversation:
                 _raise_for(r, "ElevenLabs")
                 url = r.json()["signed_url"]
         async with connect(url, max_size=None, open_timeout=15) as ws:
+            # The agent's own prompt, first message and voice apply (they're set when the agent is
+            # created here, or edited in ElevenLabs). Overriding them per call is refused unless
+            # the agent explicitly allows it, so nothing is overridden.
             init = {"type": "conversation_initiation_client_data"}
-            overrides = {}
-            if cfg.prompt:
-                overrides.setdefault("agent", {})["prompt"] = {"prompt": cfg.prompt}
-            if cfg.first_message:
-                overrides.setdefault("agent", {})["first_message"] = cfg.first_message
-            if overrides:
-                init["conversation_config_override"] = overrides
             await ws.send(json.dumps(init))
             in_rate = out_rate = 16000
             self._set("listening")
@@ -521,6 +517,46 @@ class Conversation:
                 cut = len(chunk) - len(chunk) % 2
                 carry = chunk[cut:]
                 await speaker.play(chunk[:cut], rate)
+
+
+# -- ElevenLabs account helpers ------------------------------------------------------
+
+
+async def elevenlabs_agents(key: str) -> list[dict]:
+    """The Conversational AI agents in the account, newest first."""
+    out, cursor = [], None
+    async with httpx.AsyncClient(timeout=15) as http:
+        for _ in range(10):
+            r = await http.get("https://api.elevenlabs.io/v1/convai/agents", headers={"xi-api-key": key},
+                               params={"page_size": 100, **({"cursor": cursor} if cursor else {})})
+            _raise_for(r, "ElevenLabs")
+            data = r.json()
+            out += [{"id": a["agent_id"], "name": a.get("name") or a["agent_id"]} for a in data.get("agents", [])]
+            cursor = data.get("next_cursor")
+            if not data.get("has_more") or not cursor:
+                break
+    return out
+
+
+async def elevenlabs_voices(key: str) -> list[dict]:
+    async with httpx.AsyncClient(timeout=15) as http:
+        r = await http.get("https://api.elevenlabs.io/v1/voices", headers={"xi-api-key": key})
+        _raise_for(r, "ElevenLabs")
+    voices = [{"id": v["voice_id"], "name": v.get("name") or v["voice_id"],
+               "category": v.get("category") or ""} for v in r.json().get("voices", [])]
+    return sorted(voices, key=lambda v: (v["category"] == "premade", v["name"].lower()))
+
+
+async def elevenlabs_create_agent(key: str, cfg: ConversationConfig) -> dict:
+    """Makes a "Skelly" agent with this page's personality, first line and voice."""
+    body = {"name": "Skelly", "conversation_config": {
+        "agent": {"prompt": {"prompt": cfg.prompt}, "first_message": cfg.first_message, "language": "en"},
+        "tts": {"voice_id": cfg.elevenlabs_voice_id}}}
+    async with httpx.AsyncClient(timeout=30) as http:
+        r = await http.post("https://api.elevenlabs.io/v1/convai/agents/create", headers={"xi-api-key": key},
+                            json=body)
+        _raise_for(r, "ElevenLabs")
+    return {"id": r.json()["agent_id"], "name": "Skelly"}
 
 
 # -- helpers ------------------------------------------------------------------------

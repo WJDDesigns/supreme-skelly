@@ -562,3 +562,5 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 .secret-how { flex-wrap: nowrap; }
 .secret-how span { flex: 1; min-width: 0; }
 .secret-how a { flex: none; }
+
+.row.tight { margin: 0 0 6px; gap: 8px; }

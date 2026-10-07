@@ -48,3 +48,25 @@ def test_vision_rtsp_needs_address(tmp_path):
         r = c.post("/api/vision/start")
         assert r.status_code == 400 and "RTSP" in r.json()["detail"]
         assert c.get("/api/vision").json()["state"]["running"] is False
+
+
+def test_elevenlabs_pickers(tmp_path, monkeypatch):
+    import skelly.api as api_mod
+
+    c, _ = make(tmp_path)
+    with c:
+        assert c.get("/api/elevenlabs/agents").status_code == 400  # no key yet
+        c.put("/api/vault/elevenlabs_api_key", json={"value": "xi-test-key-123456"})
+
+        async def agents(key):
+            assert key == "xi-test-key-123456"
+            return [{"id": "agent_1", "name": "Skelly"}]
+
+        async def create(key, cfg):
+            return {"id": "agent_new", "name": "Skelly"}
+
+        monkeypatch.setattr(api_mod, "elevenlabs_agents", agents)
+        monkeypatch.setattr(api_mod, "elevenlabs_create_agent", create)
+        assert c.get("/api/elevenlabs/agents").json() == [{"id": "agent_1", "name": "Skelly"}]
+        assert c.post("/api/elevenlabs/agents").json()["id"] == "agent_new"
+        assert c.get("/api/conversation").json()["config"]["elevenlabs_agent_id"] == "agent_new"
