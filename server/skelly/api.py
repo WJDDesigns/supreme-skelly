@@ -271,6 +271,17 @@ def create_app(
         live = [s for s in sinks if s and s in have]
         if not live:
             raise ConnectionError("None of the chosen speakers are connected")
+        # PipeWire gives every newly connected Bluetooth speaker 40% (-24 dB), which made Skelly
+        # nearly silent. Put each one at its saved volume, full by default, every time.
+        saved = audio.get("volumes", {})
+        current = await audio_io.volumes()
+        for sink in live:
+            want = int(saved.get(sink, 100))
+            if current.get(sink) != want:
+                try:
+                    await audio_io.set_volume(sink, want)
+                except RuntimeError as exc:
+                    log.info("volume for %s not set: %s", sink, exc)
         return await audio_io.output_for(live)
 
     async def meter_sink() -> str | None:
@@ -344,6 +355,9 @@ def create_app(
             await audio_io.set_volume(body.sink, body.volume)
         except RuntimeError as exc:
             raise HTTPException(400, str(exc)) from exc
+        audio = svc().settings.audio
+        svc().settings.audio = {**audio, "volumes": {**audio.get("volumes", {}), body.sink: body.volume}}
+        svc().settings.save()
         return {"ok": True}
 
     @app.post("/api/audio/test")
