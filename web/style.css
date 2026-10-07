@@ -63,6 +63,21 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 .pill[data-status="reconnecting"] .dot { background: var(--warn); animation: pulse 1s infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
 
+/* Bluetooth signal bars: data-bars lights 1-4 of them, data-level colours them. */
+.sig { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; flex: none; }
+.sig[hidden] { display: none; }
+.sig i { width: 3px; border-radius: 1px; background: var(--line-2); }
+.sig i:nth-child(1) { height: 25%; }
+.sig i:nth-child(2) { height: 50%; }
+.sig i:nth-child(3) { height: 75%; }
+.sig i:nth-child(4) { height: 100%; }
+.sig[data-level="good"] { --sig: var(--ok); }
+.sig[data-level="fair"] { --sig: var(--warn); }
+.sig[data-level="weak"] { --sig: var(--bad); }
+.sig[data-bars="1"] i:nth-child(-n+1), .sig[data-bars="2"] i:nth-child(-n+2),
+.sig[data-bars="3"] i:nth-child(-n+3), .sig[data-bars="4"] i:nth-child(-n+4) { background: var(--sig, var(--muted)); }
+
+
 /* mobile: nav becomes a bottom bar */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
@@ -113,13 +128,15 @@ main { width: 100%; max-width: 1400px; margin: 0 auto; padding: 22px 16px 110px;
 .stat-value { margin: 2px 0; font-size: 1.7rem; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat-sub { margin: 0; color: var(--muted); font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat-sub b { color: var(--ok); font-weight: 600; }
-.bars { margin-left: auto; display: flex; align-items: flex-end; gap: 3px; height: 50px; flex: none; }
-.bars i { width: 4px; border-radius: 2px; background: linear-gradient(180deg, var(--accent-2), var(--accent)); opacity: .9; }
+/* Meters sit in the top-right corner so the value text keeps the card's full width. */
+.bars { position: absolute; top: 18px; right: 20px; display: flex; align-items: flex-end; gap: 2px; height: 26px; }
+.bars i { width: 3px; border-radius: 2px; background: linear-gradient(180deg, var(--accent-2), var(--accent)); opacity: .9; }
 .bars i:nth-child(1) { height: 30%; opacity: .55; } .bars i:nth-child(2) { height: 34%; opacity: .6; }
 .bars i:nth-child(3) { height: 38%; opacity: .65; } .bars i:nth-child(4) { height: 42%; opacity: .7; }
 .bars i:nth-child(5) { height: 48%; opacity: .75; } .bars i:nth-child(6) { height: 62%; }
 .bars i:nth-child(7) { height: 80%; } .bars i:nth-child(8) { height: 100%; }
-.stat.off .bars i { background: #3a3a3a; }
+.bars i:not(.on), .stat.off .bars i { background: #3a3a3a; opacity: 1; }
+.bars[data-level="weak"] i.on { background: var(--bad); }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -373,7 +390,6 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 .skelly-svg .socket { fill: #120d09; stroke: #3a2f22; stroke-width: 1; }
 .skelly-svg .mouth { fill: rgba(18, 13, 9, .55); }
 .skelly-svg .teeth { stroke: #6d5c40; stroke-width: 1; }
-.skelly-svg .crack { stroke: #8f7c5c; stroke-width: 1; fill: none; }
 .skelly-svg .eye-img { filter: drop-shadow(0 0 3px rgba(255, 255, 255, .5)); }
 .skelly-svg .fx { transition: opacity .35s; }
 .skelly-svg .tint { mix-blend-mode: soft-light; }

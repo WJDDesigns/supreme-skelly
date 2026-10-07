@@ -114,6 +114,42 @@ const STATUS_TEXT = {
   reconnecting: "Reconnecting…",
 };
 
+// Bluetooth signal strength (dBm) in words and 1-4 bars; matches the scan list's labels.
+function signal(rssi) {
+  if (rssi == null) return null;
+  const bars = rssi >= -60 ? 4 : rssi >= -70 ? 3 : rssi >= -80 ? 2 : 1;
+  const [word, level] = rssi > -65 ? ["Strong", "good"] : rssi > -80 ? ["Fair", "fair"] : ["Weak", "weak"];
+  return { bars, word, level, text: `${word} signal (${rssi} dBm)` };
+}
+
+function paintBars(node, s) {
+  node.dataset.bars = s ? s.bars : 0;
+  node.dataset.level = s ? s.level : "";
+}
+
+// Light the first n of a .bars meter's bars for a 0..1 level (at least one when above zero).
+function meter(node, level) {
+  const bars = node.querySelectorAll("i");
+  const v = Math.max(0, Math.min(1, level || 0));
+  const n = v > 0 ? Math.max(1, Math.round(v * bars.length)) : 0;
+  bars.forEach((b, i) => b.classList.toggle("on", i < n));
+}
+
+function renderSignal(d, online) {
+  const s = online ? signal(d.rssi) : null;
+  const pill = $("#pill-sig");
+  pill.hidden = !s;
+  paintBars(pill, s);
+  $("#conn-pill").title = s ? s.text : "";
+  // Dashboard meter: -95 dBm (barely there) to -45 dBm (right next to it) across 8 bars.
+  const conn = $("#meter-conn");
+  meter(conn, s ? (d.rssi + 95) / 50 : 0);
+  conn.dataset.level = s?.level ?? "";
+  conn.closest(".stat").title = s ? s.text : "";
+  if (s) $("#st-conn-sub").textContent = `${s.word} signal`;
+  $("#dev-signal").textContent = s ? s.text : online ? "Checking…" : "–";
+}
+
 function renderDevice() {
   const d = state.device;
   if (!d) return;
@@ -129,6 +165,7 @@ function renderDevice() {
   $("#dev-free").textContent = d.free_kb != null ? `${(d.free_kb / 1024).toFixed(1)} MB` : "–";
   $("#live-btn").lastChild.textContent = d.live_mode ? "Live Mode is on" : "Turn on Live Mode";
   renderStats(d, online);
+  renderSignal(d, online);
   $("#live-btn").disabled = !online || d.live_mode;
   if (d.volume != null && document.activeElement !== $("#vol")) {
     $("#vol").value = d.volume;
@@ -143,6 +180,7 @@ function renderStats(d, online) {
   $("#st-conn").textContent = online ? "Online" : d.status === "disconnected" ? "Offline" : "Waiting";
   $("#st-conn-sub").textContent = online ? d.name || "Connected" : STATUS_TEXT[d.status] || d.status;
   $("#st-vol").textContent = d.volume ?? "–";
+  meter($("#meter-vol"), online && d.volume != null ? d.volume / 255 : 0);
   $("#st-sounds").textContent = online ? files.length : "–";
   $("#st-free").textContent = d.free_kb != null ? `${(d.free_kb / 1024).toFixed(1)} MB free` : "on Skelly";
   $("#st-fw").textContent = d.version ?? "–";

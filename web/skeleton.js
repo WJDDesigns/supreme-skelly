@@ -78,7 +78,6 @@ export function skeletonSVG() {
       ${vertebrae(152, 4, 10, 18)}
       <g transform="translate(150 150) scale(.86) translate(-150 -150)">
       <path class="bone skull" d="M150 18 C 106 18 90 52 92 86 C 93 104 100 116 108 124 L 110 138 C 112 146 122 150 150 150 C 178 150 188 146 190 138 L 192 124 C 200 116 207 104 208 86 C 210 52 194 18 150 18 Z"/>
-      <path class="crack" d="M170 30 l -6 12 l 5 6 l -4 10"/>
       <g class="fx mouth-fx"><ellipse cx="150" cy="140" rx="30" ry="14" fill="url(#mouth-grad)" filter="url(#soft)"/></g>
       <path class="mouth" d="M126 133 Q150 146 174 133 L 172 142 Q150 152 128 142 Z"/>
       <path class="teeth" d="M131 135 v8 M137 137 v8 M143 138 v8 M150 139 v8 M157 138 v8 M163 137 v8 M169 135 v8"/>

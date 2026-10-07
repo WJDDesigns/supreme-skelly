@@ -64,7 +64,7 @@
         <div class="mobile-brand"><svg class="logo"><use href="#i-skull"/></svg><span>SUPREME SKELLY</span></div>
         <div class="top-right">
           <button id="conn-pill" class="pill" data-status="disconnected">
-            <span class="dot"></span><span id="conn-text">Not connected</span>
+            <span class="dot"></span><span id="conn-text">Not connected</span><span class="sig" id="pill-sig" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></span>
           </button>
         </div>
       </header>
@@ -81,16 +81,16 @@
         <div class="stats">
           <div class="stat"><span class="stat-ico"><svg><use href="#i-bt"/></svg></span>
             <div><p class="stat-label">Connection</p><p class="stat-value" id="st-conn">Offline</p><p class="stat-sub" id="st-conn-sub">Not connected</p></div>
-            <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+            <span class="bars" id="meter-conn" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
           <div class="stat"><span class="stat-ico"><svg><use href="#i-volume"/></svg></span>
             <div><p class="stat-label">Volume</p><p class="stat-value" id="st-vol">–</p><p class="stat-sub">out of 255</p></div>
-            <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+            <span class="bars" id="meter-vol" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
           <div class="stat"><span class="stat-ico"><svg><use href="#i-music"/></svg></span>
             <div><p class="stat-label">Sounds</p><p class="stat-value" id="st-sounds">–</p><p class="stat-sub" id="st-free">on Skelly</p></div>
-            <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+            </div>
           <div class="stat"><span class="stat-ico"><svg><use href="#i-chip"/></svg></span>
             <div><p class="stat-label">Firmware</p><p class="stat-value" id="st-fw">–</p><p class="stat-sub" id="st-model">No device</p></div>
-            <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+            </div>
         </div>
 
         <!-- Device -->
@@ -114,6 +114,7 @@
               <div><dt>Firmware</dt><dd id="dev-version">–</dd></div>
               <div><dt>Speaker name</dt><dd id="dev-bt">–</dd></div>
               <div><dt>Free space</dt><dd id="dev-free">–</dd></div>
+              <div><dt>Bluetooth signal</dt><dd id="dev-signal">–</dd></div>
             </dl>
             <div class="row">
               <button id="live-btn" class="btn primary"><svg><use href="#i-mic"/></svg>Turn on Live Mode</button>

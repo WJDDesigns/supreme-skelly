@@ -32,6 +32,7 @@ UPLOAD_FILE_LIMIT = 30  # firmware corrupts custom sounds once its counter reach
 DEMO_HINT = (" If Skelly was factory reset recently he may still be in demo mode:"
              " hold his button for 7 seconds, then try again.")
 AUTOCONNECT_INTERVAL_S = 10.0
+SIGNAL_INTERVAL_S = 5.0
 AUTOCONNECT_SCAN_S = 8.0
 # The firmware resets lights/eyes to the sound's stored scene when playback
 # starts, so a locked look is re-applied shortly after each START.
@@ -73,6 +74,7 @@ class DeviceState:
     live: dict | None = None
     files: list[dict] = field(default_factory=list)
     playing: int | None = None
+    rssi: int | None = None  # Bluetooth signal strength in dBm while connected
     error: str | None = None
 
 
@@ -92,6 +94,7 @@ class SkellyService:
         self._queue: asyncio.Queue[tuple[bytes, asyncio.Future | None]] = asyncio.Queue()
         self._waiters: dict[str, list[asyncio.Future]] = {}
         self._writer: asyncio.Task | None = None
+        self._signal: asyncio.Task | None = None
         self._reconnector: asyncio.Task | None = None
         self._wanted: str | None = None  # address the user asked for
         self._files_buf: dict[int, dict] = {}
@@ -104,6 +107,7 @@ class SkellyService:
 
     async def start(self) -> None:
         self._writer = asyncio.create_task(self._write_loop(), name="skelly-writer")
+        self._signal = asyncio.create_task(self._signal_loop(), name="skelly-signal")
 
     def start_autoconnect(self) -> None:
         if not self._autoconnector or self._autoconnector.done():
@@ -111,7 +115,7 @@ class SkellyService:
 
     async def stop(self) -> None:
         self._wanted = None
-        for t in (self._writer, self._reconnector, self._autoconnector):
+        for t in (self._writer, self._signal, self._reconnector, self._autoconnector):
             if t:
                 t.cancel()
         await self.link.disconnect()
@@ -184,6 +188,18 @@ class SkellyService:
             self.settings.last_address, self.settings.last_name = address, self.state.name
             self.settings.save()
         asyncio.create_task(self._after_connect())
+
+    async def _signal_loop(self) -> None:
+        while True:
+            rssi = None
+            if self.state.status == "connected" and self.link.connected:
+                try:
+                    rssi = await self.link.rssi()
+                except Exception as exc:  # never let a signal reading hurt the connection
+                    log.debug("rssi: %r", exc)
+            if rssi != self.state.rssi:
+                self._set(rssi=rssi)
+            await asyncio.sleep(SIGNAL_INTERVAL_S)
 
     async def _after_connect(self) -> None:
         await self.refresh_all()

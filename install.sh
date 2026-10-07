@@ -41,7 +41,7 @@ $SUDO docker compose up -d --build
 HOST="$(hostname).local"
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 say "Done. Open one of these on your phone or computer:"
-echo "    http://${HOST}:8420"
-[ -n "$IP" ] && echo "    http://${IP}:8420"
+echo "    http://${HOST}"
+[ -n "$IP" ] && echo "    http://${IP}"
 echo
 echo "Switch Skelly on and it will connect by itself. It starts again automatically after a reboot."

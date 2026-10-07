@@ -11,6 +11,9 @@ services:
     # Ubuntu's default Docker AppArmor profile blocks D-Bus calls to BlueZ.
     security_opt:
       - apparmor=unconfined
+    # Lets the app read the live Bluetooth signal strength from the kernel.
+    cap_add:
+      - NET_ADMIN
     volumes:
       # BLE goes through the host's BlueZ daemon over D-Bus.
       - /run/dbus:/run/dbus:ro
@@ -23,5 +26,7 @@ services:
       - SKELLY_AUTOCONNECT=1
       # Set to 1 to try the UI without an animatronic.
       - SKELLY_SIMULATE=0
+      # Also serve the UI on port 80, so http://skelly.local works without ":8420".
+      - SKELLY_EXTRA_PORTS=80
       # Which Bluetooth radio to use (hci0, hci1...). Empty = the system default.
       - SKELLY_BT_ADAPTER=${SKELLY_BT_ADAPTER:-}

@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
 from . import protocol as proto
 from .profiles import PROFILES, is_supported
+from .rssi import read_rssi
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +37,7 @@ class Link(Protocol):
     def connected(self) -> bool: ...
     @property
     def mtu(self) -> int: ...
+    async def rssi(self) -> int | None: ...
 
 
 async def _bluez_unstick(address: str | None = None) -> None:
@@ -142,6 +146,17 @@ class BleakLink:
             except Exception as exc:  # already gone
                 log.debug("disconnect: %s", exc)
 
+    async def rssi(self) -> int | None:
+        """Signal strength of the open link in dBm, or None if the system can't tell."""
+        client = self._client
+        if not client or not client.is_connected or not sys.platform.startswith("linux"):
+            return None
+        # BlueZ object path looks like /org/bluez/hci1/dev_AA_BB_..; it names the radio in use.
+        path = getattr(getattr(client, "_backend", None), "_device_path", "") or ""
+        m = re.search(r"/hci(\d+)/", path) or re.fullmatch(r"hci(\d+)", self.adapter or "")
+        index = int(m.group(1)) if m else 0
+        return await asyncio.to_thread(read_rssi, client.address, index)
+
     async def write(self, data: bytes) -> None:
         if not self._client:
             raise ConnectionError("not connected")
@@ -170,6 +185,9 @@ class SimulatedLink:
     @property
     def mtu(self) -> int:
         return 247
+
+    async def rssi(self) -> int | None:
+        return -58 - (int(asyncio.get_running_loop().time()) * 7) % 9 if self._connected else None
 
     async def scan(self, timeout: float = 6.0) -> list[Found]:
         await asyncio.sleep(0.2)
