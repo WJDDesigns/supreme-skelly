@@ -8,6 +8,9 @@ services:
     restart: unless-stopped
     # Host networking keeps BLE and the web UI simple; the UI listens on port 8420.
     network_mode: host
+    # Ubuntu's default Docker AppArmor profile blocks D-Bus calls to BlueZ.
+    security_opt:
+      - apparmor=unconfined
     volumes:
       # BLE goes through the host's BlueZ daemon over D-Bus.
       - /run/dbus:/run/dbus:ro
