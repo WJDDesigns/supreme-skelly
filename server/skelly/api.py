@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio, audio_io, speaker
+from . import audio, audio_io, recorder, speaker
 from . import protocol as proto
 from .conversation import (
     Conversation,
@@ -131,6 +131,9 @@ def create_app(
             resolve_output)
         app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor, on_known)
         app.state.conv.on_user_text = on_user_text
+        app.state.recorder = recorder.Recorder()
+        app.state.conv.on_started = start_recording
+        app.state.conv.on_ended = stop_recording
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
                                   lambda: svc.settings.audio.get("mic_gain", 100) / 100)
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
@@ -140,6 +143,7 @@ def create_app(
                 log.info("camera not started: %s", exc)
         yield
         await app.state.conv.stop()
+        await app.state.recorder.stop()
         await app.state.vision.stop()
         await app.state.meters.stop()
         await svc.stop()
@@ -368,6 +372,51 @@ def create_app(
     async def faces_forget_all():
         app.state.vision.memory.forget(None)
         return []
+
+    # -- recordings --------------------------------------------------------------
+
+    async def start_recording(cfg, sink: str | None) -> None:
+        if not cfg.record:
+            return
+        vcfg = VisionConfig.from_dict(svc().settings.vision)
+        rtsp = app.state.vault.get("rtsp_url") if vcfg.source == "rtsp" else None
+        frames = app.state.vision.frames() if not rtsp and app.state.vision.state.running else None
+        await asyncio.to_thread(recorder.prune, cfg.keep_days)
+        path = await app.state.recorder.start(rtsp=rtsp, frames=frames, mic=cfg.mic or None, voice_sink=sink)
+        if path:
+            svc().bus.publish("recording", {"recording": True, "name": path.name})
+
+    async def stop_recording(transcript: list[dict]) -> None:
+        if app.state.recorder.recording:
+            saved = await app.state.recorder.stop(transcript)
+            svc().bus.publish("recording", {"recording": False, "saved": saved})
+
+    @app.get("/api/recordings")
+    async def recordings_list():
+        return await asyncio.to_thread(recorder.recordings)
+
+    @app.get("/api/recordings/{name}")
+    async def recording_file(name: str, download: bool = False):
+        path = recorder.recording_path(name)
+        if not path:
+            raise HTTPException(404, "No such recording")
+        return FileResponse(path, media_type="video/mp4", filename=name if download else None)
+
+    @app.get("/api/recordings/{name}/transcript")
+    async def recording_transcript(name: str):
+        path = recorder.recording_path(name)
+        if not path:
+            raise HTTPException(404, "No such recording")
+        try:
+            return __import__("json").loads(path.with_suffix(".json").read_text()).get("transcript", [])
+        except (OSError, ValueError):
+            return []
+
+    @app.delete("/api/recordings/{name}")
+    async def recording_delete(name: str):
+        if not recorder.delete(name):
+            raise HTTPException(404, "No such recording")
+        return await asyncio.to_thread(recorder.recordings)
 
     @app.post("/api/speaker/connect")
     async def connect_live_speaker():

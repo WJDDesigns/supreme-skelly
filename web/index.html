@@ -237,7 +237,7 @@
             <div class="card talk-card">
               <div class="card-head">
                 <div><h2>Talk to Skelly</h2><p class="muted" id="talk-sub">Skelly listens through the mic and answers through his own speaker</p></div>
-                <span class="badge" id="talk-state">Idle</span>
+                <div class="badges"><span class="badge red rec" id="rec-badge" hidden>● REC</span><span class="badge" id="talk-state">Idle</span></div>
               </div>
               <div class="talk-stage">
                 <button id="talk-toggle" class="talk-btn" data-on="false" aria-label="Start a conversation">
@@ -302,7 +302,19 @@
                 <span class="muted">Stops Skelly hearing his own voice through the mic.</span></span>
                 <input type="checkbox" data-cfg="ignore_mic_while_talking" role="switch"></label>
               <label class="field-row">End after silence (seconds)<input type="number" min="10" max="600" data-cfg="idle_timeout_s"></label>
+              <label class="switch-row"><span><strong>Record conversations</strong>
+                <span class="muted">Saves the camera picture with both voices. Needs the camera on.</span></span>
+                <input type="checkbox" data-cfg="record" role="switch"></label>
+              <label class="field-row">Keep recordings (days)<input type="number" min="1" max="365" data-cfg="keep_days"></label>
             </div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Recordings</h2><p class="muted" id="rec-sub">None yet</p></div>
+              <button id="rec-refresh" class="btn outline small"><svg><use href="#i-refresh"/></svg>Refresh</button>
+            </div>
+            <div class="rec-player" id="rec-player" hidden><video id="rec-video" controls playsinline></video><ul class="transcript" id="rec-transcript"></ul></div>
+            <ul id="recordings" class="list"></ul>
           </div>
         </section>
 

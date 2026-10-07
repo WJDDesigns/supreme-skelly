@@ -78,6 +78,8 @@ class ConversationConfig:
     move_while_talking: bool = True
     ignore_mic_while_talking: bool = True
     idle_timeout_s: int = 45  # end the conversation after this long with nobody talking
+    record: bool = False  # save each conversation as a video with sound
+    keep_days: int = 30  # delete recordings older than this
     mic: str = ""  # PipeWire source; empty = default
     mic_gain: int = 100  # percent, from Settings > Sound
     out_gain: int = 100  # percent cap on his voice, from Settings > Sound
@@ -117,6 +119,8 @@ class Conversation:
         self._context: list[str] = []
         self.output_sink: str | None = None  # where his voice is playing, for the speaker meter
         self.on_user_text: Callable[[str], None] | None = None  # e.g. listening for names
+        self.on_started = None  # async (cfg, sink) once his voice has somewhere to go
+        self.on_ended = None  # async (transcript) when the conversation finishes
 
     # -- public ---------------------------------------------------------------
 
@@ -210,6 +214,11 @@ class Conversation:
         try:
             sink = cfg.speaker or await self._sink_for_skelly()
             self.output_sink = sink
+            if self.on_started:
+                try:
+                    await self.on_started(cfg, sink)
+                except Exception as exc:
+                    log.warning("conversation start hook failed: %r", exc)
             speaker = Speaker(sink, cfg.out_gain / 100)
             mover = asyncio.create_task(self._body(cfg, speaker))
             runner = {"elevenlabs": self._elevenlabs, "openai": self._openai, "claude": self._claude}[cfg.provider]
@@ -231,6 +240,11 @@ class Conversation:
             if speaker:
                 await speaker.close()
             await self._still()
+            if self.on_ended:
+                try:
+                    await self.on_ended(list(self.state.transcript))
+                except Exception as exc:
+                    log.warning("conversation end hook failed: %r", exc)
 
     async def _idle_watch(self, cfg: ConversationConfig, speaker: Speaker) -> None:
         """Ends the conversation once nobody has spoken for a while."""

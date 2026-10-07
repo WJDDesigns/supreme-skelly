@@ -488,6 +488,7 @@ function connectEvents() {
     else if (msg.type === "faces") renderFaceBoxes(msg.data.faces);
     else if (msg.type === "face_learned") { toast(`🦴 Skelly will remember ${msg.data.name}`); loadPeople(); }
     else if (msg.type === "known_visitor") toast(`👋 ${msg.data.name} is here`);
+    else if (msg.type === "recording") { $("#rec-badge").hidden = !msg.data.recording; if (!msg.data.recording) loadRecordings(); }
   };
   ws.onclose = () => setTimeout(connectEvents, 1500);
 }
@@ -1040,3 +1041,37 @@ $("#people-forget-all").addEventListener("click", (ev) => {
   if (confirm("Forget every face Skelly knows? This can't be undone.")) run(ev.currentTarget, async () => { people = await api("/faces", undefined, "DELETE"); renderPeople(); }, "Forgot everyone");
 });
 loadPeople();
+
+// ---------- recordings ----------
+function fmtDur(s) { return s == null ? "" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+async function loadRecordings() {
+  let list = [];
+  try { list = await api("/recordings"); } catch { return; }
+  const total = list.reduce((a, r) => a + r.size, 0);
+  $("#rec-sub").textContent = list.length ? `${list.length} saved · ${(total / 1024 / 1024).toFixed(0)} MB` : "None yet. Turn on Record conversations above.";
+  $("#recordings").replaceChildren(...list.map((r) => {
+    const play = el("button", { className: "btn primary small", innerHTML: '<svg><use href="#i-play"/></svg>Play' });
+    play.addEventListener("click", async () => {
+      $("#rec-player").hidden = false;
+      $("#rec-video").src = `/api/recordings/${r.name}`;
+      $("#rec-video").play().catch(() => {});
+      const t = await api(`/recordings/${r.name}/transcript`).catch(() => []);
+      $("#rec-transcript").replaceChildren(...t.map((x) => el("li", { className: x.role === "user" ? "you" : "skelly" },
+        el("span", { className: "who-tag", textContent: x.role === "user" ? "Visitor" : "Skelly" }), el("span", { textContent: x.text }))));
+      $("#rec-player").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    const dl = el("a", { className: "btn outline small", href: `/api/recordings/${r.name}?download=true`, textContent: "Download" });
+    const del = el("button", { className: "btn outline small", textContent: "Delete" });
+    del.addEventListener("click", () => {
+      if (confirm("Delete this recording?")) run(del, async () => { await api(`/recordings/${r.name}`, undefined, "DELETE"); loadRecordings(); }, "Deleted");
+    });
+    const when = new Date(r.started * 1000).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return el("li", {},
+      el("div", { className: "who" }, el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-camera"/></svg>' }),
+        el("div", {}, el("div", { className: "name", textContent: `${when} · ${fmtDur(r.seconds)}` }),
+          el("div", { className: "meta", textContent: r.preview ? `“${r.preview}”` : `${r.lines} lines` }))),
+      el("div", { className: "end" }, play, dl, del));
+  }));
+}
+$("#rec-refresh").addEventListener("click", (ev) => run(ev.currentTarget, loadRecordings));
+loadRecordings();

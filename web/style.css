@@ -622,3 +622,12 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 .chips.small .chip { font-size: .85rem; padding: 8px 14px; }
 .chips.small .chip:disabled { opacity: .4; cursor: not-allowed; }
 .ignore-field { margin: 12px 0 6px; }
+
+.badges { display: flex; gap: 6px; align-items: center; }
+.badge.rec { animation: talk-pulse 1.4s ease-in-out infinite; }
+.badge[hidden] { display: none; }
+.rec-player { display: grid; gap: 12px; margin-bottom: 14px; }
+.rec-player[hidden] { display: none; }
+.rec-player video { width: 100%; border-radius: 14px; background: #000; max-height: 60vh; }
+.rec-player .transcript { max-height: 200px; }
+a.btn { text-decoration: none; color: inherit; }
