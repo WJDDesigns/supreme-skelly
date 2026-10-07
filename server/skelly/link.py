@@ -207,9 +207,11 @@ class BleakLink:
             except Exception as again:
                 if not _in_progress(again):
                     raise
-                log.warning("BlueZ is still stuck; restarting bluetoothd")
+                log.warning("BlueZ is still stuck; restarting bluetoothd and then this app")
                 await _restart_bluez()
-                found = await BleakScanner.discover(timeout=timeout, return_adv=True, **self._kw)
+                # bleak's view of BlueZ goes stale across a bluetoothd restart; start clean.
+                asyncio.get_running_loop().call_later(0.5, os._exit, 0)
+                return []
         out = [
             Found(dev.address, adv.local_name or dev.name or "", adv.rssi)
             for dev, adv in found.values()

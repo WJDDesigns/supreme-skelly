@@ -462,11 +462,13 @@ def create_app(
                 await app.state.conv.stop()
                 await system.restart_audio()
             elif part == "bluetooth":
+                # The app's Bluetooth library keeps stale state across a bluetoothd restart and
+                # stops finding Skelly, so the app restarts too and connects afresh.
                 await app.state.conv.stop()
+                await app.state.recorder.stop()
                 await s.link.disconnect()
                 await system.restart_bluetooth()
-                s._user_disconnected = False
-                s._set(status="disconnected", live_mode=False)  # auto-connect picks Skelly up again
+                system.restart_app_soon()
             elif part == "camera":
                 await app.state.vision.stop()
                 await app.state.vision.start()
