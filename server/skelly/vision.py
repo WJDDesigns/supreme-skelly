@@ -64,6 +64,7 @@ class VisionState:
     visitor: bool = False
     last_visitor_at: float | None = None
     description: str | None = None
+    costumes: list = field(default_factory=list)  # costumes spotted on the last visitor check
     fps: float = 0.0
     faces: list = field(default_factory=list)  # faces in view right now (Seen.public)
 
@@ -347,6 +348,10 @@ class Vision:
                     self.state.last_visitor_at = None  # a car, leaves blowing about...: stay ready
                     return
                 description = verdict.get("description")
+                self.state.costumes = costume_names(verdict)
+                costumes = self.state.costumes
+                if costumes and description and not any(c.lower() in description.lower() for c in costumes):
+                    description = f"{description} Costumes: {', '.join(costumes)}."
         self.state.visitor = True
         self.state.description = description
         self._publish()
@@ -387,9 +392,21 @@ SEE_PROMPT = (
     '{"people": <number of real people>, "approaching": <true if any of them is coming towards the camera or '
     'standing near it, false if they are only walking or driving past>, "animals": <number>, "vehicles": '
     '<number of moving or arriving cars/trucks>, "bikes": <number of bikes or scooters>, '
+    '"costumes": [<for each person in a Halloween costume, a short name for it, e.g. "vampire", "witch", '
+    '"Spider-Man", "princess", "zombie", "inflatable dinosaur"; empty if nobody is dressed up>], '
     '"description": "<one short sentence about the people (or animals) a skeleton could joke about: '
     'costumes, clothes colours, pets, what they hold>"}.'
 )
+
+
+def costume_names(verdict: dict | None) -> list[str]:
+    raw = (verdict or {}).get("costumes") or []
+    out = []
+    for c in raw if isinstance(raw, list) else [raw]:
+        name = str(c.get("costume") if isinstance(c, dict) else c).strip()[:40]
+        if name and name.lower() not in {x.lower() for x in out}:
+            out.append(name)
+    return out[:8]
 
 
 def worth_a_visit(verdict: dict, ignore: list[str]) -> bool:

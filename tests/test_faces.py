@@ -37,3 +37,11 @@ def test_ignore_chips():
     assert worth_a_visit({"animals": 1}, default)
     assert not worth_a_visit({"animals": 1}, ["animals"])
     assert not worth_a_visit({}, default)  # nothing identifiable: shadows/weather
+
+
+def test_costume_names():
+    from skelly.vision import costume_names
+
+    assert costume_names({"costumes": ["Vampire", "witch", "vampire", ""]}) == ["Vampire", "witch"]
+    assert costume_names({"costumes": [{"costume": "Spider-Man"}]}) == ["Spider-Man"]
+    assert costume_names({}) == [] and costume_names(None) == []

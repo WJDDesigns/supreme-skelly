@@ -888,6 +888,7 @@ function renderVision(v) {
   $("#cam-sub").textContent = v.running ? (v.error ? "Retrying…" : `Watching${v.fps ? ` · ${v.fps} fps` : ""}`) : "Off";
   $("#cam-visitor").hidden = !v.visitor;
   if (v.description) { $("#cam-desc").hidden = false; $("#cam-desc").textContent = v.description; }
+  renderCostumes(v.costumes);
   if (!v.running) setMotion(0);
 }
 function setMotion(m) {
@@ -896,7 +897,11 @@ function setMotion(m) {
   $("#motion-out").textContent = `${pct}%`;
 }
 function onVisitor(v) {
-  toast(v.description ? `👀 Visitor: ${v.description}` : "👀 Someone walked up");
+  const dressed = v.costumes?.length ? ` 🎃 ${v.costumes.join(", ")}` : "";
+  toast(v.description ? `👀 Visitor: ${v.description}${dressed}` : `👀 Someone walked up${dressed}`);
+}
+function renderCostumes(list = []) {
+  $("#costumes").replaceChildren(...list.map((c) => el("span", { className: "chip costume", textContent: `🎃 ${c}` })));
 }
 function renderVisionCfg() {
   const src = visionCfg.source || "usb";
@@ -931,6 +936,7 @@ $("#cam-describe").addEventListener("click", (ev) =>
     const r = await api("/vision/describe", {});
     $("#cam-desc").hidden = false;
     $("#cam-desc").textContent = `${r.people ? `${r.people} ${r.people === 1 ? "person" : "people"}. ` : "Nobody there. "}${r.description ?? ""}`;
+    renderCostumes((r.costumes ?? []).map((c) => (typeof c === "string" ? c : c.costume)).filter(Boolean));
   }));
 let ignorable = {};
 api("/vision").then((r) => { visionCfg = r.config; cams = r.cameras; ignorable = r.ignorable ?? {}; renderVisionCfg(); renderVision(r.state); renderZones(); renderIgnore(); }).catch(() => {});

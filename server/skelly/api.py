@@ -33,7 +33,7 @@ from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings
 from .vault import Vault
-from .vision import IGNORABLE, Vision, VisionConfig, describe, find_skelly, list_cameras
+from .vision import IGNORABLE, Vision, VisionConfig, costume_names, describe, find_skelly, list_cameras
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 log = logging.getLogger(__name__)
@@ -157,6 +157,8 @@ def create_app(
         app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor, on_known)
         app.state.conv.on_user_text = on_user_text
         app.state.recorder = recorder.Recorder()
+        app.state.costumes_mentioned = set()
+        costume_task = asyncio.create_task(costume_watch())
         app.state.conv.on_started = start_recording
         app.state.conv.on_ended = stop_recording
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
@@ -167,6 +169,7 @@ def create_app(
             except ValueError as exc:
                 log.info("camera not started: %s", exc)
         yield
+        costume_task.cancel()
         await app.state.conv.stop()
         await app.state.recorder.stop()
         await app.state.vision.stop()
@@ -330,16 +333,46 @@ def create_app(
         await out.close()
         return {"sink": sink}
 
+    def costume_hint(costumes: list[str]) -> str:
+        return (f" They're dressed as: {', '.join(costumes)}. Mention their costume in a fun, spooky way."
+                if costumes else "")
+
     async def on_visitor(description: str | None, cfg: VisionConfig) -> None:
-        svc().bus.publish("visitor", {"description": description, "ts": __import__("time").time()})
+        costumes = list(app.state.vision.state.costumes)
+        svc().bus.publish("visitor", {"description": description, "costumes": costumes,
+                                      "ts": __import__("time").time()})
+        app.state.costumes_mentioned = set(c.lower() for c in costumes)
         if cfg.auto_converse:
-            ctx = f"Someone just walked up. What the camera sees: {description}" if description else None
+            ctx = (f"Someone just walked up. What the camera sees: {description}{costume_hint(costumes)}"
+                   if description else None)
             try:
                 await app.state.conv.start(context=ctx)
             except (MissingKey, ValueError) as exc:
                 log.info("visitor conversation not started: %s", exc)
 
     # -- faces ---------------------------------------------------------------
+
+    async def costume_watch() -> None:
+        """While a conversation runs, look again every 20 s for costumes Skelly hasn't mentioned yet."""
+        while True:
+            await asyncio.sleep(20)
+            conv, vision = app.state.conv, app.state.vision
+            if not (conv.running and vision.state.running and vision.frame):
+                if not conv.running:
+                    app.state.costumes_mentioned = set()
+                continue
+            try:
+                cfg = VisionConfig.from_dict(svc().settings.vision)
+                verdict = await describe(app.state.vault, vision.frame, cfg.active_zones)
+            except Exception as exc:
+                log.info("costume check failed: %r", exc)
+                continue
+            new = [c for c in costume_names(verdict) if c.lower() not in app.state.costumes_mentioned]
+            if new:
+                app.state.costumes_mentioned |= {c.lower() for c in new}
+                vision.state.costumes = costume_names(verdict)
+                vision._publish()
+                conv.add_context(f"New costume spotted: {', '.join(new)}. Work it into the conversation.")
 
     def known_here() -> list[str]:
         return sorted({f.name for f in app.state.vision.seen if f.name})
@@ -601,9 +634,13 @@ def create_app(
     @app.post("/api/conversation/start")
     async def conversation_start():
         here = known_here()
+        v = app.state.vision.state
+        recent = v.last_visitor_at and __import__("time").time() - v.last_visitor_at < 120
+        parts = [f"People you recognise standing here: {', '.join(here)}." if here else "",
+                 costume_hint(v.costumes).strip() if recent else ""]
+        app.state.costumes_mentioned = {c.lower() for c in v.costumes} if recent else set()
         try:
-            return await app.state.conv.start(
-                context=f"People you recognise standing here: {', '.join(here)}." if here else None)
+            return await app.state.conv.start(context=" ".join(p for p in parts if p) or None)
         except ValueError as exc:  # MissingKey included
             raise HTTPException(400, str(exc)) from exc
 
