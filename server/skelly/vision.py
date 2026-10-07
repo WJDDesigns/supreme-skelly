@@ -14,7 +14,7 @@ import json
 import logging
 import os
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import httpx
@@ -35,6 +35,17 @@ class VisionConfig:
     ai_check: bool = True  # ask an AI whether the motion is a person, and what they look like
     auto_converse: bool = False  # start a conversation when a visitor is confirmed
     cooldown_s: int = 90  # minimum gap between visitor events
+    # Areas to ignore, per camera ("rtsp" or the USB device path): [[x, y, w, h], ...] as
+    # fractions of the picture. Skelly himself goes here so his moving doesn't count.
+    zones: dict = field(default_factory=dict)
+
+    @property
+    def camera_key(self) -> str:
+        return "rtsp" if self.source == "rtsp" else self.usb_device
+
+    @property
+    def active_zones(self) -> list[list[float]]:
+        return [z for z in self.zones.get(self.camera_key, []) if len(z) == 4]
 
     @classmethod
     def from_dict(cls, d: dict | None) -> VisionConfig:
@@ -195,6 +206,8 @@ class Vision:
 
     async def _read_motion(self, cfg: VisionConfig, stream: asyncio.StreamReader) -> None:
         size = THUMB_W * THUMB_H
+        keep = _mask(cfg.active_zones)
+        counted = max(1, len(keep))
         prev: bytes | None = None
         busy_frames, last_pub = 0, 0.0
         # Sensitivity 0..100 maps to the share of the picture that must change.
@@ -202,7 +215,7 @@ class Vision:
         while True:
             thumb = await stream.readexactly(size)
             if prev is not None:
-                changed = sum(1 for a, b in zip(thumb, prev, strict=True) if abs(a - b) > 24) / size
+                changed = sum(1 for i in keep if abs(thumb[i] - prev[i]) > 24) / counted
                 self.state.motion = round(changed, 3)
                 busy_frames = busy_frames + 1 if changed > threshold else 0
                 if busy_frames >= max(2, cfg.fps // 2):  # half a second of movement
@@ -222,7 +235,7 @@ class Vision:
         description = None
         if cfg.ai_check and self.frame:
             try:
-                verdict = await describe(self.vault, self.frame)
+                verdict = await describe(self.vault, self.frame, cfg.active_zones)
             except Exception as exc:
                 log.info("visitor check failed: %r", exc)
                 verdict = None
@@ -240,11 +253,64 @@ class Vision:
         self._publish()
 
 
-async def describe(vault, jpeg: bytes) -> dict | None:
+def _mask(zones: list[list[float]]) -> list[int]:
+    """Thumbnail pixels outside every ignored zone."""
+    out = []
+    for i in range(THUMB_W * THUMB_H):
+        x, y = (i % THUMB_W + 0.5) / THUMB_W, (i // THUMB_W + 0.5) / THUMB_H
+        if not any(zx <= x <= zx + zw and zy <= y <= zy + zh for zx, zy, zw, zh in zones):
+            out.append(i)
+    return out
+
+
+async def blackout(jpeg: bytes, zones: list[list[float]]) -> bytes:
+    """Paint ignored zones black so an AI looking at the frame can't count what's in them."""
+    if not zones:
+        return jpeg
+    boxes = ",".join(f"drawbox=x=iw*{x:.4f}:y=ih*{y:.4f}:w=iw*{w:.4f}:h=ih*{h:.4f}:color=black:t=fill"
+                     for x, y, w, h in zones)
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "image2pipe", "-i", "pipe:0", "-vf", boxes,
+        "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "4", "pipe:1",
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+    out, _ = await proc.communicate(jpeg)
+    return out or jpeg
+
+
+SEE_PROMPT = (
+    "You are the eyes of a talking Halloween skeleton. Look at this camera frame. Skeletons, statues, "
+    "inflatables and other Halloween decorations are props, not people; black areas are hidden on purpose. "
+    'Reply with JSON only: {"people": <number of real people>, "description": "<one short sentence about '
+    'them a skeleton could joke about: costumes, clothes colours, pets, what they hold>"}.'
+)
+
+FIND_PROMPT = (
+    "This camera frame shows a life-size Halloween skeleton decoration (an animatronic prop). "
+    "Give the box around the whole skeleton, including head, arms and feet, as fractions of the image width "
+    'and height. Reply with JSON only: {"found": true, "x": <left>, "y": <top>, "w": <width>, "h": <height>} '
+    'or {"found": false} if there is no skeleton.'
+)
+
+
+async def find_skelly(vault, jpeg: bytes) -> list[float] | None:
+    """Where Skelly stands in the picture, padded a little, as [x, y, w, h] fractions."""
+    r = await _ask_vision(vault, jpeg, FIND_PROMPT)
+    if not r or not r.get("found"):
+        return None
+    x, y, w, h = (float(r[k]) for k in ("x", "y", "w", "h"))
+    if max(x, y, w, h) > 1.5:  # some models answer in percent
+        x, y, w, h = x / 100, y / 100, w / 100, h / 100
+    pad_w, pad_h = w * 0.15, h * 0.08
+    x, y = max(0.0, x - pad_w), max(0.0, y - pad_h)
+    return [round(x, 4), round(y, 4), round(min(1 - x, w + 2 * pad_w), 4), round(min(1 - y, h + 2 * pad_h), 4)]
+
+
+async def describe(vault, jpeg: bytes, zones: list[list[float]] | None = None) -> dict | None:
     """Ask Claude (or OpenAI) whether people are in the frame and what they look like."""
-    prompt = ("You are the eyes of a talking Halloween skeleton. Look at this camera frame. "
-              'Reply with JSON only: {"people": <number of people>, "description": "<one short sentence about '
-              'them a skeleton could joke about: costumes, clothes colours, pets, what they hold>"}.')
+    return await _ask_vision(vault, await blackout(jpeg, zones or []), SEE_PROMPT)
+
+
+async def _ask_vision(vault, jpeg: bytes, prompt: str) -> dict | None:
     b64 = base64.b64encode(jpeg).decode()
     async with httpx.AsyncClient(timeout=20) as http:
         if key := vault.get("anthropic_api_key"):

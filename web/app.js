@@ -706,6 +706,7 @@ function onVisitor(v) {
 }
 function renderVisionCfg() {
   const src = visionCfg.source || "usb";
+  if (typeof renderZones === "function" && $("#zones")) setTimeout(renderZones);
   document.querySelectorAll("#cam-source button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.val === src));
   document.querySelectorAll(".prov[data-cam]").forEach((d) => (d.hidden = d.dataset.cam !== src));
   const sel = $("#cam-device");
@@ -736,7 +737,69 @@ $("#cam-describe").addEventListener("click", (ev) =>
     $("#cam-desc").hidden = false;
     $("#cam-desc").textContent = `${r.people ? `${r.people} ${r.people === 1 ? "person" : "people"}. ` : "Nobody there. "}${r.description ?? ""}`;
   }));
-api("/vision").then((r) => { visionCfg = r.config; cams = r.cameras; renderVisionCfg(); renderVision(r.state); }).catch(() => {});
+api("/vision").then((r) => { visionCfg = r.config; cams = r.cameras; renderVisionCfg(); renderVision(r.state); renderZones(); }).catch(() => {});
+
+// ---------- ignored areas (Skelly himself, flags, trees) ----------
+const camKey = () => (visionCfg.source === "rtsp" ? "rtsp" : visionCfg.usb_device);
+const zonesNow = () => (visionCfg.zones ?? {})[camKey()] ?? [];
+function renderZones() {
+  const z = zonesNow();
+  $("#zones").replaceChildren(...z.map((b, i) => {
+    const d = el("div", { className: "zone" }, el("span", { textContent: i === 0 ? "Ignored" : "" }));
+    Object.assign(d.style, { left: `${b[0] * 100}%`, top: `${b[1] * 100}%`, width: `${b[2] * 100}%`, height: `${b[3] * 100}%` });
+    return d;
+  }));
+  $("#zone-sub").textContent = z.length ? `Ignored areas: ${z.length}. Motion and people there don't count.` : "Ignored areas: none";
+  $("#zone-clear").disabled = !z.length;
+}
+async function putZones(zones) {
+  visionCfg = await api("/vision/zones", { zones }, "PUT");
+  renderZones();
+}
+$("#zone-find").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => { visionCfg = await api("/vision/find-skelly", {}); renderZones(); },
+    "Found Skelly. He's now ignored, so only people count."));
+$("#zone-clear").addEventListener("click", (ev) => run(ev.currentTarget, () => putZones([]), "Cleared"));
+let drawing = null;
+$("#zone-draw").addEventListener("click", () => {
+  const on = $("#cam-view").classList.toggle("drawing");
+  $("#zone-draw").textContent = on ? "Drag on the picture…" : "Draw area";
+});
+const frac = (e) => {
+  const r = $("#cam-view").getBoundingClientRect();
+  const p = e.touches?.[0] ?? e;
+  return [Math.min(1, Math.max(0, (p.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (p.clientY - r.top) / r.height))];
+};
+function startDraw(e) {
+  if (!$("#cam-view").classList.contains("drawing")) return;
+  e.preventDefault();
+  const [x, y] = frac(e);
+  drawing = { x, y, box: el("div", { className: "zone live" }) };
+  $("#zones").append(drawing.box);
+}
+function moveDraw(e) {
+  if (!drawing) return;
+  e.preventDefault();
+  const [x, y] = frac(e);
+  drawing.rect = [Math.min(x, drawing.x), Math.min(y, drawing.y), Math.abs(x - drawing.x), Math.abs(y - drawing.y)];
+  Object.assign(drawing.box.style, { left: `${drawing.rect[0] * 100}%`, top: `${drawing.rect[1] * 100}%`,
+    width: `${drawing.rect[2] * 100}%`, height: `${drawing.rect[3] * 100}%` });
+}
+function endDraw() {
+  if (!drawing) return;
+  const r = drawing.rect;
+  drawing = null;
+  $("#cam-view").classList.remove("drawing");
+  $("#zone-draw").textContent = "Draw area";
+  if (r && r[2] > 0.02 && r[3] > 0.02) run(null, () => putZones([...zonesNow(), r]), "Area ignored");
+  else renderZones();
+}
+$("#cam-view").addEventListener("mousedown", startDraw);
+$("#cam-view").addEventListener("touchstart", startDraw, { passive: false });
+window.addEventListener("mousemove", moveDraw);
+window.addEventListener("touchmove", moveDraw, { passive: false });
+window.addEventListener("mouseup", endDraw);
+window.addEventListener("touchend", endDraw);
 
 // ---------- settings: speaker, vault ----------
 async function loadAudio() {

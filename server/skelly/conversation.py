@@ -41,6 +41,23 @@ DEFAULT_PROMPT = (
 )
 
 
+# Added to every Claude prompt: whatever the personality says, the reply is read aloud.
+SPOKEN_RULES = (
+    "Your words are spoken aloud by a speaker inside a skeleton, to someone standing in front of you. "
+    "Reply in one to three short sentences. Never write stage directions, actions in asterisks, emoji, "
+    "lists or formatting: only the words you say."
+)
+
+
+def speakable(text: str) -> str:
+    """Strip what shouldn't be read out: *actions*, (asides), markdown and emoji."""
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)  # **bold** keeps its words
+    text = re.sub(r"\*[^*]{1,200}\*", " ", text).replace("*", " ")  # *rattles* is an action
+    text = re.sub(r"[_#`>~]|\[|\]", " ", text)
+    text = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 @dataclass
 class ConversationConfig:
     provider: str = "elevenlabs"
@@ -454,7 +471,7 @@ class Conversation:
     async def _answer(self, http: httpx.AsyncClient, cfg: ConversationConfig, speaker: Speaker,
                       history: list[dict]) -> str:
         """Streams Claude's reply and speaks it sentence by sentence as it arrives."""
-        body = {"model": cfg.claude_model, "max_tokens": 300, "system": cfg.prompt,
+        body = {"model": cfg.claude_model, "max_tokens": 300, "system": f"{cfg.prompt}\n\n{SPOKEN_RULES}",
                 "messages": history, "stream": True}
         headers = {"x-api-key": self.vault.get("anthropic_api_key"), "anthropic-version": "2023-06-01",
                    "content-type": "application/json"}
@@ -489,10 +506,13 @@ class Conversation:
             await voicer
         finally:
             voicer.cancel()
-        self._say("skelly", full)
+        self._say("skelly", speakable(full))
         return full
 
     async def _speak(self, http: httpx.AsyncClient, cfg: ConversationConfig, speaker: Speaker, text: str) -> None:
+        text = speakable(text)
+        if not text:
+            return
         if cfg.tts == "openai":
             rate = 24000
             req = http.stream("POST", "https://api.openai.com/v1/audio/speech",

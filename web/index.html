@@ -311,12 +311,21 @@
               <div class="cam-view" id="cam-view">
                 <img id="cam-img" alt="Camera preview" hidden>
                 <div class="cam-empty" id="cam-empty"><svg><use href="#i-camera"/></svg><span>Camera is off</span></div>
+                <div class="zones" id="zones"></div>
                 <span class="badge orange cam-visitor" id="cam-visitor" hidden>Visitor!</span>
               </div>
               <div class="meter-row"><span class="muted">Motion</span><div class="meter"><i id="motion-bar"></i></div><output id="motion-out">0%</output></div>
               <p class="cam-desc" id="cam-desc" hidden></p>
               <div class="row">
                 <button id="cam-describe" class="btn outline"><svg><use href="#i-eye"/></svg>What does Skelly see?</button>
+              </div>
+              <div class="zone-bar">
+                <span class="muted" id="zone-sub">Ignored areas: none</span>
+                <div class="zone-btns">
+                  <button id="zone-find" class="btn primary small"><svg><use href="#i-skull"/></svg>Find Skelly</button>
+                  <button id="zone-draw" class="btn outline small">Draw area</button>
+                  <button id="zone-clear" class="btn outline small">Clear</button>
+                </div>
               </div>
             </div>
 

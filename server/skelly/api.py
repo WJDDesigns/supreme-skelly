@@ -31,7 +31,7 @@ from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings
 from .vault import Vault
-from .vision import Vision, VisionConfig, describe, list_cameras
+from .vision import Vision, VisionConfig, describe, find_skelly, list_cameras
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 log = logging.getLogger(__name__)
@@ -74,6 +74,10 @@ class KeepLookBody(BaseModel):
 
 class AdapterBody(BaseModel):
     address: str
+
+
+class ZonesBody(BaseModel):
+    zones: list[list[float]]
 
 
 class SecretBody(BaseModel):
@@ -333,12 +337,41 @@ def create_app(
         return StreamingResponse(body(), media_type="multipart/x-mixed-replace; boundary=frame",
                                  headers={"Cache-Control": "no-store"})
 
+    async def save_zones(zones: list[list[float]]) -> dict:
+        cfg = VisionConfig.from_dict(svc().settings.vision)
+        clean = [[round(min(max(v, 0.0), 1.0), 4) for v in z] for z in zones if len(z) == 4 and z[2] > 0 and z[3] > 0]
+        cfg.zones = {**cfg.zones, cfg.camera_key: clean}
+        svc().settings.vision = vars(cfg)
+        svc().settings.save()
+        if app.state.vision.state.running:  # the motion mask is built when capture starts
+            await app.state.vision.stop()
+            await app.state.vision.start()
+        return vars(cfg)
+
+    @app.put("/api/vision/zones")
+    async def vision_zones(body: ZonesBody):
+        return await save_zones(body.zones)
+
+    @app.post("/api/vision/find-skelly")
+    async def vision_find_skelly():
+        if not app.state.vision.frame:
+            raise HTTPException(409, "Start the camera first")
+        try:
+            box = await find_skelly(app.state.vault, app.state.vision.frame)
+        except Exception as exc:
+            raise HTTPException(502, f"The AI couldn't look: {exc}") from exc
+        if box is None:
+            raise HTTPException(404, "Couldn't spot Skelly in this camera's picture. Draw the area by hand instead.")
+        cfg = VisionConfig.from_dict(svc().settings.vision)
+        return await save_zones([*cfg.active_zones, box])
+
     @app.post("/api/vision/describe")
     async def vision_describe():
         if not app.state.vision.frame:
             raise HTTPException(409, "Start the camera first")
+        cfg = VisionConfig.from_dict(svc().settings.vision)
         try:
-            verdict = await describe(app.state.vault, app.state.vision.frame)
+            verdict = await describe(app.state.vault, app.state.vision.frame, cfg.active_zones)
         except Exception as exc:
             raise HTTPException(502, f"The AI couldn't look: {exc}") from exc
         if verdict is None:

@@ -96,3 +96,17 @@ def test_elevenlabs_prompt_sync(tmp_path, monkeypatch):
         r = c.put("/api/conversation/config", json={"prompt": "Edited here"}).json()
         assert r["sync"] == "Saved to ElevenLabs"
         assert pushed == {"agent_id": "a1", "prompt": "Edited here", "first_message": "Boo!"}
+
+
+def test_ignored_zones_are_per_camera_and_masked(tmp_path):
+    from skelly.vision import THUMB_H, THUMB_W, _mask
+
+    c, _ = make(tmp_path)
+    with c:
+        c.put("/api/vision/config", json={"source": "rtsp"})
+        cfg = c.put("/api/vision/zones", json={"zones": [[0.0, 0.2, 0.25, 0.6], [0.5, 0.5, 0, 0.1]]}).json()
+        assert cfg["zones"] == {"rtsp": [[0.0, 0.2, 0.25, 0.6]]}  # empty box dropped
+        cfg = c.put("/api/vision/config", json={"source": "usb"}).json()
+        assert c.put("/api/vision/zones", json={"zones": []}).json()["zones"]["rtsp"] == [[0.0, 0.2, 0.25, 0.6]]
+    keep = _mask([[0.0, 0.0, 0.5, 1.0]])
+    assert len(keep) == THUMB_W * THUMB_H // 2 and all(i % THUMB_W >= THUMB_W // 2 for i in keep)

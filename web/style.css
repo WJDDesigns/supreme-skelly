@@ -564,3 +564,15 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 .secret-how a { flex: none; }
 
 .row.tight { margin: 0 0 6px; gap: 8px; }
+
+/* ignored areas drawn over the camera picture */
+.zones { position: absolute; inset: 0; pointer-events: none; }
+.zone { position: absolute; border: 2px dashed rgba(255, 90, 90, .9); background: rgba(255, 90, 90, .14); border-radius: 8px; }
+.zone span { position: absolute; top: 4px; left: 6px; font-size: .72rem; font-weight: 600; color: #fff;
+  text-shadow: 0 1px 3px #000; }
+.zone.live { border-color: var(--accent-2); background: rgba(255, 181, 71, .16); }
+.cam-view.drawing { cursor: crosshair; outline: 2px solid var(--accent); touch-action: none; }
+.zone-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 14px;
+  padding-top: 14px; border-top: 1px solid var(--line); font-size: .88rem; }
+.zone-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn.small svg { width: 15px; height: 15px; }
