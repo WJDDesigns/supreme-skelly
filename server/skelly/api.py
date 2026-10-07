@@ -161,6 +161,7 @@ def create_app(
         app.state.conv.scene_context = app.state.scene.context
         app.state.recorder = recorder.Recorder()
         app.state.costumes_mentioned = set()
+        app.state.last_live_callout = 0.0
         costume_task = asyncio.create_task(costume_watch())
         app.state.pending_name = None
         name_task = asyncio.create_task(pending_name_watch())
@@ -423,6 +424,26 @@ def create_app(
 
     # -- UniFi Protect -------------------------------------------------------------
 
+    async def call_over_live(jpeg: bytes, zones: list) -> None:
+        """A person shows up while Skelly is in a conversation nobody is having: call them over."""
+        now = time.monotonic()
+        conv = app.state.conv
+        if now - app.state.last_live_callout < 20 or conv.quiet_for < 8:
+            return
+        app.state.last_live_callout = now
+        try:
+            verdict = await describe(app.state.vault, jpeg, zones)
+        except Exception as exc:
+            log.info("call-over check failed: %r", exc)
+            return
+        if not verdict or not int(verdict.get("people") or 0):
+            return
+        from .callouts import call_out
+
+        line = call_out(costume_names(verdict))
+        if conv.call_over(line):
+            svc().bus.publish("calling_over", {"line": line, "costumes": costume_names(verdict)})
+
     async def on_protect_person(camera: str, jpeg: bytes, event: dict) -> None:
         cfg = VisionConfig.from_dict(svc().settings.vision)
         cam_id = event.get("device") or event.get("deviceId") or ""
@@ -432,7 +453,10 @@ def create_app(
             seen = await asyncio.to_thread(vision.engine.process, jpeg, zones)
             vision.recognise_external(seen)
         if cfg.ai_check:
-            await vision.maybe_visitor_from(jpeg, zones)
+            if app.state.conv.running and cfg.call_over:
+                await call_over_live(jpeg, zones)  # he's mid-chat: invite them in rather than restart
+            else:
+                await vision.maybe_visitor_from(jpeg, zones)
 
     @app.get("/api/protect")
     async def protect_state():

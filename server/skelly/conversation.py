@@ -132,6 +132,12 @@ RESUME_AFTER_S = 3.0
 RESUME_MARK = "(Nobody said anything"
 
 
+def call_over_prompt(line: str) -> str:
+    """Hidden nudge: someone is walking past while nobody is talking to Skelly; he calls out."""
+    return (f"{RESUME_MARK} to you; someone new is walking past at a distance.) Call out to them to come "
+            f"over and chat, in your own words, something like: \"{line}\" One short line only.")
+
+
 def resume_prompt(unsaid: str) -> str:
     return (f"{RESUME_MARK}; that was just a noise.) Carry on where you were cut off. Start with a quick "
             "\"As I was saying...\" or a playful variation, then finish your point in your own words. "
@@ -161,6 +167,7 @@ class Conversation:
         self.on_ended = None  # async (transcript) when the conversation finishes
         self._override_ok = False
         self._opening: str | None = None
+        self._nudges: asyncio.Queue | None = None
         self._echo_gain = 1.0  # mic level per unit of played level; follows his real echo while he talks
         self._echo_delay = ECHO_DELAY_S  # measured live from how the mic tracks what was played
 
@@ -209,6 +216,18 @@ class Conversation:
         self.state.level = 0.0
         self._publish()
         return self.snapshot()
+
+    @property
+    def quiet_for(self) -> float:
+        """Seconds since anyone spoke to Skelly (or since he finished talking)."""
+        return time.monotonic() - self._last_heard
+
+    def call_over(self, line: str) -> bool:
+        """Make Skelly call out to a passer-by now, if the AI supports being nudged mid-chat."""
+        if not self.running or self._nudges is None:
+            return False
+        self._nudges.put_nowait(call_over_prompt(line))
+        return True
 
     def add_context(self, text: str) -> None:
         """Something worth knowing mid-conversation (e.g. what the camera sees)."""
@@ -289,6 +308,7 @@ class Conversation:
         else:
             self._set("idle")
         finally:
+            self._nudges = None
             if mover:
                 mover.cancel()
             if speaker:
@@ -476,6 +496,15 @@ class Conversation:
                         log.info("interrupted with nothing said; resuming")
                         await ws.send(json.dumps({"type": "user_message", "text": resume_prompt(text)}))
 
+            self._nudges = asyncio.Queue()
+
+            async def send_nudges():
+                while True:
+                    text = await self._nudges.get()
+                    if not speaker.speaking:
+                        log.info("nudging the agent: %s", text[:80])
+                        await ws.send(json.dumps({"type": "user_message", "text": text}))
+
             async def send_mic():
                 async for pcm in self._mic_frames(cfg, in_rate, speaker):
                     if ctx := self._take_context():
@@ -523,7 +552,7 @@ class Conversation:
                     if kind != "audio" and not speaker.speaking and self.state.state == "speaking":
                         self._set("listening")
 
-            await _first_done(send_mic(), receive(), resume_watch(), self._idle_watch(cfg, speaker),
+            await _first_done(send_mic(), receive(), resume_watch(), send_nudges(), self._idle_watch(cfg, speaker),
                               self._speaking_watch(speaker))
 
     # -- OpenAI Realtime --------------------------------------------------------
