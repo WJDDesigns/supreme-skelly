@@ -283,7 +283,12 @@ $("#scan-btn").addEventListener("click", (ev) =>
     list.replaceChildren(el("li", {}, el("span", { className: "muted", textContent: "Scanning…" })));
     const found = await api("/scan", {});
     if (!found.length) {
-      list.replaceChildren(el("li", {}, el("span", { className: "muted", textContent: "Nothing found. Is Skelly switched on and nearby?" })));
+      // A connected Skelly stops advertising, so he never shows up in his own scan.
+      const d = state.device;
+      const msg = d?.status === "connected"
+        ? `Already connected to ${d.name || "Skelly"}. No other animatronics nearby.`
+        : "Nothing found. Is Skelly switched on and nearby?";
+      list.replaceChildren(el("li", {}, el("span", { className: "muted", textContent: msg })));
       return;
     }
     list.replaceChildren(
