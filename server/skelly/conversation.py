@@ -79,6 +79,8 @@ class ConversationConfig:
     ignore_mic_while_talking: bool = True
     idle_timeout_s: int = 45  # end the conversation after this long with nobody talking
     mic: str = ""  # PipeWire source; empty = default
+    mic_gain: int = 100  # percent, from Settings > Sound
+    out_gain: int = 100  # percent cap on his voice, from Settings > Sound
     speaker: str = ""  # PipeWire sink; empty = Skelly's Live speaker when paired, else default
 
     @classmethod
@@ -202,7 +204,7 @@ class Conversation:
         try:
             sink = cfg.speaker or await self._sink_for_skelly()
             self.output_sink = sink
-            speaker = Speaker(sink)
+            speaker = Speaker(sink, cfg.out_gain / 100)
             mover = asyncio.create_task(self._body(cfg, speaker))
             runner = {"elevenlabs": self._elevenlabs, "openai": self._openai, "claude": self._claude}[cfg.provider]
             await runner(cfg, speaker)
@@ -237,7 +239,7 @@ class Conversation:
     async def _mic_frames(self, cfg: ConversationConfig, rate: int, speaker: Speaker) -> AsyncIterator[bytes]:
         """Mic chunks, with Skelly's own voice blanked out if asked, and the level published."""
         last_pub = 0.0
-        async with Mic(rate, cfg.mic or None) as mic:
+        async with Mic(rate, cfg.mic or None, cfg.mic_gain / 100) as mic:
             async for pcm in mic:
                 deaf = cfg.ignore_mic_while_talking and speaker.speaking
                 self.state.level = 0.0 if deaf else mic.level

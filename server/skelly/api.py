@@ -79,6 +79,8 @@ class AdapterBody(BaseModel):
 
 class AudioBody(BaseModel):
     mic: str | None = None
+    mic_gain: int | None = Field(None, ge=0, le=300)
+    out_gain: int | None = Field(None, ge=0, le=150)
     skelly: bool | None = None
     extra: list[str] | None = None
 
@@ -123,10 +125,13 @@ def create_app(
         app.state.tasks = set()
         app.state.vault = vault or Vault()
         app.state.conv = Conversation(
-            svc, app.state.vault, lambda: {**svc.settings.conversation, "mic": svc.settings.audio.get("mic", "")},
+            svc, app.state.vault, lambda: {**svc.settings.conversation, "mic": svc.settings.audio.get("mic", ""),
+                                           "mic_gain": svc.settings.audio.get("mic_gain", 100),
+                                           "out_gain": svc.settings.audio.get("out_gain", 100)},
             resolve_output)
         app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor)
-        app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink)
+        app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
+                                  lambda: svc.settings.audio.get("mic_gain", 100) / 100)
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
             try:
                 await app.state.vision.start()
@@ -214,7 +219,7 @@ def create_app(
         if conv.running and conv.output_sink:
             return conv.output_sink
         have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
-        for name in (audio_io.COMBINED, audio_io.skelly_sink_name(svc().settings.live_speaker)):
+        for name in (audio_io.last_sink, audio_io.COMBINED, audio_io.skelly_sink_name(svc().settings.live_speaker)):
             if name and name in have:
                 return name
         return None
@@ -283,7 +288,9 @@ def create_app(
             sink = await resolve_output()
         except (ConnectionError, LookupError, RuntimeError) as exc:
             raise HTTPException(409, str(exc)) from exc
-        out = audio_io.Speaker(sink)
+        out = audio_io.Speaker(sink, svc().settings.audio.get("out_gain", 100) / 100)
+        audio_io.last_sink = sink
+        await asyncio.sleep(1.2)  # let the speaker meter latch on before the chime starts
         await out.play(audio_io.chime(), 16000)
         await out.wait_done()
         await out.close()

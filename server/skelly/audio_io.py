@@ -19,6 +19,19 @@ log = logging.getLogger(__name__)
 
 FRAME_MS = 20
 
+# The last output anything played on, so the speaker meter can follow it.
+last_sink: str | None = None
+
+
+def scale(pcm: bytes, gain: float) -> bytes:
+    """Apply a volume/gain factor to 16-bit PCM, clipping instead of wrapping."""
+    if abs(gain - 1.0) < 0.01 or len(pcm) < 2:
+        return pcm
+    a = array.array("h", pcm[: len(pcm) - len(pcm) % 2])
+    for i, x in enumerate(a):
+        a[i] = max(-32768, min(32767, int(x * gain)))
+    return a.tobytes()
+
 
 def rms(pcm: bytes) -> float:
     """Loudness of a 16-bit mono chunk, 0..1."""
@@ -64,9 +77,10 @@ def skelly_sink_name(mac: str | None) -> str | None:
 class Mic:
     """Streams 20 ms chunks of 16-bit mono PCM from a PipeWire source."""
 
-    def __init__(self, rate: int, source: str | None = None) -> None:
+    def __init__(self, rate: int, source: str | None = None, gain: float = 1.0) -> None:
         self.rate = rate
         self.source = source
+        self.gain = gain
         self.level = 0.0
         self._proc: asyncio.subprocess.Process | None = None
 
@@ -93,6 +107,7 @@ class Mic:
                 pcm = await self._proc.stdout.readexactly(size)
             except asyncio.IncompleteReadError:
                 raise ConnectionError("The microphone stopped (is it plugged in?)") from None
+            pcm = scale(pcm, self.gain)
             self.level = rms(pcm)
             yield pcm
 
@@ -100,8 +115,9 @@ class Mic:
 class Speaker:
     """Plays 16-bit mono PCM on a PipeWire sink and knows roughly when it's still talking."""
 
-    def __init__(self, sink: str | None = None) -> None:
+    def __init__(self, sink: str | None = None, gain: float = 1.0) -> None:
         self.sink = sink
+        self.gain = gain
         self.rate = 0
         self._proc: asyncio.subprocess.Process | None = None
         self._busy_until = 0.0
@@ -123,10 +139,12 @@ class Speaker:
     async def play(self, pcm: bytes, rate: int) -> None:
         if not pcm:
             return
+        global last_sink
         if rate != self.rate or not self._proc or self._proc.returncode is not None:
             await self._open(rate)
+            last_sink = self.sink
         assert self._proc and self._proc.stdin
-        self._proc.stdin.write(pcm)
+        self._proc.stdin.write(scale(pcm, self.gain))
         try:
             await self._proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
@@ -223,7 +241,7 @@ async def volumes() -> dict[str, int]:
 def chime(rate: int = 16000) -> bytes:
     """A short two-note "ta-da" for testing speakers."""
     out = array.array("h")
-    for freq, secs in ((660, 0.18), (880, 0.32)):
+    for freq, secs in ((523, 0.25), (660, 0.25), (784, 0.25), (1047, 0.7)):
         n = int(rate * secs)
         for i in range(n):
             env = min(1.0, i / 400, (n - i) / 1600)

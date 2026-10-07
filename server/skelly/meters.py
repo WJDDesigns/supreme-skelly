@@ -25,8 +25,9 @@ def db(level: float) -> float:
 
 
 class Meters:
-    def __init__(self, bus, mic_getter, sink_getter) -> None:
+    def __init__(self, bus, mic_getter, sink_getter, mic_gain=lambda: 1.0) -> None:
         self.bus = bus
+        self._gain = mic_gain
         self._mic = mic_getter
         self._sink = sink_getter
         self._until = 0.0
@@ -57,8 +58,8 @@ class Meters:
                 if want_spk != spk_src or (spk is not None and spk.returncode is not None):
                     await _close(spk)
                     spk, spk_src = (await _record(want_spk) if want_spk else None), want_spk
-                for _ in range(10):  # re-check the sources once a second
-                    m = await _level(mic)
+                for _ in range(10 if spk else 3):  # re-check the sources every second (faster while idle)
+                    m = min(1.0, await _level(mic) * self._gain())
                     s = await _level(spk) if spk else 0.0
                     self.levels = {"mic": m, "speaker": s}
                     self.bus.publish("meters", {"mic": round(m, 4), "speaker": round(s, 4),

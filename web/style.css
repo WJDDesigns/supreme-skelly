@@ -599,3 +599,6 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
   -webkit-mask: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 8px); mask: repeating-linear-gradient(90deg, #000 0 6px, transparent 6px 8px); }
 .lvl output { text-align: right; font-variant-numeric: tabular-nums; color: var(--bone); }
 .talk-card .lvl-meters { margin: 4px 0 8px; }
+
+.lvl.gain input { width: 100%; accent-color: var(--accent); margin: 0; }
+.lvl.gain { margin-bottom: 6px; }

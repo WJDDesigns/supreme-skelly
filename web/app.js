@@ -842,6 +842,7 @@ function renderAudio() {
   $("#mic-pick").replaceChildren(el("option", { value: "", textContent: "Default microphone" }),
     ...mics.map((m) => el("option", { value: m.name, textContent: m.label })));
   $("#mic-pick").value = config.mic || "";
+  renderGains();
   const have = new Set(devices.speakers.map((d) => d.name));
   const skellySink = audio.skelly_sink;
   const connectBtn = el("button", { className: "btn outline small", textContent: "Connect" });
@@ -944,3 +945,21 @@ function wantMeters() {
 setInterval(wantMeters, 8000);
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setTimeout(wantMeters, 50)));
 wantMeters();
+
+// Mic gain and the cap on Skelly's voice: same setting, shown under both sets of meters.
+function renderGains() {
+  for (const k of ["mic_gain", "out_gain"]) {
+    const v = audio.config[k] ?? 100;
+    document.querySelectorAll(`[data-gain="${k}"]`).forEach((r) => { if (document.activeElement !== r) r.value = v; });
+    document.querySelectorAll(`[data-gain-out="${k}"]`).forEach((o) => (o.textContent = `${v}%`));
+  }
+}
+let gainTimer;
+document.querySelectorAll("[data-gain]").forEach((r) =>
+  r.addEventListener("input", () => {
+    audio.config[r.dataset.gain] = Number(r.value);
+    renderGains();
+    clearTimeout(gainTimer);
+    gainTimer = setTimeout(() => run(null, () => api("/audio/config", { [r.dataset.gain]: Number(r.value) }, "PUT")), 250);
+  }));
+renderGains();
