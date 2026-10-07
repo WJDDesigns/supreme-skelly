@@ -804,6 +804,9 @@ function renderTalkCfg() {
   document.querySelectorAll("[data-seg]").forEach((seg) =>
     seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", talkCfg[seg.dataset.seg] === b.dataset.val)));
   document.querySelectorAll("[data-show-tts]").forEach((l) => (l.hidden = l.dataset.showTts !== talkCfg.tts));
+  $("#talk-amount-out").textContent = ["", "Very short", "Short", "Medium", "Chatty", "Very chatty"][talkCfg.talk_amount ?? 2];
+  $("#interrupt-out").textContent = talkCfg.interrupt_sensitivity ?? 50;
+  $("#interrupt-sens").hidden = !talkCfg.allow_interrupt;
   const have = new Set(vault.filter((v) => v.set).map((v) => v.name));
   const missing = KEY_NEEDS[p]().filter((n) => n === "agent" || !have.has(n));
   const warn = $("#key-warn");
@@ -838,7 +841,7 @@ document.querySelectorAll("[data-seg] button").forEach((b) =>
   b.addEventListener("click", () => saveTalkCfg({ [b.parentElement.dataset.seg]: b.dataset.val })));
 document.querySelectorAll("[data-cfg]").forEach((i) =>
   i.addEventListener(i.type === "checkbox" || i.tagName === "SELECT" ? "change" : "input", () =>
-    saveTalkCfg({ [i.dataset.cfg]: i.type === "checkbox" ? i.checked : i.type === "number" ? Number(i.value) : i.value })));
+    saveTalkCfg({ [i.dataset.cfg]: i.type === "checkbox" ? i.checked : ["number", "range"].includes(i.type) ? Number(i.value) : i.value })));
 api("/conversation").then((r) => { talkCfg = r.config; renderTalkCfg(); renderTalk(r.state); loadEleven(); }).catch(() => {});
 
 // ElevenLabs pickers: agents in the account and voices in the library.

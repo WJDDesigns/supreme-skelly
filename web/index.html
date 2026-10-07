@@ -307,6 +307,13 @@
               <label class="switch-row"><span><strong>Move while talking</strong>
                 <span class="muted">Head, arms and torso move while Skelly speaks.</span></span>
                 <input type="checkbox" data-cfg="move_while_talking" role="switch"></label>
+              <label class="slider">Talk amount <output id="talk-amount-out">Short</output>
+                <input type="range" min="1" max="5" step="1" data-cfg="talk_amount"></label>
+              <label class="switch-row"><span><strong>Let visitors interrupt</strong>
+                <span class="muted">Talking over Skelly cuts him off, like a real conversation.</span></span>
+                <input type="checkbox" data-cfg="allow_interrupt" role="switch"></label>
+              <label class="slider" id="interrupt-sens">Interrupt sensitivity <output id="interrupt-out">50</output>
+                <input type="range" min="0" max="100" step="5" data-cfg="interrupt_sensitivity"></label>
               <label class="switch-row"><span><strong>Don't listen while talking</strong>
                 <span class="muted">Stops Skelly hearing his own voice through the mic.</span></span>
                 <input type="checkbox" data-cfg="ignore_mic_while_talking" role="switch"></label>

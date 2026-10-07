@@ -41,11 +41,25 @@ DEFAULT_PROMPT = (
 )
 
 
+# How much Skelly says per reply, from the "Talk amount" slider (1..5).
+TALK_RULES = {
+    1: "Keep every reply very short: a few words or one short sentence, then let them talk.",
+    2: "Keep every reply short: one or two short sentences, then let them talk.",
+    3: "Keep replies to two or three sentences.",
+    4: "You can be chatty: up to four or five sentences when it's fun.",
+    5: "Be as chatty and theatrical as you like.",
+}
+MAX_TOKENS = {1: 60, 2: 120, 3: 200, 4: 320, 5: 500}
+
+
+def talk_rule(amount: int) -> str:
+    return TALK_RULES.get(max(1, min(5, int(amount or 2))), TALK_RULES[2])
+
+
 # Added to every Claude prompt: whatever the personality says, the reply is read aloud.
 SPOKEN_RULES = (
     "Your words are spoken aloud by a speaker inside a skeleton, to someone standing in front of you. "
-    "Reply in one to three short sentences. Never write stage directions, actions in asterisks, emoji, "
-    "lists or formatting: only the words you say."
+    "Never write stage directions, actions in asterisks, emoji, lists or formatting: only the words you say."
 )
 
 
@@ -77,6 +91,9 @@ class ConversationConfig:
     # Behaviour
     move_while_talking: bool = True
     ignore_mic_while_talking: bool = True
+    allow_interrupt: bool = True  # a visitor speaking clearly over Skelly cuts him off
+    interrupt_sensitivity: int = 50  # 0..100: how easily speech counts as interrupting
+    talk_amount: int = 2  # 1..5: how much he says per reply
     idle_timeout_s: int = 45  # end the conversation after this long with nobody talking
     record: bool = False  # save each conversation as a video with sound
     keep_days: int = 30  # delete recordings older than this
@@ -121,6 +138,7 @@ class Conversation:
         self.on_user_text: Callable[[str], None] | None = None  # e.g. listening for names
         self.on_started = None  # async (cfg, sink) once his voice has somewhere to go
         self.on_ended = None  # async (transcript) when the conversation finishes
+        self._override_ok = False
 
     # -- public ---------------------------------------------------------------
 
@@ -190,6 +208,8 @@ class Conversation:
 
     def _say(self, role: str, text: str) -> None:
         text = (text or "").strip()
+        if role == "skelly":  # ElevenLabs v3 performance cues like [excited] aren't words
+            text = re.sub(r"\s*\[[a-z][a-z ,'-]{0,30}\]\s*", " ", text, flags=re.I).strip()
         if not text:
             return
         entry = {"role": role, "text": text, "ts": time.time()}
@@ -259,11 +279,28 @@ class Conversation:
     async def _mic_frames(self, cfg: ConversationConfig, rate: int, speaker: Speaker) -> AsyncIterator[bytes]:
         """Mic chunks, with Skelly's own voice blanked out if asked, and the level published."""
         last_pub = 0.0
+        echo = 0.0  # how loud Skelly's own voice is at the mic
+        loud = 0
+        gate_until = 0.0
+        # 0 = only shouting gets through, 100 = normal talking does
+        factor = 4.0 - 3.0 * (cfg.interrupt_sensitivity / 100)
         async with Mic(rate, cfg.mic or None, cfg.mic_gain / 100) as mic:
             async for pcm in mic:
-                deaf = cfg.ignore_mic_while_talking and speaker.speaking
-                self.state.level = 0.0 if deaf else mic.level
                 now = time.monotonic()
+                deaf = cfg.ignore_mic_while_talking and speaker.speaking
+                if deaf and cfg.allow_interrupt:
+                    # Pass the mic through only when someone is clearly louder than Skelly's echo.
+                    if mic.level > max(0.02, echo * factor):
+                        loud += 1
+                    else:
+                        loud = 0
+                        echo = 0.9 * echo + 0.1 * mic.level
+                    if loud >= 3:  # 60 ms of it: a person, not a click
+                        gate_until = now + 0.8
+                    deaf = now > gate_until
+                elif not speaker.speaking:
+                    echo, loud = echo * 0.98, 0
+                self.state.level = 0.0 if deaf else mic.level
                 if now - last_pub > 0.15:
                     last_pub = now
                     self.svc.bus.publish("conversation_level", {"level": round(self.state.level, 3)})
@@ -310,12 +347,18 @@ class Conversation:
                                    params={"agent_id": cfg.elevenlabs_agent_id}, headers={"xi-api-key": key})
                 _raise_for(r, "ElevenLabs")
                 url = r.json()["signed_url"]
+        self._override_ok = bool(key) and await _allow_prompt_override(key, cfg.elevenlabs_agent_id)
         async with connect(url, max_size=None, open_timeout=15) as ws:
             # The agent's own prompt, first message and voice apply (they're set when the agent is
             # created here, or edited in ElevenLabs). Overriding them per call is refused unless
             # the agent explicitly allows it, so nothing is overridden.
             init = {"type": "conversation_initiation_client_data"}
+            rule = talk_rule(cfg.talk_amount)
+            if self._override_ok and cfg.prompt:
+                init["conversation_config_override"] = {"agent": {"prompt": {"prompt": f"{cfg.prompt}\n\n{rule}"}}}
             await ws.send(json.dumps(init))
+            if not self._override_ok:  # second best: tell it as context
+                await ws.send(json.dumps({"type": "contextual_update", "text": f"Speaking style: {rule}"}))
             in_rate = out_rate = 16000
             self._set("listening")
 
@@ -364,7 +407,7 @@ class Conversation:
         async with connect(url, additional_headers=headers, max_size=None, open_timeout=15) as ws:
             await ws.send(json.dumps({"type": "session.update", "session": {
                 "type": "realtime",
-                "instructions": cfg.prompt,
+                "instructions": f"{cfg.prompt}\n\n{talk_rule(cfg.talk_amount)}",
                 "audio": {
                     "input": {"format": {"type": "audio/pcm", "rate": rate},
                               "turn_detection": {"type": "server_vad"},
@@ -398,7 +441,8 @@ class Conversation:
                     elif kind == "conversation.item.input_audio_transcription.completed":
                         self._say("user", msg.get("transcript", ""))
                     elif kind == "input_audio_buffer.speech_started":
-                        if not (cfg.ignore_mic_while_talking and speaker.speaking):
+                        # Echo never reaches OpenAI (the mic is blanked or gated), so speech is a person.
+                        if cfg.allow_interrupt or not speaker.speaking:
                             await speaker.interrupt()
                         self._last_heard = time.monotonic()
                     elif kind == "input_audio_buffer.speech_stopped":
@@ -495,7 +539,8 @@ class Conversation:
     async def _answer(self, http: httpx.AsyncClient, cfg: ConversationConfig, speaker: Speaker,
                       history: list[dict]) -> str:
         """Streams Claude's reply and speaks it sentence by sentence as it arrives."""
-        body = {"model": cfg.claude_model, "max_tokens": 300, "system": f"{cfg.prompt}\n\n{SPOKEN_RULES}",
+        body = {"model": cfg.claude_model, "max_tokens": MAX_TOKENS.get(cfg.talk_amount, 200),
+                "system": f"{cfg.prompt}\n\n{SPOKEN_RULES} {talk_rule(cfg.talk_amount)}",
                 "messages": history, "stream": True}
         headers = {"x-api-key": self.vault.get("anthropic_api_key"), "anthropic-version": "2023-06-01",
                    "content-type": "application/json"}
@@ -585,6 +630,32 @@ class Conversation:
 
 
 # -- ElevenLabs account helpers ------------------------------------------------------
+
+_override_checked: dict[str, bool] = {}
+
+
+async def _allow_prompt_override(key: str, agent_id: str) -> bool:
+    """Let this agent take a per-conversation prompt (for the Talk amount slider). Done once."""
+    if agent_id in _override_checked:
+        return _override_checked[agent_id]
+    ok = False
+    try:
+        async with httpx.AsyncClient(timeout=15) as http:
+            r = await http.get(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}", headers={"xi-api-key": key})
+            _raise_for(r, "ElevenLabs")
+            o = ((r.json().get("platform_settings") or {}).get("overrides") or {})
+            ok = bool((((o.get("conversation_config_override") or {}).get("agent") or {}).get("prompt") or {})
+                      .get("prompt"))
+            if not ok:
+                r = await http.patch(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}",
+                                     headers={"xi-api-key": key}, json={"platform_settings": {"overrides": {
+                                         "conversation_config_override": {"agent": {"prompt": {"prompt": True}}}}}})
+                _raise_for(r, "ElevenLabs")
+                ok = True
+    except Exception as exc:
+        log.info("prompt override not available: %r", exc)
+    _override_checked[agent_id] = ok
+    return ok
 
 
 async def elevenlabs_agents(key: str) -> list[dict]:

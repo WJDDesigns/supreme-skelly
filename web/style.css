@@ -666,3 +666,5 @@ a.btn { text-decoration: none; color: inherit; }
 
 .costume-chips { margin-top: 10px; }
 .chip.costume { cursor: default; background: var(--accent-soft); border-color: rgba(255,138,0,.35); color: var(--accent-2); }
+
+.slider[hidden] { display: none; }
