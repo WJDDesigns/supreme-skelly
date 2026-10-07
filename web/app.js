@@ -484,6 +484,7 @@ function connectEvents() {
     else if (msg.type === "vision") renderVision(msg.data);
     else if (msg.type === "vision_motion") setMotion(msg.data.motion);
     else if (msg.type === "visitor") onVisitor(msg.data);
+    else if (msg.type === "meters") setMeters(msg.data);
   };
   ws.onclose = () => setTimeout(connectEvents, 1500);
 }
@@ -924,3 +925,22 @@ function renderVault() {
   renderTalkCfg();
 }
 api("/vault").then((v) => { vault = v; renderVault(); loadEleven(); }).catch(() => {});
+
+// ---------- mic and speaker meters ----------
+// Levels arrive on the event stream while the server is asked to measure; we keep asking
+// while a page with meters is on screen, and it stops by itself shortly after.
+function setMeters(m) {
+  for (const k of ["mic", "speaker"]) {
+    const dbv = m[`${k}_db`];
+    const pct = dbv <= -60 ? 0 : Math.min(100, ((dbv + 60) / 60) * 100);  // -60 dB .. 0 dB
+    document.querySelectorAll(`[data-meter="${k}"]`).forEach((i) => (i.style.clipPath = `inset(0 ${100 - pct}% 0 0)`));
+    document.querySelectorAll(`[data-meter-db="${k}"]`).forEach((o) => (o.textContent = dbv <= -99 ? "–" : `${Math.round(dbv)} dB`));
+  }
+}
+function wantMeters() {
+  const visible = ["tab-settings", "tab-talk"].some((id) => !document.getElementById(id).hidden);
+  if (visible && !document.hidden) api("/audio/meters", {}).catch(() => {});
+}
+setInterval(wantMeters, 8000);
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setTimeout(wantMeters, 50)));
+wantMeters();

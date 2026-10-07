@@ -27,6 +27,7 @@ from .conversation import (
     elevenlabs_voices,
 )
 from .link import BleakLink, Link, SimulatedLink
+from .meters import Meters
 from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings
@@ -125,6 +126,7 @@ def create_app(
             svc, app.state.vault, lambda: {**svc.settings.conversation, "mic": svc.settings.audio.get("mic", "")},
             resolve_output)
         app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor)
+        app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink)
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
             try:
                 await app.state.vision.start()
@@ -133,6 +135,7 @@ def create_app(
         yield
         await app.state.conv.stop()
         await app.state.vision.stop()
+        await app.state.meters.stop()
         await svc.stop()
 
     app = FastAPI(title="Supreme Skelly", lifespan=lifespan)
@@ -204,6 +207,23 @@ def create_app(
         if not live:
             raise ConnectionError("None of the chosen speakers are connected")
         return await audio_io.output_for(live)
+
+    async def meter_sink() -> str | None:
+        """The output to meter: the conversation's if one is running, else Skelly's/combined if awake."""
+        conv = app.state.conv
+        if conv.running and conv.output_sink:
+            return conv.output_sink
+        have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
+        for name in (audio_io.COMBINED, audio_io.skelly_sink_name(svc().settings.live_speaker)):
+            if name and name in have:
+                return name
+        return None
+
+    @app.post("/api/audio/meters")
+    async def audio_meters():
+        """Keep live mic/speaker levels coming on the event stream for the next 12 seconds."""
+        app.state.meters.watch()
+        return app.state.meters.levels
 
     @app.get("/api/audio")
     async def audio_state():

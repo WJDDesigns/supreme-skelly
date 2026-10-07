@@ -113,6 +113,7 @@ class Conversation:
         self._task: asyncio.Task | None = None
         self._last_heard = 0.0
         self._context: list[str] = []
+        self.output_sink: str | None = None  # where his voice is playing, for the speaker meter
 
     # -- public ---------------------------------------------------------------
 
@@ -200,6 +201,7 @@ class Conversation:
         self._last_heard = time.monotonic()
         try:
             sink = cfg.speaker or await self._sink_for_skelly()
+            self.output_sink = sink
             speaker = Speaker(sink)
             mover = asyncio.create_task(self._body(cfg, speaker))
             runner = {"elevenlabs": self._elevenlabs, "openai": self._openai, "claude": self._claude}[cfg.provider]

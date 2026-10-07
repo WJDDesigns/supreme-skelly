@@ -247,6 +247,10 @@
                 <p class="talk-hint" id="talk-hint">Tap to start a conversation</p>
                 <p class="talk-error" id="talk-error" hidden></p>
               </div>
+              <div class="lvl-meters">
+                <div class="lvl"><span>Mic</span><div class="lvl-bar"><i data-meter="mic"></i></div><output data-meter-db="mic">–</output></div>
+                <div class="lvl"><span>Speaker</span><div class="lvl-bar"><i data-meter="speaker"></i></div><output data-meter-db="speaker">–</output></div>
+              </div>
               <ul id="transcript" class="transcript"></ul>
             </div>
 
@@ -382,6 +386,10 @@
               <button id="snd-test" class="btn primary"><svg><use href="#i-volume"/></svg>Test sound</button>
             </div>
             <label class="field-row">Microphone<select id="mic-pick"></select></label>
+            <div class="lvl-meters">
+                <div class="lvl"><span>Mic</span><div class="lvl-bar"><i data-meter="mic"></i></div><output data-meter-db="mic">–</output></div>
+                <div class="lvl"><span>Speaker</span><div class="lvl-bar"><i data-meter="speaker"></i></div><output data-meter-db="speaker">–</output></div>
+              </div>
             <p class="sub-head">Speakers <span class="muted">· ticked ones all play at once</span></p>
             <ul id="speakers" class="list"></ul>
             <div class="row">
