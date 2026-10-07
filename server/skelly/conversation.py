@@ -43,13 +43,14 @@ DEFAULT_PROMPT = (
 
 # How much Skelly says per reply, from the "Talk amount" slider (1..5).
 TALK_RULES = {
-    1: "Keep every reply very short: a few words or one short sentence, then let them talk.",
-    2: "Keep every reply short: one or two short sentences, then let them talk.",
-    3: "Keep replies to two or three sentences.",
-    4: "You can be chatty: up to four or five sentences when it's fun.",
+    1: "HARD LIMIT: answer in at most 12 words. One short sentence, then stop and let them talk.",
+    2: "HARD LIMIT: answer in at most 20 words. One or two short sentences, then stop and let them talk.",
+    3: "HARD LIMIT: answer in at most 35 words, then let them talk.",
+    4: "Keep answers under 60 words.",
     5: "Be as chatty and theatrical as you like.",
 }
-MAX_TOKENS = {1: 60, 2: 120, 3: 200, 4: 320, 5: 500}
+# Token caps for the agent / model: a backstop a bit above the word limit so sentences can finish.
+MAX_TOKENS = {1: 45, 2: 70, 3: 110, 4: 170, 5: 400}
 
 
 def talk_rule(amount: int) -> str:
@@ -355,6 +356,8 @@ class Conversation:
                 _raise_for(r, "ElevenLabs")
                 url = r.json()["signed_url"]
         self._override_ok = bool(key) and await _allow_prompt_override(key, cfg.elevenlabs_agent_id)
+        if key:
+            await _cap_agent_tokens(key, cfg.elevenlabs_agent_id, MAX_TOKENS.get(cfg.talk_amount, 110))
         async with connect(url, max_size=None, open_timeout=15) as ws:
             # The agent's own prompt, first message and voice apply (they're set when the agent is
             # created here, or edited in ElevenLabs). Overriding them per call is refused unless
@@ -362,7 +365,10 @@ class Conversation:
             init = {"type": "conversation_initiation_client_data"}
             rule = talk_rule(cfg.talk_amount)
             if self._override_ok and cfg.prompt:
-                init["conversation_config_override"] = {"agent": {"prompt": {"prompt": f"{cfg.prompt}\n\n{rule}"}}}
+                # The rule goes first and last: one line in the middle of a long personality
+                # prompt gets ignored.
+                init["conversation_config_override"] = {"agent": {"prompt": {
+                    "prompt": f"{rule}\n\n{cfg.prompt}\n\n{rule}"}}}
             await ws.send(json.dumps(init))
             if not self._override_ok:  # second best: tell it as context
                 await ws.send(json.dumps({"type": "contextual_update", "text": f"Speaking style: {rule}"}))
@@ -414,7 +420,7 @@ class Conversation:
         async with connect(url, additional_headers=headers, max_size=None, open_timeout=15) as ws:
             await ws.send(json.dumps({"type": "session.update", "session": {
                 "type": "realtime",
-                "instructions": f"{cfg.prompt}\n\n{talk_rule(cfg.talk_amount)}",
+                "instructions": f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n{talk_rule(cfg.talk_amount)}",
                 "audio": {
                     "input": {"format": {"type": "audio/pcm", "rate": rate},
                               "turn_detection": {"type": "server_vad"},
@@ -547,7 +553,7 @@ class Conversation:
                       history: list[dict]) -> str:
         """Streams Claude's reply and speaks it sentence by sentence as it arrives."""
         body = {"model": cfg.claude_model, "max_tokens": MAX_TOKENS.get(cfg.talk_amount, 200),
-                "system": f"{cfg.prompt}\n\n{SPOKEN_RULES} {talk_rule(cfg.talk_amount)}",
+                "system": f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n{SPOKEN_RULES} {talk_rule(cfg.talk_amount)}",
                 "messages": history, "stream": True}
         headers = {"x-api-key": self.vault.get("anthropic_api_key"), "anthropic-version": "2023-06-01",
                    "content-type": "application/json"}
@@ -639,6 +645,21 @@ class Conversation:
 # -- ElevenLabs account helpers ------------------------------------------------------
 
 _override_checked: dict[str, bool] = {}
+_tokens_set: dict[str, int] = {}
+
+
+async def _cap_agent_tokens(key: str, agent_id: str, tokens: int) -> None:
+    """Match the agent's reply length cap to the Talk amount slider (a backstop for the prompt rule)."""
+    if _tokens_set.get(agent_id) == tokens:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=15) as http:
+            r = await http.patch(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}", headers={"xi-api-key": key},
+                                 json={"conversation_config": {"agent": {"prompt": {"max_tokens": tokens}}}})
+            _raise_for(r, "ElevenLabs")
+        _tokens_set[agent_id] = tokens
+    except Exception as exc:
+        log.info("couldn't set the agent's reply cap: %r", exc)
 
 
 async def _allow_prompt_override(key: str, agent_id: str) -> bool:
