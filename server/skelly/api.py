@@ -169,6 +169,7 @@ def create_app(
         app.state.protect = protect.Protect(svc, app.state.vault,
                                             lambda: VisionConfig.from_dict(svc.settings.vision), on_protect_person)
         app.state.protect.start()
+        app.state.vision.protect = app.state.protect
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
                                   lambda: svc.settings.audio.get("mic_gain", 100) / 100)
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
@@ -459,7 +460,12 @@ def create_app(
                 continue
             try:
                 cfg = VisionConfig.from_dict(svc().settings.vision)
-                verdict = await describe(app.state.vault, vision.frame, cfg.active_zones)
+                frame, zones = vision.frame, cfg.active_zones
+                if cfg.protect and cfg.preview_camera and app.state.protect.connected:
+                    # A fresh full-resolution picture beats the preview for spotting costumes.
+                    frame = await app.state.protect.snapshot(cfg.preview_camera)
+                    zones = [z for z in cfg.zones.get(f"protect:{cfg.preview_camera}", []) if len(z) == 4]
+                verdict = await describe(app.state.vault, frame, zones)
             except Exception as exc:
                 log.info("costume check failed: %r", exc)
                 continue
@@ -564,6 +570,11 @@ def create_app(
             return
         vcfg = VisionConfig.from_dict(svc().settings.vision)
         rtsp = app.state.vault.get("rtsp_url") if vcfg.source == "rtsp" else None
+        if vcfg.source == "protect" and vcfg.preview_camera:
+            try:  # record the camera's own stream, opened only for this conversation
+                rtsp = await app.state.protect.rtsps(vcfg.preview_camera, "high")
+            except Exception as exc:
+                log.info("no Protect stream to record: %r", exc)
         frames = app.state.vision.frames() if not rtsp and app.state.vision.state.running else None
         await asyncio.to_thread(recorder.prune, cfg.keep_days)
         path = await app.state.recorder.start(rtsp=rtsp, frames=frames, mic=cfg.mic or None, voice_sink=sink)

@@ -71,6 +71,15 @@ class Protect:
             r.raise_for_status()
             return r.content
 
+    async def rtsps(self, camera_id: str, quality: str = "high") -> str | None:
+        """The camera's RTSPS address (Protect hands these out per quality)."""
+        async with self._client() as c:
+            r = await c.get(f"/cameras/{camera_id}/rtsps-stream")
+            if r.status_code == 200 and (url := r.json().get(quality)):
+                return url
+            r = await c.post(f"/cameras/{camera_id}/rtsps-stream", json={"qualities": [quality]})
+            return r.json().get(quality) if r.status_code < 300 else None
+
     def start(self) -> None:
         if not self._task or self._task.done():
             self._task = asyncio.create_task(self._run(), name="skelly-protect")

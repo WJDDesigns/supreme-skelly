@@ -382,10 +382,13 @@
             <div class="card">
               <div class="card-head"><div><h2>Source</h2><p class="muted">Where the picture comes from</p></div></div>
               <div class="seg wide" id="cam-source">
-                <button data-val="usb">USB camera</button><button data-val="rtsp">Network camera (RTSP)</button>
+                <button data-val="protect">UniFi Protect</button><button data-val="rtsp">RTSP</button><button data-val="usb">USB</button>
               </div>
               <div class="prov" data-cam="usb">
                 <label class="field-row">Camera<select id="cam-device" data-vcfg="usb_device"></select></label>
+              </div>
+              <div class="prov" data-cam="protect">
+                <label class="field-row">Camera on screen<select id="protect-preview" data-vcfg="protect_preview"></select></label>
               </div>
               <div class="prov" data-cam="rtsp">
                 <div class="vault-inline" id="rtsp-inline"></div>

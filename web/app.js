@@ -1369,6 +1369,13 @@ function renderProtectState(p) {
   const last = p.recent?.at(-1);
   $("#protect-sub").textContent = p.error && !p.connected ? `Problem: ${p.error}` : last ? `Last: ${last.objects.join(", ") || last.type} on ${last.camera}, ${ago(last.ts)}` : "Use Protect's own person and face detections";
 }
+function renderProtectPreview() {
+  const sel = $("#protect-preview");
+  const chosen = visionCfg.protect_cameras ?? [];
+  const cams = protectCams.filter((c) => chosen.includes(c.id));
+  sel.replaceChildren(...(cams.length ? cams : protectCams).map((c) => el("option", { value: c.id, textContent: c.name })));
+  sel.value = visionCfg.protect_preview || chosen[0] || "";
+}
 function renderProtectCams() {
   const on = new Set(visionCfg.protect_cameras ?? []);
   $("#protect-cams").replaceChildren(...(protectCams.length ? protectCams.map((c) => {
@@ -1379,6 +1386,7 @@ function renderProtectCams() {
       on.has(c.id) ? on.delete(c.id) : on.add(c.id);
       saveVisionCfg({ protect_cameras: [...on] });
       renderProtectCams();
+      renderProtectPreview();
     });
     return chip;
   }) : [el("span", { className: "muted", textContent: "Add the UniFi Protect API key in Settings and the console address above." })]));
@@ -1388,6 +1396,7 @@ async function loadProtect() {
     const p = await api("/protect");
     protectCams = p.cameras;
     renderProtectCams();
+    renderProtectPreview();
     renderProtectState(p);
     if (p.camera_error) $("#protect-sub").textContent = p.camera_error;
   } catch {}

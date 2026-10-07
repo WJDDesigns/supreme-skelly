@@ -26,7 +26,7 @@ THUMB_W, THUMB_H = 80, 45
 
 @dataclass
 class VisionConfig:
-    source: str = "usb"  # usb | rtsp
+    source: str = "usb"  # usb | rtsp | protect (snapshots from UniFi Protect, no live stream)
     usb_device: str = "/dev/video0"
     fps: int = 6
     rotate: int = 0  # 0 | 90 | 180 | 270
@@ -40,6 +40,7 @@ class VisionConfig:
     protect: bool = False
     protect_host: str = ""
     protect_cameras: list = field(default_factory=list)
+    protect_preview: str = ""  # Protect camera shown on the page when the source is "protect"
     # What shouldn't set Skelly off, checked by the AI (see IGNORABLE).
     ignore: list = field(default_factory=lambda: ["vehicles", "weather", "passers"])
     # Areas to ignore, per camera ("rtsp" or the USB device path): [[x, y, w, h], ...] as
@@ -48,7 +49,13 @@ class VisionConfig:
 
     @property
     def camera_key(self) -> str:
+        if self.source == "protect":
+            return f"protect:{self.preview_camera}"
         return "rtsp" if self.source == "rtsp" else self.usb_device
+
+    @property
+    def preview_camera(self) -> str:
+        return self.protect_preview or (self.protect_cameras[0] if self.protect_cameras else "")
 
     @property
     def active_zones(self) -> list[list[float]]:
@@ -108,6 +115,8 @@ class Vision:
         self.engine = FaceEngine()
         self.memory = FaceMemory()
         self.seen: list = []  # Seen objects in the latest face frame
+        self.protect = None  # set by the app: the UniFi Protect bridge, for the "protect" source
+        self.full_frame: bytes | None = None  # full-resolution snapshot (Protect source)
         self._recent: list = []  # unknown faces from the last few seconds, for naming
         self.state = VisionState()
         self.frame: bytes | None = None
@@ -125,6 +134,9 @@ class Vision:
         cfg = VisionConfig.from_dict(self._config())
         if cfg.source == "rtsp" and not self.vault.get("rtsp_url"):
             raise ValueError("Add the camera's RTSP address in Settings > API keys first.")
+        if cfg.source == "protect" and not (self.protect and cfg.protect_host and cfg.preview_camera
+                                            and self.vault.get("protect_api_key")):
+            raise ValueError("Set up UniFi Protect below (key, console address and a camera) first.")
         self.state = VisionState(running=True)
         self._publish()
         self._task = asyncio.create_task(self._run(cfg), name="skelly-vision")
@@ -174,10 +186,40 @@ class Vision:
         return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-fflags", "nobuffer", *src,
                 "-filter_complex", graph, *outs]
 
+    async def _snapshots(self, cfg: VisionConfig) -> None:
+        """Protect source: a fresh full-resolution snapshot every 2 s instead of decoding video.
+
+        Visitors, faces and costumes come from Protect's own detections (see protect.py).
+        """
+        import cv2
+        import numpy as np
+
+        count, since = 0, time.monotonic()
+        while True:
+            jpeg = await self.protect.snapshot(cfg.preview_camera)
+            img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_REDUCED_COLOR_2)
+            if img is not None and img.shape[1] > 960:  # keep the page light: preview at ~960 px
+                img = cv2.resize(img, (960, int(img.shape[0] * 960 / img.shape[1])))
+            ok, small = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80]) if img is not None else (False, None)
+            self.frame = small.tobytes() if ok else jpeg
+            self.full_frame = jpeg
+            self._frame_event.set()
+            count += 1
+            if self.state.error:
+                self.state.error = None
+                self._publish()
+            if (now := time.monotonic()) - since > 10:
+                self.state.fps = round(count / (now - since), 1)
+                count, since = 0, now
+            await asyncio.sleep(2)
+
     async def _run(self, cfg: VisionConfig) -> None:
         backoff = 2
         while True:
             try:
+                if cfg.source == "protect":
+                    await self._snapshots(cfg)
+                    continue
                 await self._capture(cfg)
                 backoff = 2
             except asyncio.CancelledError:
