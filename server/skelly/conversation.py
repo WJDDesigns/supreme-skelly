@@ -23,6 +23,7 @@ import random
 import re
 import time
 import wave
+from collections import deque
 from collections.abc import AsyncIterator, Callable
 from dataclasses import asdict, dataclass, field
 
@@ -121,7 +122,7 @@ class ConversationState:
 
 # Interrupting Skelly: the mic must beat his own echo, after a moment to learn how loud it is.
 INTERRUPT_MIN = 0.03
-INTERRUPT_FRAMES = 5  # 100 ms of a louder voice, so a clatter doesn't count
+INTERRUPT_FRAMES = 8  # 160 ms of a louder voice, so a clatter or an echo blip doesn't count
 ECHO_LEARN_S = 0.6  # each time he starts talking, listen to his echo before allowing interruptions
 ECHO_HOLD_S = 0.4  # his echo level halves this fast once he goes quieter
 
@@ -160,7 +161,8 @@ class Conversation:
         self.on_ended = None  # async (transcript) when the conversation finishes
         self._override_ok = False
         self._opening: str | None = None
-        self._echo_gain = 0.15  # mic level per unit of played level (measured ~0.08); learned while he talks
+        self._echo_gain = 1.0  # mic level per unit of played level; follows his real echo while he talks
+        self._echo_delay = ECHO_DELAY_S  # measured live from how the mic tracks what was played
 
     # -- public ---------------------------------------------------------------
 
@@ -323,6 +325,7 @@ class Conversation:
         gate_until = 0.0
         talk_started = 0.0
         hearing_self = False
+        hist: deque = deque(maxlen=400)  # (time, mic level) for the last 8 s, to measure the echo delay
         # 0 = only shouting gets through, 100 = talking a bit louder than him does
         factor = 3.0 - 1.6 * (max(0, min(100, cfg.interrupt_sensitivity)) / 100)
         frame_s = FRAME_MS / 1000
@@ -340,25 +343,34 @@ class Conversation:
                     deaf = True
                     peak = max(peak, level)
                 elif hasattr(speaker, "level_at"):
-                    # Predict his echo from what was played half a second ago (the Bluetooth
-                    # delay) and how loud that comes back at the mic. Between his words the
-                    # prediction drops, so a visitor talking then is heard even if his loudest
-                    # words are louder than they are.
+                    # Predict his echo from what was played one Bluetooth delay ago, scaled by how
+                    # loud it comes back. Both are measured live: the delay from how the mic's
+                    # loudness tracks what was played, the loudness as an upper envelope that
+                    # jumps up at once (so his echo can never be mistaken for a visitor while it
+                    # catches up) and eases down slowly. Between his words the prediction drops,
+                    # so a visitor talking then gets through.
                     gate_open = now < gate_until
-                    ref = speaker.level_at(now - ECHO_DELAY_S)
+                    talk_started = talk_started or now
+                    hist.append((now, level))
+                    if len(hist) % 50 == 0:
+                        self._echo_delay = _estimate_delay(hist, speaker, self._echo_delay)
+                    ref = speaker.level_at(now - self._echo_delay, window=0.12)
+                    if ref > 0.03 and not gate_open:
+                        ratio = level / ref
+                        self._echo_gain = max(self._echo_gain * 0.998, min(ratio, 4.0))
                     expected = self._echo_gain * ref
-                    if level > max(INTERRUPT_MIN, expected * factor + 0.01):
+                    settled = now - talk_started > ECHO_LEARN_S
+                    if settled and level > max(INTERRUPT_MIN, expected * factor + 0.015):
                         loud += 1
                         if loud >= INTERRUPT_FRAMES:
                             if not gate_open:
-                                log.info("mic opened over Skelly: level %.3f, expected echo %.3f (gain %.2f)",
-                                         level, expected, self._echo_gain)
+                                log.info("mic opened over Skelly: level %.3f, expected echo %.3f "
+                                         "(gain %.2f, delay %.2fs)", level, expected, self._echo_gain,
+                                         self._echo_delay)
                             gate_until = now + 0.8
                             gate_open = True
                     else:
                         loud = 0
-                        if ref > 0.02 and not gate_open:  # learn how loud his voice comes back
-                            self._echo_gain = min(3.0, 0.95 * self._echo_gain + 0.05 * (level / ref))
                     peak = max(peak, level)
                     deaf = not gate_open
                 else:
@@ -864,6 +876,28 @@ async def elevenlabs_update_agent(key: str, agent_id: str, *, prompt: str | None
 
 
 # -- helpers ------------------------------------------------------------------------
+
+
+def _estimate_delay(hist, speaker, current: float) -> float:
+    """The lag (0.2-1.2 s) at which the mic's loudness best follows what was played."""
+    pts = list(hist)[-250:]  # last 5 s
+    if len(pts) < 100:
+        return current
+    mic = [lv for _, lv in pts]
+    m_mean = sum(mic) / len(mic)
+    best, best_score = current, 0.0
+    for i in range(10, 61, 2):  # 0.2 .. 1.2 s in 40 ms steps
+        lag = i * 0.02
+        ref = [speaker.level_at(t - lag, window=0.02) for t, _ in pts]
+        r_mean = sum(ref) / len(ref)
+        num = sum((a - m_mean) * (b - r_mean) for a, b in zip(mic, ref, strict=True))
+        den = (sum((a - m_mean) ** 2 for a in mic) * sum((b - r_mean) ** 2 for b in ref)) ** 0.5
+        score = num / den if den else 0.0
+        if score > best_score:
+            best, best_score = lag, score
+    if best_score < 0.4:  # not enough of him playing to tell; keep what we had
+        return current
+    return round(0.7 * current + 0.3 * best, 3)
 
 
 async def _first_done(*coros) -> None:
