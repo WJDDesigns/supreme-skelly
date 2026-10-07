@@ -1298,3 +1298,18 @@ document.querySelectorAll("[data-restart]").forEach((b) =>
   }));
 loadSystem();
 setInterval(() => { if (!$("#tab-settings").hidden) loadSystem(); }, 15000);
+
+// ---------- voice test ----------
+$("#vt-speed").addEventListener("input", (e) => ($("#vt-speed-out").textContent = `${Number(e.target.value).toFixed(2)}×`));
+api("/voices").then(({ options, kokoro_ready }) => {
+  $("#vt-list").replaceChildren(...options.map((o) => {
+    const play = el("button", { className: "btn primary small", innerHTML: '<svg><use href="#i-play"/></svg>Play' });
+    const meta = el("div", { className: "meta", textContent: o.id.startsWith("kokoro") && !kokoro_ready ? `${o.note} · first play downloads it (~1 min)` : o.note });
+    play.addEventListener("click", () => run(play, async () => {
+      const r = await api("/voices/test", { voice: o.id, text: $("#vt-text").value, speed: Number($("#vt-speed").value) });
+      meta.textContent = `${o.note} · made in ${r.made_in_s}s`;
+    }));
+    return el("li", {}, el("div", { className: "who" }, el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-volume"/></svg>' }),
+      el("div", {}, el("div", { className: "name", textContent: o.label }), meta)), el("div", { className: "end" }, play));
+  }));
+}).catch(() => {});

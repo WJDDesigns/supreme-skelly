@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio, audio_io, recorder, speaker, system
+from . import audio, audio_io, recorder, speaker, system, voices
 from . import protocol as proto
 from .conversation import (
     Conversation,
@@ -516,6 +516,36 @@ def create_app(
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(502, f"Restart failed: {exc}") from exc
         return {"ok": True, "part": part}
+
+    # -- voice test ----------------------------------------------------------------
+
+    @app.get("/api/voices")
+    async def voice_options():
+        return {"options": voices.OPTIONS, "kokoro_ready": voices.kokoro_ready()}
+
+    @app.post("/api/voices/test")
+    async def voice_test(body: dict):
+        """Say a line in one voice through whatever speakers Skelly is using."""
+        text = str(body.get("text") or "").strip()[:400] or "Well hello there! Come closer, I don't bite... much."
+        cfg = ConversationConfig.from_dict(svc().settings.conversation)
+        try:
+            pcm, rate, took = await voices.synth(str(body.get("voice")), text,
+                                                 eleven_key=app.state.vault.get("elevenlabs_api_key"),
+                                                 eleven_voice=cfg.elevenlabs_voice_id,
+                                                 speed=float(body.get("speed") or 1.15))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, f"Couldn't make that voice: {exc}") from exc
+        try:
+            sink = await resolve_output()
+        except (ConnectionError, LookupError, RuntimeError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+        out = audio_io.Speaker(sink, svc().settings.audio.get("out_gain", 100) / 100)
+        await out.play(pcm, rate)
+        await out.wait_done()
+        await out.close()
+        return {"made_in_s": round(took, 2), "seconds": round(len(pcm) / 2 / rate, 1)}
 
     @app.post("/api/speaker/connect")
     async def connect_live_speaker():

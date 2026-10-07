@@ -325,6 +325,13 @@
             <div class="rec-player" id="rec-player" hidden><video id="rec-video" controls playsinline></video><ul class="transcript" id="rec-transcript"></ul></div>
             <ul id="recordings" class="list"></ul>
           </div>
+          <div class="card">
+            <div class="card-head"><div><h2>Voice test</h2><p class="muted">Hear the same line in each voice, through Skelly</p></div></div>
+            <label class="field-row stack">Line<input type="text" id="vt-text" value="Well hello there! Come closer, I don't bite... much."></label>
+            <label class="slider">Kokoro speed <output id="vt-speed-out">1.15×</output>
+              <input type="range" id="vt-speed" min="0.8" max="1.5" step="0.05" value="1.15"></label>
+            <ul id="vt-list" class="list"></ul>
+          </div>
         </section>
 
         <!-- Vision -->
