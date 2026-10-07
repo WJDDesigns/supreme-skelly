@@ -616,18 +616,22 @@ async def elevenlabs_agent(key: str, agent_id: str) -> dict:
 
 async def elevenlabs_update_agent(key: str, agent_id: str, *, prompt: str | None = None,
                                   first_message: str | None = None) -> None:
-    """Writes the page's personality and first line back to the agent, keeping its other prompt settings."""
+    """Writes the page's personality and first line back to the agent.
+
+    Only the changed fields are sent: ElevenLabs merges them and keeps the agent's model,
+    tools and knowledge base. (Echoing the whole prompt block back is refused, because it
+    carries both "tools" and "tool_ids".)
+    """
+    agent: dict = {}
+    if prompt is not None:
+        agent["prompt"] = {"prompt": prompt}
+    if first_message is not None:
+        agent["first_message"] = first_message
+    if not agent:
+        return
     async with httpx.AsyncClient(timeout=20) as http:
-        r = await http.get(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}", headers={"xi-api-key": key})
-        _raise_for(r, "ElevenLabs")
-        agent = dict(r.json().get("conversation_config", {}).get("agent", {}))
-        if prompt is not None:
-            agent["prompt"] = {**(agent.get("prompt") or {}), "prompt": prompt}
-        if first_message is not None:
-            agent["first_message"] = first_message
-        patch = {k: agent[k] for k in ("prompt", "first_message") if k in agent}
         r = await http.patch(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}", headers={"xi-api-key": key},
-                             json={"conversation_config": {"agent": patch}})
+                             json={"conversation_config": {"agent": agent}})
         _raise_for(r, "ElevenLabs")
 
 
