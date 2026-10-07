@@ -3,127 +3,189 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0d0f14">
+  <meta name="theme-color" content="#000000">
   <title>Supreme Skelly</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand"><span class="logo" aria-hidden="true">☠</span> Supreme Skelly</div>
-    <button id="conn-pill" class="pill" data-status="disconnected">
-      <span class="dot"></span><span id="conn-text">Not connected</span>
-    </button>
-  </header>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-skull" viewBox="0 0 24 24"><path d="M12 2a8 8 0 0 0-8 8c0 2.6 1.2 4.5 3 5.6V19a1 1 0 0 0 1 1h1v-2h2v2h2v-2h2v2h1a1 1 0 0 0 1-1v-3.4c1.8-1.1 3-3 3-5.6a8 8 0 0 0-8-8Z"/><circle cx="9" cy="11" r="1.6"/><circle cx="15" cy="11" r="1.6"/></symbol>
+      <symbol id="i-radar" viewBox="0 0 24 24"><path d="M12 12 19 5"/><path d="M19.4 14.9A8 8 0 1 1 12 4"/><path d="M15.6 12A3.6 3.6 0 1 1 12 8.4"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+      <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+      <symbol id="i-bt" viewBox="0 0 24 24"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></symbol>
+      <symbol id="i-chip" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 9h6v6H9zM9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+      <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></symbol>
+      <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="i-move" viewBox="0 0 24 24"><path d="M5 9 2 12l3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></symbol>
+    </defs>
+  </svg>
 
-  <nav class="tabs" role="tablist">
-    <button role="tab" data-tab="device" aria-selected="true">Device</button>
-    <button role="tab" data-tab="controls">Controls</button>
-    <button role="tab" data-tab="sounds">Sounds</button>
-  </nav>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><svg class="logo"><use href="#i-skull"/></svg><span>SUPREME SKELLY</span></div>
 
-  <main>
-    <!-- Device -->
-    <section id="tab-device" class="tab">
-      <div class="card">
-        <div class="card-head">
-          <h2>Find your animatronic</h2>
-          <button id="scan-btn" class="btn primary">Scan</button>
-        </div>
-        <p class="muted" id="scan-hint">Turn Skelly on, then scan. Supported: Ultra Skelly v2, Animated Skelly, 12ft Skelly, Lethal Lily, Ultra Santa.</p>
-        <ul id="scan-list" class="list"></ul>
+      <nav class="tabs" role="tablist">
+        <p class="nav-label">Main</p>
+        <button role="tab" data-tab="device" aria-selected="true"><span class="nav-ico"><svg><use href="#i-radar"/></svg></span>Device</button>
+        <p class="nav-label">Control</p>
+        <button role="tab" data-tab="controls"><span class="nav-ico"><svg><use href="#i-sliders"/></svg></span>Controls</button>
+        <button role="tab" data-tab="sounds"><span class="nav-ico"><svg><use href="#i-music"/></svg></span>Sounds</button>
+      </nav>
+
+      <div class="side-card">
+        <p class="side-title">Live Mode</p>
+        <p class="side-sub" id="side-live">Turns Skelly into a Bluetooth speaker for talking through him.</p>
+        <svg class="side-spark" viewBox="0 0 160 30" preserveAspectRatio="none" aria-hidden="true"><path d="M0 28 L60 26 L100 18 L130 12 L160 4"/></svg>
       </div>
+    </aside>
 
-      <div class="card" id="device-card" hidden>
-        <div class="card-head">
-          <h2 id="dev-name">Device</h2>
-          <button id="disconnect-btn" class="btn ghost">Disconnect</button>
+    <div class="content">
+      <header class="topbar">
+        <div class="mobile-brand"><svg class="logo"><use href="#i-skull"/></svg><span>SUPREME SKELLY</span></div>
+        <div class="top-right">
+          <button id="conn-pill" class="pill" data-status="disconnected">
+            <span class="dot"></span><span id="conn-text">Not connected</span>
+          </button>
         </div>
-        <dl class="facts">
-          <div><dt>Model</dt><dd id="dev-model">–</dd></div>
-          <div><dt>Firmware</dt><dd id="dev-version">–</dd></div>
-          <div><dt>Speaker name</dt><dd id="dev-bt">–</dd></div>
-          <div><dt>Free space</dt><dd id="dev-free">–</dd></div>
-        </dl>
-        <div class="row">
-          <button id="live-btn" class="btn">Turn on Live Mode</button>
-          <span class="muted" id="live-hint">Makes Skelly a Bluetooth speaker for Live AI and mic passthrough.</span>
-        </div>
-      </div>
+      </header>
 
-      <div class="card">
-        <h2>Startup</h2>
-        <label class="switch-row"><span><strong>Connect automatically</strong>
-          <span class="muted">Finds Skelly on its own at startup and whenever the connection drops.</span></span>
-          <input type="checkbox" id="set-auto-connect" role="switch"></label>
-        <label class="switch-row"><span><strong>Turn on Live Mode after connecting</strong>
-          <span class="muted">Ready to talk as soon as Skelly is found.</span></span>
-          <input type="checkbox" id="set-auto-live" role="switch"></label>
-      </div>
-    </section>
-
-    <!-- Controls -->
-    <section id="tab-controls" class="tab" hidden>
-      <div class="card look-card">
-        <div class="card-head">
-          <h2>Pick a look</h2>
-          <label class="lock" title="Skelly goes back to his own colors whenever a sound starts. This puts yours back automatically.">
-            <input type="checkbox" id="keep-look"> <span>📌 Keep this look</span>
-          </label>
-        </div>
-        <div id="scenes" class="scenes"></div>
-
-        <div class="custom">
-          <label class="color-dot" title="Pick any color">
-            <input type="color" id="color" value="#00ff3c" aria-label="Pick any color">
-          </label>
-          <label class="slider grow">Brightness <output id="bright-out">255</output>
-            <input type="range" id="bright" min="0" max="255" value="255"></label>
-        </div>
-
-        <details class="more">
-          <summary>More light options</summary>
-          <div class="more-body">
-            <div class="field"><span class="muted">Which lights</span><div id="light-targets" class="seg"></div></div>
-            <div class="field"><span class="muted">Effect</span><div id="light-modes" class="seg"></div></div>
-            <label class="slider">Effect speed <output id="speed-out">127</output>
-              <input type="range" id="speed" min="0" max="254" value="127"></label>
+      <main>
+        <div class="page-head">
+          <div>
+            <h1 id="greeting">Good evening!</h1>
+            <p class="muted">Here's what Skelly is up to.</p>
           </div>
-        </details>
-
-        <div class="row split">
-          <button id="lights-off" class="btn ghost">🌑 Lights off</button>
-          <button id="save-sounds" class="btn" title="Writes this look into every sound on Skelly, so it sticks even when he plays sounds on his own.">💾 Save to every sound</button>
+          <button id="head-scan" class="btn primary"><svg><use href="#i-radar"/></svg>Scan</button>
         </div>
-      </div>
 
-      <div class="card">
-        <h2>Move</h2>
-        <p class="muted">Tap the parts you want moving.</p>
-        <div id="moves" class="chips"></div>
-      </div>
-
-      <div class="card" id="eyes-card">
-        <h2>Eyes</h2>
-        <div id="eyes" class="grid"></div>
-      </div>
-
-      <div class="card">
-        <label class="slider">🔊 Volume <output id="vol-out">–</output>
-          <input type="range" id="vol" min="0" max="255" value="128"></label>
-      </div>
-    </section>
-
-    <!-- Sounds -->
-    <section id="tab-sounds" class="tab" hidden>
-      <div class="card">
-        <div class="card-head">
-          <h2>Sounds on Skelly</h2>
-          <button id="files-refresh" class="btn ghost">Refresh</button>
+        <div class="stats">
+          <div class="stat"><span class="stat-ico"><svg><use href="#i-bt"/></svg></span>
+            <div><p class="stat-label">Connection</p><p class="stat-value" id="st-conn">Offline</p><p class="stat-sub" id="st-conn-sub">Not connected</p></div>
+            <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+          <div class="stat"><span class="stat-ico"><svg><use href="#i-volume"/></svg></span>
+            <div><p class="stat-label">Volume</p><p class="stat-value" id="st-vol">–</p><p class="stat-sub">out of 255</p></div>
+            <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+          <div class="stat"><span class="stat-ico"><svg><use href="#i-music"/></svg></span>
+            <div><p class="stat-label">Sounds</p><p class="stat-value" id="st-sounds">–</p><p class="stat-sub" id="st-free">on Skelly</p></div>
+            <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+          <div class="stat"><span class="stat-ico"><svg><use href="#i-chip"/></svg></span>
+            <div><p class="stat-label">Firmware</p><p class="stat-value" id="st-fw">–</p><p class="stat-sub" id="st-model">No device</p></div>
+            <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
         </div>
-        <ul id="files" class="list"></ul>
-      </div>
-    </section>
-  </main>
+
+        <!-- Device -->
+        <section id="tab-device" class="tab">
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Find your animatronic</h2>
+                <p class="muted" id="scan-hint">Turn Skelly on, then scan. Works with Ultra Skelly v2, Animated Skelly, 12ft Skelly, Lethal Lily and Ultra Santa.</p></div>
+              <button id="scan-btn" class="btn outline"><svg><use href="#i-refresh"/></svg>Scan</button>
+            </div>
+            <ul id="scan-list" class="list"></ul>
+          </div>
+
+          <div class="card" id="device-card" hidden>
+            <div class="card-head">
+              <div><h2 id="dev-name">Device</h2><p class="muted">Connected animatronic</p></div>
+              <button id="disconnect-btn" class="btn outline">Disconnect</button>
+            </div>
+            <dl class="facts">
+              <div><dt>Model</dt><dd id="dev-model">–</dd></div>
+              <div><dt>Firmware</dt><dd id="dev-version">–</dd></div>
+              <div><dt>Speaker name</dt><dd id="dev-bt">–</dd></div>
+              <div><dt>Free space</dt><dd id="dev-free">–</dd></div>
+            </dl>
+            <div class="row">
+              <button id="live-btn" class="btn primary"><svg><use href="#i-mic"/></svg>Turn on Live Mode</button>
+              <span class="muted" id="live-hint">Makes Skelly a Bluetooth speaker for Live AI and mic passthrough.</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div><h2>Startup</h2><p class="muted">What happens when the mini PC boots</p></div></div>
+            <label class="switch-row"><span><strong>Connect automatically</strong>
+              <span class="muted">Finds Skelly on its own at startup and whenever the connection drops.</span></span>
+              <input type="checkbox" id="set-auto-connect" role="switch"></label>
+            <label class="switch-row"><span><strong>Turn on Live Mode after connecting</strong>
+              <span class="muted">Ready to talk as soon as Skelly is found.</span></span>
+              <input type="checkbox" id="set-auto-live" role="switch"></label>
+          </div>
+        </section>
+
+        <!-- Controls -->
+        <section id="tab-controls" class="tab" hidden>
+          <div class="card look-card">
+            <div class="card-head">
+              <div><h2>Pick a look</h2><p class="muted">One tap sets colour and effect</p></div>
+              <label class="lock" title="Skelly goes back to his own colors whenever a sound starts. This puts yours back automatically.">
+                <input type="checkbox" id="keep-look"> <span>Keep this look</span>
+              </label>
+            </div>
+            <div id="scenes" class="scenes"></div>
+
+            <div class="custom">
+              <label class="color-dot" title="Pick any color">
+                <input type="color" id="color" value="#00ff3c" aria-label="Pick any color">
+              </label>
+              <label class="slider grow">Brightness <output id="bright-out">255</output>
+                <input type="range" id="bright" min="0" max="255" value="255"></label>
+            </div>
+
+            <details class="more">
+              <summary>More light options</summary>
+              <div class="more-body">
+                <div class="field"><span class="muted">Which lights</span><div id="light-targets" class="seg"></div></div>
+                <div class="field"><span class="muted">Effect</span><div id="light-modes" class="seg"></div></div>
+                <label class="slider">Effect speed <output id="speed-out">127</output>
+                  <input type="range" id="speed" min="0" max="254" value="127"></label>
+              </div>
+            </details>
+
+            <div class="row split">
+              <button id="lights-off" class="btn outline">Lights off</button>
+              <button id="save-sounds" class="btn primary" title="Writes this look into every sound on Skelly, so it sticks even when he plays sounds on his own.">Save to every sound</button>
+            </div>
+          </div>
+
+          <div class="split-grid">
+            <div class="card">
+              <div class="card-head"><div><h2>Move</h2><p class="muted">Tap the parts you want moving</p></div></div>
+              <div id="moves" class="chips"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><div><h2>Volume</h2><p class="muted">Skelly's speaker</p></div></div>
+              <label class="slider vol">Level <output id="vol-out">–</output>
+                <input type="range" id="vol" min="0" max="255" value="128"></label>
+            </div>
+          </div>
+
+          <div class="card" id="eyes-card">
+            <div class="card-head"><div><h2>Eyes</h2><p class="muted">Pick what shows in his eyes</p></div></div>
+            <div id="eyes" class="grid"></div>
+          </div>
+        </section>
+
+        <!-- Sounds -->
+        <section id="tab-sounds" class="tab" hidden>
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Sounds on Skelly</h2><p class="muted">Stored on the animatronic</p></div>
+              <button id="files-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>
+            </div>
+            <ul id="files" class="list"></ul>
+          </div>
+        </section>
+      </main>
+
+      <footer class="foot"><span>Supreme Skelly</span><span id="foot-host"></span></footer>
+    </div>
+  </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script type="module" src="/static/app.js"></script>

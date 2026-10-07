@@ -81,6 +81,11 @@ $("#tab-controls").classList.add("disabled-when-offline");
 $("#tab-sounds").classList.add("disabled-when-offline");
 $("#conn-pill").addEventListener("click", () => showTab("device"));
 
+// ---------- header ----------
+const hour = new Date().getHours();
+$("#greeting").textContent = `Good ${hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"}!`;
+$("#foot-host").textContent = location.host;
+
 // ---------- rendering ----------
 const STATUS_TEXT = {
   disconnected: "Not connected",
@@ -102,7 +107,8 @@ function renderDevice() {
   $("#dev-version").textContent = d.version ?? "–";
   $("#dev-bt").textContent = d.bt_name ?? "–";
   $("#dev-free").textContent = d.free_kb != null ? `${(d.free_kb / 1024).toFixed(1)} MB` : "–";
-  $("#live-btn").textContent = d.live_mode ? "Live Mode is on" : "Turn on Live Mode";
+  $("#live-btn").lastChild.textContent = d.live_mode ? "Live Mode is on" : "Turn on Live Mode";
+  renderStats(d, online);
   $("#live-btn").disabled = !online || d.live_mode;
   if (d.volume != null && document.activeElement !== $("#vol")) {
     $("#vol").value = d.volume;
@@ -110,6 +116,21 @@ function renderDevice() {
   }
   if (d.error) toast(d.error, true);
   renderFiles();
+}
+
+function renderStats(d, online) {
+  const files = d.files ?? [];
+  $("#st-conn").textContent = online ? "Online" : d.status === "disconnected" ? "Offline" : "Waiting";
+  $("#st-conn-sub").textContent = online ? d.name || "Connected" : STATUS_TEXT[d.status] || d.status;
+  $("#st-vol").textContent = d.volume ?? "–";
+  $("#st-sounds").textContent = online ? files.length : "–";
+  $("#st-free").textContent = d.free_kb != null ? `${(d.free_kb / 1024).toFixed(1)} MB free` : "on Skelly";
+  $("#st-fw").textContent = d.version ?? "–";
+  $("#st-model").textContent = state.profile?.name ?? "No device";
+  document.querySelectorAll(".stat").forEach((s) => s.classList.toggle("off", !online));
+  $("#side-live").innerHTML = d.live_mode
+    ? "<b>On.</b> Skelly is a Bluetooth speaker right now."
+    : "Turns Skelly into a Bluetooth speaker for talking through him.";
 }
 
 function renderProfile() {
@@ -215,14 +236,19 @@ function renderFiles() {
     return;
   }
   list.replaceChildren(
-    ...files.map((f) => {
+    ...files.map((f, i) => {
       const playing = state.device.playing === f.serial;
-      const btn = el("button", { className: playing ? "btn" : "btn primary", textContent: playing ? "Stop" : "Play" });
+      const btn = el("button", { className: playing ? "btn outline" : "btn primary", textContent: playing ? "Stop" : "Play" });
       btn.addEventListener("click", () => run(btn, () => api(`/files/${f.serial}/play`, { play: !playing })));
+      const end = el("div", { className: "end" });
+      if (playing) end.append(el("span", { className: "badge orange", textContent: "Playing" }));
+      end.append(btn);
       const li = el("li", {},
-        el("div", {}, el("div", { textContent: f.name || `Sound ${f.serial}` }),
-          el("div", { className: "meta", textContent: `#${f.serial}` })),
-        btn);
+        el("div", { className: "who" },
+          el("span", { className: "num", textContent: String(i + 1).padStart(2, "0") }),
+          el("div", {}, el("div", { className: "name", textContent: f.name || `Sound ${f.serial}` }),
+            el("div", { className: "meta", textContent: `Sound #${f.serial}` }))),
+        end);
       li.classList.toggle("playing", playing);
       return li;
     }),
@@ -249,14 +275,21 @@ $("#scan-btn").addEventListener("click", (ev) =>
             showTab("controls");
           }, `Connected to ${f.name}`),
         );
+        const strength = f.rssi == null ? null : f.rssi > -65 ? ["Strong", "green"] : f.rssi > -80 ? ["Fair", "orange"] : ["Weak", "red"];
+        const end = el("div", { className: "end" });
+        if (strength) end.append(el("span", { className: `badge ${strength[1]}`, textContent: strength[0] }));
+        end.append(b);
         return el("li", {},
-          el("div", {}, el("div", { textContent: f.name }),
-            el("div", { className: "meta", textContent: `${f.address}${f.rssi != null ? ` · ${f.rssi} dBm` : ""}` })),
-          b);
+          el("div", { className: "who" },
+            el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-skull"/></svg>' }),
+            el("div", {}, el("div", { className: "name", textContent: f.name }),
+              el("div", { className: "meta", textContent: `${f.address}${f.rssi != null ? ` · ${f.rssi} dBm` : ""}` }))),
+          end);
       }),
     );
   }),
 );
+$("#head-scan").addEventListener("click", () => { showTab("device"); $("#scan-btn").click(); });
 $("#disconnect-btn").addEventListener("click", (ev) => run(ev.currentTarget, () => api("/disconnect", {})));
 $("#live-btn").addEventListener("click", (ev) => run(ev.currentTarget, () => api("/live-mode", {}), "Live Mode on"));
 
