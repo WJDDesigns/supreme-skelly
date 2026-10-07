@@ -59,6 +59,7 @@ echo "==> Writing $OUT"
 rm -f "$OUT"
 xorriso -indev "$ISO_NAME" -outdev "$OUT" \
   -map "$WORK/nocloud" /nocloud \
+  -map "$WORK/nocloud/user-data" /autoinstall.yaml \
   -map "$WORK/supreme-skelly.tar.gz" /supreme-skelly.tar.gz \
   -map "$WORK/grub.cfg" /boot/grub/grub.cfg \
   -boot_image any replay >/dev/null 2>&1
