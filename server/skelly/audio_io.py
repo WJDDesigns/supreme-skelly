@@ -168,3 +168,64 @@ async def _stop(proc: asyncio.subprocess.Process | None) -> None:
 def pulse_available() -> bool:
     server = os.environ.get("PULSE_SERVER", "")
     return not server.startswith("unix:") or os.path.exists(server[5:])
+
+
+COMBINED = "skelly_all_speakers"
+
+
+async def _pactl(*args: str) -> str:
+    proc = await asyncio.create_subprocess_exec("pactl", *args, stdout=asyncio.subprocess.PIPE,
+                                                stderr=asyncio.subprocess.PIPE)
+    out, err = await asyncio.wait_for(proc.communicate(), 10)
+    if proc.returncode:
+        raise RuntimeError(err.decode(errors="replace").strip() or f"pactl {args[0]} failed")
+    return out.decode()
+
+
+async def output_for(sinks: list[str]) -> str | None:
+    """One sink to play on: the only one, or a combined sink that plays on all of them at once.
+
+    PipeWire's combine-sink keeps the speakers in step and resamples for each one.
+    """
+    sinks = list(dict.fromkeys(s for s in sinks if s))
+    if not sinks:
+        return None
+    if len(sinks) == 1:
+        return sinks[0]
+    modules = await _pactl_json("list", "modules")
+    for m in modules:
+        if m.get("name") == "module-combine-sink" and f"sink_name={COMBINED}" in (m.get("argument") or ""):
+            if f"slaves={','.join(sinks)}" in m["argument"]:
+                return COMBINED
+            await _pactl("unload-module", str(m["index"]))
+    await _pactl("load-module", "module-combine-sink", f"sink_name={COMBINED}", f"slaves={','.join(sinks)}",
+                 "sink_properties=device.description='Skelly+speakers'")
+    for _ in range(20):
+        if any(d["name"] == COMBINED for d in (await list_devices())["speakers"]):
+            break
+        await asyncio.sleep(0.25)
+    return COMBINED
+
+
+async def set_volume(sink: str, percent: int) -> None:
+    await _pactl("set-sink-volume", sink, f"{max(0, min(150, int(percent)))}%")
+
+
+async def volumes() -> dict[str, int]:
+    out = {}
+    for s in await _pactl_json("list", "sinks"):
+        vols = [int(str(c.get("value_percent", "0")).rstrip("%") or 0) for c in (s.get("volume") or {}).values()]
+        if vols:
+            out[s["name"]] = max(vols)
+    return out
+
+
+def chime(rate: int = 16000) -> bytes:
+    """A short two-note "ta-da" for testing speakers."""
+    out = array.array("h")
+    for freq, secs in ((660, 0.18), (880, 0.32)):
+        n = int(rate * secs)
+        for i in range(n):
+            env = min(1.0, i / 400, (n - i) / 1600)
+            out.append(int(9000 * env * math.sin(2 * math.pi * freq * i / rate)))
+    return out.tobytes()

@@ -801,17 +801,89 @@ window.addEventListener("touchmove", moveDraw, { passive: false });
 window.addEventListener("mouseup", endDraw);
 window.addEventListener("touchend", endDraw);
 
-// ---------- settings: speaker, vault ----------
+// ---------- settings: sound ----------
+let audio = { devices: { speakers: [], mics: [] }, volumes: {}, config: { mic: "", skelly: true, extra: [] } };
+const sinkMac = (n) => (n.match(/^bluez_output\.([0-9A-F_]{17})\./i)?.[1] ?? "").replace(/_/g, ":");
 async function loadAudio() {
-  try {
-    const d = await api("/audio/devices");
-    const spk = d.speakers.find((x) => x.bluetooth);
-    $("#spk-out").textContent = spk ? `${spk.label} · connected` : "Not connected";
-    $("#mic-out").textContent = d.mics.find((m) => /usb/i.test(m.name))?.label ?? d.mics[0]?.label ?? "None found";
-  } catch { $("#spk-out").textContent = "Audio isn't set up on this machine"; }
+  try { audio = await api("/audio"); } catch { return; }
+  renderAudio();
 }
-$("#spk-connect").addEventListener("click", (ev) =>
-  run(ev.currentTarget, async () => { await api("/speaker/connect", {}); await loadAudio(); }, "Skelly's speaker is connected"));
+function saveAudio(patch) {
+  audio.config = { ...audio.config, ...patch };
+  renderAudio();
+  run(null, async () => { audio.config = await api("/audio/config", patch, "PUT"); });
+}
+function volSlider(sink) {
+  const v = audio.volumes[sink];
+  if (v == null) return "";
+  const r = el("input", { type: "range", min: 0, max: 150, value: v, className: "vol-mini", title: "Volume" });
+  let t;
+  r.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => run(null, () => api("/audio/volume", { sink, volume: Number(r.value) })), 150); });
+  return r;
+}
+function speakerRow({ label, meta, sink, on, onToggle, connected, extraBtn }) {
+  const sw = el("input", { type: "checkbox", checked: on });
+  sw.setAttribute("role", "switch");
+  sw.addEventListener("change", () => onToggle(sw.checked));
+  const end = el("div", { className: "end" });
+  end.append(el("span", { className: `badge ${connected ? "green" : ""}`, textContent: connected ? "Connected" : "Off" }));
+  if (extraBtn) end.append(extraBtn);
+  end.append(el("label", { className: "mini-switch" }, sw));
+  return el("li", { className: "spk" },
+    el("div", { className: "who" },
+      el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-volume"/></svg>' }),
+      el("div", {}, el("div", { className: "name", textContent: label }), el("div", { className: "meta", textContent: meta }))),
+    sink && connected ? volSlider(sink) : "", end);
+}
+function renderAudio() {
+  const { devices, config } = audio;
+  const mics = devices.mics;
+  $("#mic-pick").replaceChildren(el("option", { value: "", textContent: "Default microphone" }),
+    ...mics.map((m) => el("option", { value: m.name, textContent: m.label })));
+  $("#mic-pick").value = config.mic || "";
+  const have = new Set(devices.speakers.map((d) => d.name));
+  const skellySink = audio.skelly_sink;
+  const connectBtn = el("button", { className: "btn outline small", textContent: "Connect" });
+  connectBtn.addEventListener("click", () => run(connectBtn, async () => { await api("/speaker/connect", {}); await loadAudio(); }, "Skelly's speaker is connected"));
+  const rows = [speakerRow({ label: "Skelly (Live Mode speaker)", meta: "His own speaker, over Bluetooth", sink: skellySink,
+    on: config.skelly !== false, connected: skellySink && have.has(skellySink), onToggle: (v) => saveAudio({ skelly: v }),
+    extraBtn: skellySink && have.has(skellySink) ? null : connectBtn })];
+  const extra = config.extra ?? [];
+  const others = devices.speakers.filter((d) => d.name !== skellySink && d.name !== "skelly_all_speakers");
+  const names = [...new Set([...extra, ...others.map((d) => d.name)])];
+  for (const n of names) {
+    const d = devices.speakers.find((x) => x.name === n);
+    const mac = sinkMac(n);
+    let forget = null;
+    if (mac) {
+      forget = el("button", { className: "btn outline small", textContent: "Forget" });
+      forget.addEventListener("click", () => {
+        if (!confirm(`Forget ${d?.label ?? mac}?`)) return;
+        run(forget, async () => { audio.config = await api("/audio/forget", { address: mac }); await loadAudio(); }, "Forgotten");
+      });
+    }
+    rows.push(speakerRow({ label: d?.label ?? mac ?? n, meta: mac ? `Bluetooth · ${mac}` : "Wired output on the mini PC", sink: n,
+      on: extra.includes(n), connected: have.has(n),
+      onToggle: (v) => saveAudio({ extra: v ? [...extra, n] : extra.filter((x) => x !== n) }), extraBtn: forget }));
+  }
+  $("#speakers").replaceChildren(...rows);
+}
+$("#mic-pick").addEventListener("change", (e) => saveAudio({ mic: e.target.value }));
+$("#snd-test").addEventListener("click", (ev) => run(ev.currentTarget, async () => { await api("/audio/test", {}); await loadAudio(); }, "Ta-da! Played on the ticked speakers"));
+$("#bt-scan").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => {
+    $("#bt-hint").textContent = "Looking for speakers (10 seconds)…";
+    const found = await api("/audio/scan", {});
+    $("#bt-hint").textContent = found.length ? "Tap Pair on your speaker." : "Nothing found. Is it in pairing mode and close by?";
+    $("#bt-found").replaceChildren(...found.filter((f) => !sinkMac(audio.skelly_sink || "") || f.address !== sinkMac(audio.skelly_sink)).map((f) => {
+      const b = el("button", { className: f.paired ? "btn outline small" : "btn primary small", textContent: f.paired ? "Use" : "Pair" });
+      b.addEventListener("click", () => run(b, async () => { await api("/audio/pair", { address: f.address }); $("#bt-found").replaceChildren(); await loadAudio(); }, `${f.name} added`));
+      return el("li", {}, el("div", { className: "who" },
+        el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-bt"/></svg>' }),
+        el("div", {}, el("div", { className: "name", textContent: f.name }), el("div", { className: "meta", textContent: `${f.address}${f.rssi != null ? ` · ${f.rssi} dBm` : ""}` }))),
+        el("div", { className: "end" }, b));
+    }));
+  }));
 loadAudio();
 
 function secretRow(v) {

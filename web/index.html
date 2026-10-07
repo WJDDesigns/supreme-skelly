@@ -378,13 +378,17 @@
 
           <div class="card">
             <div class="card-head">
-              <div><h2>Skelly's speaker</h2><p class="muted" id="spk-sub">Live Mode turns Skelly into a Bluetooth speaker for his AI voice</p></div>
-              <button id="spk-connect" class="btn primary"><svg><use href="#i-bt"/></svg>Connect speaker</button>
+              <div><h2>Sound</h2><p class="muted">Where Skelly listens and where his voice plays</p></div>
+              <button id="snd-test" class="btn primary"><svg><use href="#i-volume"/></svg>Test sound</button>
             </div>
-            <div class="facts two">
-              <div><dt>Speaker</dt><dd id="spk-out">–</dd></div>
-              <div><dt>Microphone</dt><dd id="mic-out">–</dd></div>
+            <label class="field-row">Microphone<select id="mic-pick"></select></label>
+            <p class="sub-head">Speakers <span class="muted">· ticked ones all play at once</span></p>
+            <ul id="speakers" class="list"></ul>
+            <div class="row">
+              <button id="bt-scan" class="btn outline"><svg><use href="#i-bt"/></svg>Add Bluetooth speaker</button>
+              <span class="muted" id="bt-hint">Put the speaker in pairing mode first.</span>
             </div>
+            <ul id="bt-found" class="list"></ul>
           </div>
 
           <div class="card">

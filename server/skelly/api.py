@@ -76,6 +76,21 @@ class AdapterBody(BaseModel):
     address: str
 
 
+class AudioBody(BaseModel):
+    mic: str | None = None
+    skelly: bool | None = None
+    extra: list[str] | None = None
+
+
+class AddressBody(BaseModel):
+    address: str
+
+
+class VolumeSinkBody(BaseModel):
+    sink: str
+    volume: int = Field(ge=0, le=150)
+
+
 class ZonesBody(BaseModel):
     zones: list[list[float]]
 
@@ -106,7 +121,9 @@ def create_app(
         app.state.svc = svc
         app.state.tasks = set()
         app.state.vault = vault or Vault()
-        app.state.conv = Conversation(svc, app.state.vault, lambda: svc.settings.conversation, skelly_sink)
+        app.state.conv = Conversation(
+            svc, app.state.vault, lambda: {**svc.settings.conversation, "mic": svc.settings.audio.get("mic", "")},
+            resolve_output)
         app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor)
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
             try:
@@ -160,6 +177,97 @@ def create_app(
                 break
             await asyncio.sleep(0.5)
         return sink
+
+    def adapter_name() -> str:
+        return getattr(svc().link, "adapter_in_use", None) or "hci0"
+
+    async def resolve_output() -> str | None:
+        """Where Skelly's voice plays: his Live speaker and/or extra speakers, combined if several."""
+        audio = svc().settings.audio
+        sinks: list[str] = []
+        if audio.get("skelly", True):
+            sinks.append(await skelly_sink())
+        if os.environ.get("SKELLY_SIMULATE") == "1":
+            return None
+        have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
+        for sink in audio.get("extra", []):
+            if sink not in have and sink.startswith("bluez_output."):
+                mac = sink.split(".")[1].replace("_", ":")
+                try:
+                    await speaker.connect_address(adapter_name(), mac)
+                    await asyncio.sleep(2)
+                except Exception as exc:
+                    log.info("extra speaker %s not connected: %s", mac, exc)
+            sinks.append(sink)
+        have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
+        live = [s for s in sinks if s and s in have]
+        if not live:
+            raise ConnectionError("None of the chosen speakers are connected")
+        return await audio_io.output_for(live)
+
+    @app.get("/api/audio")
+    async def audio_state():
+        return {"devices": await audio_io.list_devices(), "volumes": await audio_io.volumes(),
+                "config": svc().settings.audio,
+                "skelly_sink": audio_io.skelly_sink_name(svc().settings.live_speaker)}
+
+    @app.put("/api/audio/config")
+    async def audio_config(body: AudioBody):
+        svc().settings.audio = {**svc().settings.audio, **body.model_dump(exclude_none=True)}
+        svc().settings.save()
+        return svc().settings.audio
+
+    @app.post("/api/audio/scan")
+    async def audio_scan():
+        try:
+            return await speaker.scan_speakers(adapter_name())
+        except Exception as exc:
+            raise HTTPException(502, f"Bluetooth scan failed: {exc}") from exc
+
+    @app.post("/api/audio/pair")
+    async def audio_pair(body: AddressBody):
+        try:
+            info = await speaker.connect_address(adapter_name(), body.address)
+        except Exception as exc:
+            raise HTTPException(502, f"Couldn't pair: {exc}. Is the speaker in pairing mode?") from exc
+        sink = audio_io.skelly_sink_name(info["address"])
+        audio = svc().settings.audio
+        if sink not in audio.get("extra", []):
+            svc().settings.audio = {**audio, "extra": [*audio.get("extra", []), sink]}
+            svc().settings.save()
+        return {**info, "sink": sink}
+
+    @app.post("/api/audio/forget")
+    async def audio_forget(body: AddressBody):
+        sink = audio_io.skelly_sink_name(body.address)
+        audio = svc().settings.audio
+        svc().settings.audio = {**audio, "extra": [s for s in audio.get("extra", []) if s != sink]}
+        svc().settings.save()
+        try:
+            await speaker.forget(adapter_name(), body.address)
+        except Exception as exc:
+            log.info("forget %s: %s", body.address, exc)
+        return svc().settings.audio
+
+    @app.post("/api/audio/volume")
+    async def audio_volume(body: VolumeSinkBody):
+        try:
+            await audio_io.set_volume(body.sink, body.volume)
+        except RuntimeError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True}
+
+    @app.post("/api/audio/test")
+    async def audio_test():
+        try:
+            sink = await resolve_output()
+        except (ConnectionError, LookupError, RuntimeError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+        out = audio_io.Speaker(sink)
+        await out.play(audio_io.chime(), 16000)
+        await out.wait_done()
+        await out.close()
+        return {"sink": sink}
 
     async def on_visitor(description: str | None, cfg: VisionConfig) -> None:
         svc().bus.publish("visitor", {"description": description, "ts": __import__("time").time()})

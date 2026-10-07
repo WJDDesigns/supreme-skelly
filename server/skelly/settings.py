@@ -27,6 +27,9 @@ class Settings:
     live_speaker: str | None = None  # MAC of Skelly's Live Mode (Classic) speaker once paired
     conversation: dict = field(default_factory=dict)  # ConversationConfig fields
     vision: dict = field(default_factory=dict)  # VisionConfig fields
+    # Sound in and out: {"mic": PipeWire source or "", "skelly": play on Skelly's Live speaker,
+    # "extra": [more PipeWire sinks, e.g. outdoor Bluetooth speakers]}
+    audio: dict = field(default_factory=lambda: {"mic": "", "skelly": True, "extra": []})
     bt_adapter: str | None = None  # MAC of the Bluetooth radio to use; None = SKELLY_BT_ADAPTER or the default
 
     @classmethod
