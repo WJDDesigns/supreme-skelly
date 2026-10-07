@@ -305,6 +305,7 @@ class Conversation:
         loud = 0
         gate_until = 0.0
         talk_started = 0.0
+        hearing_self = False
         # 0 = only shouting gets through, 100 = talking a bit louder than him does
         factor = 3.0 - 1.6 * (max(0, min(100, cfg.interrupt_sensitivity)) / 100)
         frame_s = FRAME_MS / 1000
@@ -313,11 +314,14 @@ class Conversation:
             async for pcm in mic:
                 now = time.monotonic()
                 level = mic.level
-                hearing_self = cfg.ignore_mic_while_talking and speaker.echoing
+                was_hearing, hearing_self = hearing_self, cfg.ignore_mic_while_talking and speaker.echoing
                 if not hearing_self:
+                    if was_hearing:
+                        log.info("Skelly finished; mic open (his peak %.3f, mic now %.3f)", peak, level)
                     deaf, echo, peak, loud, talk_started = False, 0.0, 0.0, 0, 0.0
                 elif not cfg.allow_interrupt:
                     deaf = True
+                    peak = max(peak, level)
                 else:
                     talk_started = talk_started or now
                     gate_open = now < gate_until
@@ -327,6 +331,9 @@ class Conversation:
                     if settled and level > max(INTERRUPT_MIN, max(echo, peak * 0.8) * factor):
                         loud += 1
                         if loud >= INTERRUPT_FRAMES:
+                            if not gate_open:
+                                log.info("mic opened over Skelly: level %.3f, his echo %.3f, his peak %.3f",
+                                         level, echo, peak)
                             gate_until = now + 0.8
                             gate_open = True
                     else:

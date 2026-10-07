@@ -127,8 +127,8 @@ class Mic:
 
 
 # How long Skelly's voice keeps coming out after the last chunk is handed to PipeWire:
-# the pacat buffer (80 ms) plus Bluetooth A2DP's own delay, which is often 200-400 ms.
-ECHO_TAIL_S = 0.7
+# the pacat buffer, PipeWire and Bluetooth A2DP delay (often 300-600 ms), plus room for error.
+ECHO_TAIL_S = 1.2
 
 
 class Speaker:
