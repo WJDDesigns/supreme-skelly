@@ -26,6 +26,7 @@ KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/mode
 KOKORO_FILES = ("kokoro-v1.0.int8.onnx", "voices-v1.0.bin")
 
 OPTIONS = [
+    {"id": "agent", "label": "Your ElevenLabs agent", "note": "Exactly what the agent sounds like in conversations"},
     {"id": "eleven_flash", "label": "ElevenLabs Flash", "note": "What conversations use: fast"},
     {"id": "eleven_v3", "label": "ElevenLabs v3", "note": "Most expressive; slower to start"},
     {"id": "kokoro:bm_lewis", "label": "Kokoro: Lewis", "note": "Free, on the mini PC"},
@@ -68,21 +69,41 @@ def _kokoro_say(text: str, voice: str, speed: float) -> tuple[bytes, int]:
     return out.tobytes(), rate
 
 
-async def _eleven(key: str, voice_id: str, model: str, text: str) -> tuple[bytes, int]:
+async def _eleven(key: str, voice_id: str, model: str, text: str,
+                  settings: dict | None = None) -> tuple[bytes, int]:
+    body = {"text": text, "model_id": model}
+    if settings:
+        body["voice_settings"] = settings
     async with httpx.AsyncClient(timeout=60) as http:
         r = await http.post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-                            params={"output_format": "pcm_16000"}, headers={"xi-api-key": key},
-                            json={"text": text, "model_id": model})
+                            params={"output_format": "pcm_16000"}, headers={"xi-api-key": key}, json=body)
         if r.status_code >= 400:
             raise RuntimeError(f"ElevenLabs {r.status_code}: {r.text[:200]}")
         return r.content, 16000
 
 
+async def agent_voice(key: str, agent_id: str) -> dict:
+    """The voice, model and tuning an ElevenLabs agent speaks with."""
+    async with httpx.AsyncClient(timeout=15) as http:
+        r = await http.get(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}", headers={"xi-api-key": key})
+        if r.status_code >= 400:
+            raise RuntimeError(f"ElevenLabs {r.status_code}: {r.text[:200]}")
+    tts = r.json().get("conversation_config", {}).get("tts", {})
+    settings = {k: tts[k] for k in ("stability", "similarity_boost", "speed") if tts.get(k) is not None}
+    return {"voice_id": tts.get("voice_id"), "model_id": tts.get("model_id") or "eleven_flash_v2_5",
+            "settings": settings}
+
+
 async def synth(option: str, text: str, *, eleven_key: str | None, eleven_voice: str,
-                speed: float = 1.15) -> tuple[bytes, int, float]:
+                speed: float = 1.15, agent_id: str | None = None) -> tuple[bytes, int, float]:
     """Returns PCM, its rate, and how long it took to make (seconds)."""
     t = time.monotonic()
-    if option.startswith("kokoro:"):
+    if option == "agent":
+        if not (eleven_key and agent_id):
+            raise ValueError("Pick your ElevenLabs agent on the Conversation page first.")
+        av = await agent_voice(eleven_key, agent_id)
+        pcm, rate = await _eleven(eleven_key, av["voice_id"] or eleven_voice, av["model_id"], text, av["settings"])
+    elif option.startswith("kokoro:"):
         pcm, rate = await asyncio.to_thread(_kokoro_say, text, option.split(":", 1)[1], speed)
     elif option in ("eleven_flash", "eleven_v3"):
         if not eleven_key:

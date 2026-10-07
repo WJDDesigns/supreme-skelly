@@ -559,7 +559,8 @@ def create_app(
             pcm, rate, took = await voices.synth(str(body.get("voice")), text,
                                                  eleven_key=app.state.vault.get("elevenlabs_api_key"),
                                                  eleven_voice=cfg.elevenlabs_voice_id,
-                                                 speed=float(body.get("speed") or 1.15))
+                                                 speed=float(body.get("speed") or 1.15),
+                                                 agent_id=cfg.elevenlabs_agent_id or None)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:

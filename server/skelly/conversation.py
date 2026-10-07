@@ -533,6 +533,22 @@ class Conversation:
         self._say("skelly", speakable(full))
         return full
 
+    async def _agent_voice(self, cfg: ConversationConfig) -> dict:
+        if not cfg.elevenlabs_agent_id:
+            return {}
+        cached = getattr(self, "_agent_voice_cache", None)
+        if cached and cached[0] == cfg.elevenlabs_agent_id and time.monotonic() - cached[1] < 300:
+            return cached[2]
+        from .voices import agent_voice
+
+        try:
+            av = await agent_voice(self.vault.get("elevenlabs_api_key"), cfg.elevenlabs_agent_id)
+        except Exception as exc:
+            log.info("agent voice lookup failed: %r", exc)
+            av = {}
+        self._agent_voice_cache = (cfg.elevenlabs_agent_id, time.monotonic(), av)
+        return av
+
     async def _speak(self, http: httpx.AsyncClient, cfg: ConversationConfig, speaker: Speaker, text: str) -> None:
         text = speakable(text)
         if not text:
@@ -546,10 +562,15 @@ class Conversation:
             name = "OpenAI voice"
         else:
             rate = 16000
-            req = http.stream("POST", f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.elevenlabs_voice_id}/stream",
+            # With an agent picked, speak exactly like it (same voice, model and tuning).
+            av = await self._agent_voice(cfg)
+            body = {"text": text, "model_id": av.get("model_id") or "eleven_flash_v2_5"}
+            if av.get("settings"):
+                body["voice_settings"] = av["settings"]
+            req = http.stream("POST", "https://api.elevenlabs.io/v1/text-to-speech/"
+                              f"{av.get('voice_id') or cfg.elevenlabs_voice_id}/stream",
                               params={"output_format": "pcm_16000"},
-                              headers={"xi-api-key": self.vault.get("elevenlabs_api_key")},
-                              json={"text": text, "model_id": "eleven_flash_v2_5"})
+                              headers={"xi-api-key": self.vault.get("elevenlabs_api_key")}, json=body)
             name = "ElevenLabs voice"
         async with req as r:
             if r.status_code >= 400:
