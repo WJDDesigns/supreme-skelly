@@ -821,12 +821,12 @@ function volSlider(sink) {
   r.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => run(null, () => api("/audio/volume", { sink, volume: Number(r.value) })), 150); });
   return r;
 }
-function speakerRow({ label, meta, sink, on, onToggle, connected, extraBtn }) {
+function speakerRow({ label, meta, sink, on, onToggle, connected, extraBtn, idle = "Off" }) {
   const sw = el("input", { type: "checkbox", checked: on });
   sw.setAttribute("role", "switch");
   sw.addEventListener("change", () => onToggle(sw.checked));
   const end = el("div", { className: "end" });
-  end.append(el("span", { className: `badge ${connected ? "green" : ""}`, textContent: connected ? "Connected" : "Off" }));
+  end.append(el("span", { className: `badge ${connected ? "green" : ""}`, textContent: connected ? "Connected" : idle }));
   if (extraBtn) end.append(extraBtn);
   end.append(el("label", { className: "mini-switch" }, sw));
   return el("li", { className: "spk" },
@@ -847,7 +847,7 @@ function renderAudio() {
   connectBtn.addEventListener("click", () => run(connectBtn, async () => { await api("/speaker/connect", {}); await loadAudio(); }, "Skelly's speaker is connected"));
   const rows = [speakerRow({ label: "Skelly (Live Mode speaker)", meta: "His own speaker, over Bluetooth", sink: skellySink,
     on: config.skelly !== false, connected: skellySink && have.has(skellySink), onToggle: (v) => saveAudio({ skelly: v }),
-    extraBtn: skellySink && have.has(skellySink) ? null : connectBtn })];
+    extraBtn: skellySink ? null : connectBtn, idle: skellySink ? "Wakes when he talks" : "Not paired" })];
   const extra = config.extra ?? [];
   const others = devices.speakers.filter((d) => d.name !== skellySink && d.name !== "skelly_all_speakers");
   const names = [...new Set([...extra, ...others.map((d) => d.name)])];
@@ -864,7 +864,8 @@ function renderAudio() {
     }
     rows.push(speakerRow({ label: d?.label ?? mac ?? n, meta: mac ? `Bluetooth · ${mac}` : "Wired output on the mini PC", sink: n,
       on: extra.includes(n), connected: have.has(n),
-      onToggle: (v) => saveAudio({ extra: v ? [...extra, n] : extra.filter((x) => x !== n) }), extraBtn: forget }));
+      onToggle: (v) => saveAudio({ extra: v ? [...extra, n] : extra.filter((x) => x !== n) }), extraBtn: forget,
+      idle: mac ? "Connects when needed" : "Off" }));
   }
   $("#speakers").replaceChildren(...rows);
 }
