@@ -131,8 +131,17 @@ class Mic:
 ECHO_TAIL_S = 1.2
 
 
+# Measured on the mini PC: Skelly's voice reaches the mic ~0.5 s after it's handed to PipeWire
+# (pacat buffer + Bluetooth A2DP). Used to line up what's playing with what the mic hears.
+ECHO_DELAY_S = float(os.environ.get("SKELLY_ECHO_DELAY_S", "0.5"))
+
+
 class Speaker:
-    """Plays 16-bit mono PCM on a PipeWire sink and knows roughly when it's still talking."""
+    """Plays 16-bit mono PCM on a PipeWire sink and knows roughly when it's still talking.
+
+    It also keeps a timeline of how loud each 20 ms of what it played was, and when it was
+    due to play, so the mic side can predict how loud Skelly's own echo is at any moment.
+    """
 
     def __init__(self, sink: str | None = None, gain: float = 1.0) -> None:
         self.sink = sink
@@ -140,6 +149,12 @@ class Speaker:
         self.rate = 0
         self._proc: asyncio.subprocess.Process | None = None
         self._busy_until = 0.0
+        self._timeline: list[tuple[float, float]] = []  # (time it plays, level) per 20 ms
+
+    def level_at(self, t: float, window: float = 0.08) -> float:
+        """Loudest played level due around time t (allowing for timing jitter)."""
+        lo, hi = t - window, t + window
+        return max((lv for ts, lv in self._timeline if lo <= ts <= hi), default=0.0)
 
     @property
     def speaking(self) -> bool:
@@ -169,14 +184,19 @@ class Speaker:
             await self._open(rate)
             last_sink = self.sink
         assert self._proc and self._proc.stdin
-        self._proc.stdin.write(scale(pcm, self.gain))
+        self._proc.stdin.write(scale(pcm, self.gain))  # timeline below uses the same scaled audio
         try:
             await self._proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
             self._proc = None
             raise ConnectionError("Skelly's speaker went away") from None
         now = time.monotonic()
-        self._busy_until = max(self._busy_until, now) + len(pcm) / (2 * rate)
+        start = max(self._busy_until, now)
+        step = rate * 2 * FRAME_MS // 1000
+        out = scale(pcm, self.gain)
+        self._timeline = [x for x in self._timeline if x[0] > now - 3] + [
+            (start + i / step * FRAME_MS / 1000, rms(out[i:i + step])) for i in range(0, len(out), step)]
+        self._busy_until = start + len(pcm) / (2 * rate)
 
     async def wait_done(self) -> None:
         while self.speaking:

@@ -28,7 +28,7 @@ from dataclasses import asdict, dataclass, field
 
 import httpx
 
-from .audio_io import FRAME_MS, Mic, Speaker, rms
+from .audio_io import ECHO_DELAY_S, FRAME_MS, Mic, Speaker, rms
 
 log = logging.getLogger(__name__)
 
@@ -159,6 +159,7 @@ class Conversation:
         self.on_started = None  # async (cfg, sink) once his voice has somewhere to go
         self.on_ended = None  # async (transcript) when the conversation finishes
         self._override_ok = False
+        self._echo_gain = 0.15  # mic level per unit of played level (measured ~0.08); learned while he talks
 
     # -- public ---------------------------------------------------------------
 
@@ -333,6 +334,28 @@ class Conversation:
                 elif not cfg.allow_interrupt:
                     deaf = True
                     peak = max(peak, level)
+                elif hasattr(speaker, "level_at"):
+                    # Predict his echo from what was played half a second ago (the Bluetooth
+                    # delay) and how loud that comes back at the mic. Between his words the
+                    # prediction drops, so a visitor talking then is heard even if his loudest
+                    # words are louder than they are.
+                    gate_open = now < gate_until
+                    ref = speaker.level_at(now - ECHO_DELAY_S)
+                    expected = self._echo_gain * ref
+                    if level > max(INTERRUPT_MIN, expected * factor + 0.01):
+                        loud += 1
+                        if loud >= INTERRUPT_FRAMES:
+                            if not gate_open:
+                                log.info("mic opened over Skelly: level %.3f, expected echo %.3f (gain %.2f)",
+                                         level, expected, self._echo_gain)
+                            gate_until = now + 0.8
+                            gate_open = True
+                    else:
+                        loud = 0
+                        if ref > 0.02 and not gate_open:  # learn how loud his voice comes back
+                            self._echo_gain = min(3.0, 0.95 * self._echo_gain + 0.05 * (level / ref))
+                    peak = max(peak, level)
+                    deaf = not gate_open
                 else:
                     talk_started = talk_started or now
                     gate_open = now < gate_until
