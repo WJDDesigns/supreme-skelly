@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -159,6 +160,8 @@ def create_app(
         app.state.recorder = recorder.Recorder()
         app.state.costumes_mentioned = set()
         costume_task = asyncio.create_task(costume_watch())
+        app.state.pending_name = None
+        name_task = asyncio.create_task(pending_name_watch())
         app.state.conv.on_started = start_recording
         app.state.conv.on_ended = stop_recording
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
@@ -170,6 +173,7 @@ def create_app(
                 log.info("camera not started: %s", exc)
         yield
         costume_task.cancel()
+        name_task.cancel()
         await app.state.conv.stop()
         await app.state.recorder.stop()
         await app.state.vision.stop()
@@ -440,10 +444,36 @@ def create_app(
         name = heard_name(text)
         if not name:
             return
+        log.info("heard a name: %s", name)
+        if not try_learn(name):
+            # No face close enough yet: keep the name for a bit and save it once one shows up.
+            app.state.pending_name = (name, time.monotonic())
+            svc().bus.publish("face_pending", {"name": name})
+            app.state.conv.add_context(f"(You heard their name is {name}, but you can't see their face clearly "
+                                       "yet. Ask them to step closer and look right at you so you'll remember them.)")
+
+    def try_learn(name: str) -> bool:
         person = app.state.vision.learn_name(name)
         if person:
+            app.state.pending_name = None
             app.state.conv.add_context(f"(You can now recognise {name} by their face next time.)")
             log.info("learned the face of %s", name)
+        return bool(person)
+
+    async def pending_name_watch() -> None:
+        """A name heard with no face in view: keep trying for 30 s while they step closer."""
+        while True:
+            await asyncio.sleep(1)
+            pending = app.state.pending_name
+            if not pending:
+                continue
+            name, since = pending
+            if time.monotonic() - since > 30:
+                app.state.pending_name = None
+                log.info("never saw a face for %s", name)
+                svc().bus.publish("face_missed", {"name": name})
+            elif app.state.vision.state.running:
+                try_learn(name)
 
     @app.get("/api/faces")
     async def faces():

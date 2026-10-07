@@ -45,3 +45,10 @@ def test_costume_names():
     assert costume_names({"costumes": ["Vampire", "witch", "vampire", ""]}) == ["Vampire", "witch"]
     assert costume_names({"costumes": [{"costume": "Spider-Man"}]}) == ["Spider-Man"]
     assert costume_names({}) == [] and costume_names(None) == []
+
+
+def test_greeting_skelly_is_not_a_name():
+    from skelly.faces import heard_name
+
+    assert heard_name("Hey, it's Skelly.") is None
+    assert heard_name("Hi Skelly, my name is Wayne.") == "Wayne"

@@ -676,6 +676,8 @@ function connectEvents() {
     else if (msg.type === "meters") setMeters(msg.data);
     else if (msg.type === "faces") renderFaceBoxes(msg.data.faces);
     else if (msg.type === "face_learned") { toast(`🦴 Skelly will remember ${msg.data.name}`); loadPeople(); }
+    else if (msg.type === "face_pending") toast(`Heard "${msg.data.name}". Step closer to the camera so Skelly can see your face.`);
+    else if (msg.type === "face_missed") toast(`Skelly heard "${msg.data.name}" but never saw a face. Tap "Who's this?" on the Vision page to name someone by hand.`);
     else if (msg.type === "known_visitor") toast(`👋 ${msg.data.name} is here`);
     else if (msg.type === "recording") { $("#rec-badge").hidden = !msg.data.recording; if (!msg.data.recording) loadRecordings(); }
   };
