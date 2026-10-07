@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from .link import BleakLink, Link, SimulatedLink
 from .profiles import PROFILES
 from .service import SkellyService
+from .settings import Settings
 
 WEB_DIR = Path(os.environ.get("SKELLY_WEB_DIR", Path(__file__).resolve().parents[2] / "web"))
 
@@ -49,15 +50,24 @@ class PlayBody(BaseModel):
     play: bool = True
 
 
+class SettingsBody(BaseModel):
+    auto_connect: bool | None = None
+    auto_live_mode: bool | None = None
+
+
 def make_link() -> Link:
     return SimulatedLink() if os.environ.get("SKELLY_SIMULATE") == "1" else BleakLink()
 
 
-def create_app(link: Link | None = None) -> FastAPI:
+def create_app(
+    link: Link | None = None, settings: Settings | None = None, *, autoconnect: bool | None = None
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        svc = SkellyService(link or make_link())
+        svc = SkellyService(link or make_link(), settings=settings or Settings.load())
         await svc.start()
+        if autoconnect if autoconnect is not None else os.environ.get("SKELLY_AUTOCONNECT", "1") == "1":
+            svc.start_autoconnect()
         app.state.svc = svc
         yield
         await svc.stop()
@@ -88,6 +98,14 @@ def create_app(link: Link | None = None) -> FastAPI:
     @app.get("/api/state")
     async def state():
         return svc().snapshot()
+
+    @app.get("/api/settings")
+    async def get_settings():
+        return svc().settings.public()
+
+    @app.patch("/api/settings")
+    async def patch_settings(body: SettingsBody):
+        return svc().update_settings(**body.model_dump(exclude_none=True))
 
     @app.post("/api/scan")
     async def scan(timeout: float = 6.0):

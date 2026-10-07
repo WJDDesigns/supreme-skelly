@@ -58,7 +58,7 @@ def test_profile_lookup():
 
 
 def test_api_end_to_end():
-    with TestClient(create_app(SimulatedLink())) as c:
+    with TestClient(create_app(SimulatedLink(), autoconnect=False)) as c:
         found = c.post("/api/scan", params={"timeout": 1}).json()
         assert found[0]["name"] == "Ultra Skelly v2"
         assert c.post("/api/movement", json={"parts": ["head"]}).status_code == 409
@@ -71,3 +71,35 @@ def test_api_end_to_end():
         assert c.post("/api/volume", json={"volume": 300}).status_code == 422
         with c.websocket_connect("/api/events") as ws:
             assert ws.receive_json()["type"] == "snapshot"
+
+
+async def test_autoconnect_finds_device_and_remembers_it(tmp_path, monkeypatch):
+    from skelly import service as service_mod
+    from skelly.settings import Settings
+
+    monkeypatch.setattr(service_mod, "AUTOCONNECT_INTERVAL_S", 0.05)
+    monkeypatch.setattr(service_mod, "AUTOCONNECT_SCAN_S", 0.05)
+    settings = Settings.load(tmp_path / "settings.json")
+    settings.auto_live_mode = True
+    svc = SkellyService(SimulatedLink(), settings=settings)
+    await svc.start()
+    svc.start_autoconnect()
+    await asyncio.sleep(1.2)
+    assert svc.state.status == "connected"
+    assert svc.state.live_mode is True
+    assert Settings.load(tmp_path / "settings.json").last_name == "Ultra Skelly v2"
+
+    # A manual disconnect must not be undone by auto-connect.
+    await svc.disconnect()
+    await asyncio.sleep(0.5)
+    assert svc.state.status == "disconnected"
+    await svc.stop()
+
+
+def test_settings_api(tmp_path):
+    from skelly.settings import Settings
+
+    with TestClient(create_app(SimulatedLink(), Settings.load(tmp_path / "s.json"), autoconnect=False)) as c:
+        assert c.get("/api/settings").json()["auto_connect"] is True
+        assert c.patch("/api/settings", json={"auto_live_mode": True}).json()["auto_live_mode"] is True
+    assert Settings.load(tmp_path / "s.json").auto_live_mode is True

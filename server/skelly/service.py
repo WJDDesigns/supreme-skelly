@@ -16,11 +16,14 @@ from typing import Any
 from . import protocol as proto
 from .link import Found, Link
 from .profiles import UNKNOWN, Profile, by_ble_name
+from .settings import Settings
 
 log = logging.getLogger(__name__)
 
 WRITE_GAP_S = 0.04  # device drops back-to-back write-without-response packets
 REPLY_TIMEOUT_S = 3.0
+AUTOCONNECT_INTERVAL_S = 10.0
+AUTOCONNECT_SCAN_S = 8.0
 
 
 class EventBus:
@@ -62,9 +65,13 @@ class DeviceState:
 
 
 class SkellyService:
-    def __init__(self, link: Link, bus: EventBus | None = None, *, auto_reconnect: bool = True) -> None:
+    def __init__(self, link: Link, bus: EventBus | None = None, *, auto_reconnect: bool = True,
+                 settings: Settings | None = None) -> None:
         self.link = link
         self.bus = bus or EventBus()
+        self.settings = settings or Settings()
+        self._autoconnector: asyncio.Task | None = None
+        self._user_disconnected = False
         self.state = DeviceState()
         self.profile: Profile = UNKNOWN
         self.auto_reconnect = auto_reconnect
@@ -83,15 +90,28 @@ class SkellyService:
     async def start(self) -> None:
         self._writer = asyncio.create_task(self._write_loop(), name="skelly-writer")
 
+    def start_autoconnect(self) -> None:
+        if not self._autoconnector or self._autoconnector.done():
+            self._autoconnector = asyncio.create_task(self._autoconnect_loop(), name="skelly-autoconnect")
+
     async def stop(self) -> None:
         self._wanted = None
-        for t in (self._writer, self._reconnector):
+        for t in (self._writer, self._reconnector, self._autoconnector):
             if t:
                 t.cancel()
         await self.link.disconnect()
 
     def snapshot(self) -> dict:
-        return {"device": asdict(self.state), "profile": self.profile.to_dict()}
+        return {"device": asdict(self.state), "profile": self.profile.to_dict(), "settings": self.settings.public()}
+
+    def update_settings(self, **changes: Any) -> dict:
+        for k, v in changes.items():
+            setattr(self.settings, k, v)
+        self.settings.save()
+        if changes.get("auto_connect"):
+            self._user_disconnected = False
+        self.bus.publish("settings", self.settings.public())
+        return self.settings.public()
 
     def _set(self, **changes: Any) -> None:
         for k, v in changes.items():
@@ -110,7 +130,26 @@ class SkellyService:
 
     async def connect(self, address: str, name: str | None = None) -> None:
         self._wanted = address
+        self._user_disconnected = False
         await self._connect_once(address, name)
+
+    async def _autoconnect_loop(self) -> None:
+        """Plug and play: keep looking for the last (or any) supported prop until connected."""
+        while True:
+            idle = self.state.status == "disconnected" and not self.link.connected
+            if idle and self.settings.auto_connect and not self._user_disconnected:
+                try:
+                    found = await self.scan(AUTOCONNECT_SCAN_S)
+                    pick = next((f for f in found if f.address == self.settings.last_address), None)
+                    pick = pick or (found[0] if found else None)
+                    if pick and not self._user_disconnected and self.state.status == "disconnected":
+                        log.info("auto-connecting to %s (%s)", pick.name, pick.address)
+                        await self.connect(pick.address, pick.name)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    log.info("auto-connect attempt failed: %s", exc)
+            await asyncio.sleep(AUTOCONNECT_INTERVAL_S)
 
     async def _connect_once(self, address: str, name: str | None) -> None:
         self._set(status="connecting", address=address, error=None)
@@ -122,10 +161,22 @@ class SkellyService:
         self.profile = by_ble_name(name or self.state.name)
         self._set(status="connected", name=name or self.state.name, profile=self.profile.key)
         self.bus.publish("profile", self.profile.to_dict())
-        asyncio.create_task(self.refresh_all())
+        if (self.settings.last_address, self.settings.last_name) != (address, self.state.name):
+            self.settings.last_address, self.settings.last_name = address, self.state.name
+            self.settings.save()
+        asyncio.create_task(self._after_connect())
+
+    async def _after_connect(self) -> None:
+        await self.refresh_all()
+        if self.settings.auto_live_mode and not self.state.live_mode and self.link.connected:
+            try:
+                await self.enable_live_mode()
+            except (TimeoutError, ConnectionError) as exc:
+                log.info("auto Live Mode failed: %r", exc)
 
     async def disconnect(self) -> None:
         self._wanted = None
+        self._user_disconnected = True  # don't auto-connect straight back
         if self._reconnector:
             self._reconnector.cancel()
         await self.link.disconnect()

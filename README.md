@@ -21,15 +21,16 @@ stutters on small machines. Here:
 
 ## Run it
 
-**Recommended: a Linux mini PC with Docker** (Ubuntu Server 24.04 or Debian 12).
+**Recommended: a Linux mini PC** (Ubuntu Server 24.04 or Debian 12). One command
+sets everything up, including Bluetooth and Docker:
 
 ```bash
-sudo apt install bluez docker.io docker-compose-v2
 git clone https://github.com/WJDDesigns/supreme-skelly && cd supreme-skelly
-docker compose up -d
+./install.sh
 ```
 
-Then open `http://<mini-pc-ip>:8420`.
+Then open `http://<mini-pc-name>.local:8420` on your phone. Switch Skelly on and
+it connects by itself; after a reboot everything comes back on its own.
 
 Docker Desktop on Windows can't reach the PC's Bluetooth radio, so on Windows
 run it natively instead:
@@ -46,12 +47,15 @@ supreme-skelly
 |---|---|---|
 | `SKELLY_PORT` | `8420` | Web UI / API port |
 | `SKELLY_SIMULATE` | `0` | `1` = fake device for testing |
+| `SKELLY_AUTOCONNECT` | `1` | Find and connect to Skelly automatically |
+| `SKELLY_DATA_DIR` | `~/.local/share/supreme-skelly` | Where settings are kept (`/data` in Docker) |
 | `SKELLY_LOG_LEVEL` | `INFO` | |
 
 ## Status
 
 | Area | State |
 |---|---|
+| Plug and play: one-command install, auto-connect, starts on boot | ✅ |
 | Scan, connect, auto-reconnect, device info | ✅ |
 | Movement, eyes, lights, volume, Live Mode switch | ✅ |
 | Sound list and playback | ✅ |

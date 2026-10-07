@@ -64,7 +64,7 @@ $("#conn-pill").addEventListener("click", () => showTab("device"));
 // ---------- rendering ----------
 const STATUS_TEXT = {
   disconnected: "Not connected",
-  scanning: "Scanning…",
+  scanning: "Looking for Skelly…",
   connecting: "Connecting…",
   reconnecting: "Reconnecting…",
 };
@@ -198,6 +198,18 @@ $("#scan-btn").addEventListener("click", (ev) =>
 $("#disconnect-btn").addEventListener("click", (ev) => run(ev.currentTarget, () => api("/disconnect", {})));
 $("#live-btn").addEventListener("click", (ev) => run(ev.currentTarget, () => api("/live-mode", {}), "Live Mode on"));
 
+function renderSettings(st) {
+  if (!st) return;
+  state.settings = st;
+  $("#set-auto-connect").checked = st.auto_connect;
+  $("#set-auto-live").checked = st.auto_live_mode;
+}
+for (const [id, key] of [["set-auto-connect", "auto_connect"], ["set-auto-live", "auto_live_mode"]]) {
+  $(`#${id}`).addEventListener("change", (e) =>
+    run(null, async () => renderSettings(await api("/settings", { [key]: e.target.checked }, "PATCH")), "Saved"),
+  );
+}
+
 // ---------- controls tab ----------
 $("#moves-apply").addEventListener("click", (ev) =>
   run(ev.currentTarget, () => api("/movement", { parts: [...state.moves] }),
@@ -245,6 +257,7 @@ $("#files-refresh").addEventListener("click", (ev) => run(ev.currentTarget, () =
 function applySnapshot(s) {
   state.device = s.device;
   state.profile = s.profile;
+  renderSettings(s.settings);
   renderProfile();
   renderDevice();
 }
@@ -255,6 +268,7 @@ function connectEvents() {
     const msg = JSON.parse(m.data);
     if (msg.type === "snapshot") applySnapshot(msg.data);
     else if (msg.type === "state") { state.device = msg.data; renderDevice(); }
+    else if (msg.type === "settings") renderSettings(msg.data);
     else if (msg.type === "profile") { state.profile = msg.data; state.moves.clear(); state.mode = null; renderProfile(); }
   };
   ws.onclose = () => setTimeout(connectEvents, 1500);
