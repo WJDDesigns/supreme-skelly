@@ -151,6 +151,9 @@ class SkellyService:
 
     async def _autoconnect_loop(self) -> None:
         """Plug and play: keep looking for the last (or any) supported prop until connected."""
+        release = getattr(self.link, "release_stale", None)
+        if release and self.settings.last_address and not self.link.connected:
+            await release(self.settings.last_address)
         while True:
             idle = self.state.status == "disconnected" and not self.link.connected
             if idle and self.settings.auto_connect and not self._user_disconnected:

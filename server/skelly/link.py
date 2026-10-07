@@ -36,6 +36,40 @@ class Link(Protocol):
     def mtu(self) -> int: ...
 
 
+async def _bluez_unstick(address: str | None = None) -> None:
+    """Clear BlueZ state left behind when a previous run died mid-scan or mid-connect.
+
+    BlueZ then answers every new scan or connect with "InProgress" until the
+    stale discovery is stopped or the half-open device connection is dropped.
+    """
+    from dbus_fast import BusType
+    from dbus_fast.aio import MessageBus
+
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    try:
+        intro = await bus.introspect("org.bluez", "/org/bluez")
+        for node in intro.nodes:
+            path = f"/org/bluez/{node.name}"
+            obj = bus.get_proxy_object("org.bluez", path, await bus.introspect("org.bluez", path))
+            try:
+                await obj.get_interface("org.bluez.Adapter1").call_stop_discovery()
+            except Exception:  # not discovering: fine
+                pass
+            if address:
+                dev = f"{path}/dev_{address.replace(':', '_').upper()}"
+                try:
+                    dobj = bus.get_proxy_object("org.bluez", dev, await bus.introspect("org.bluez", dev))
+                    await dobj.get_interface("org.bluez.Device1").call_disconnect()
+                except Exception:  # adapter doesn't know this device
+                    pass
+    finally:
+        bus.disconnect()
+
+
+def _in_progress(exc: Exception) -> bool:
+    return "InProgress" in str(exc)
+
+
 class BleakLink:
     """BLE via bleak. Works with BlueZ on Linux (also macOS/Windows for dev)."""
 
@@ -58,7 +92,14 @@ class BleakLink:
     async def scan(self, timeout: float = 6.0) -> list[Found]:
         from bleak import BleakScanner
 
-        found = await BleakScanner.discover(timeout=timeout, return_adv=True, **self._kw)
+        try:
+            found = await BleakScanner.discover(timeout=timeout, return_adv=True, **self._kw)
+        except Exception as exc:
+            if not _in_progress(exc):
+                raise
+            log.info("BlueZ was stuck mid-scan; clearing it and scanning again")
+            await _bluez_unstick()
+            found = await BleakScanner.discover(timeout=timeout, return_adv=True, **self._kw)
         out = [
             Found(dev.address, adv.local_name or dev.name or "", adv.rssi)
             for dev, adv in found.values()
@@ -74,9 +115,24 @@ class BleakLink:
                 self.on_disconnect()
 
         client = BleakClient(address, disconnected_callback=_gone, timeout=15.0, **self._kw)
-        await client.connect()
+        try:
+            await client.connect()
+        except Exception as exc:
+            if not _in_progress(exc):
+                raise
+            log.info("BlueZ was stuck mid-connect; clearing it and connecting again")
+            await _bluez_unstick(address)
+            client = BleakClient(address, disconnected_callback=_gone, timeout=15.0, **self._kw)
+            await client.connect()
         await client.start_notify(proto.NOTIFY_UUID, lambda _c, data: self.on_notify and self.on_notify(bytes(data)))
         self._client = client
+
+    async def release_stale(self, address: str) -> None:
+        """Drop a link a previous run left open; Skelly stops advertising while it exists."""
+        try:
+            await _bluez_unstick(address)
+        except Exception as exc:  # no BlueZ (macOS/Windows dev) or nothing to clear
+            log.debug("release_stale: %s", exc)
 
     async def disconnect(self) -> None:
         client, self._client = self._client, None
