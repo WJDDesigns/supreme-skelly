@@ -35,6 +35,12 @@ SECRETS: dict[str, dict] = {
         "url": "https://console.anthropic.com/settings/keys",
         "how": "Sign in to the Console (separate from a claude.ai plan), click Create Key and copy it.",
     },
+    "protect_api_key": {
+        "label": "UniFi Protect API key",
+        "used_for": "Sharp face crops and detections from your Protect cameras",
+        "url": "https://unifi.ui.com",
+        "how": "In UniFi OS on the Protect console: Settings > Control Plane > Integrations, create an API key.",
+    },
     "rtsp_url": {
         "label": "Camera stream address (RTSP)",
         "used_for": "Vision, e.g. a UniFi Protect camera's RTSPS link",
