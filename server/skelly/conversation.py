@@ -133,6 +133,7 @@ class Conversation:
         self.state = ConversationState()
         self._task: asyncio.Task | None = None
         self._last_heard = 0.0
+        self.scene_context: Callable[[], str] | None = None  # background about the yard and display
         self._context: list[str] = []
         self.output_sink: str | None = None  # where his voice is playing, for the speaker meter
         self.on_user_text: Callable[[str], None] | None = None  # e.g. listening for names
@@ -156,7 +157,13 @@ class Conversation:
             return self.snapshot()
         cfg = ConversationConfig.from_dict(self._config())
         self._check_keys(cfg)
-        self._context = [context] if context else []
+        scene = ""
+        if self.scene_context:
+            try:
+                scene = self.scene_context()
+            except Exception as exc:
+                log.info("no scene context: %r", exc)
+        self._context = [c for c in (scene, context) if c]
         self.state = ConversationState(state="connecting", provider=cfg.provider, started_at=time.time())
         self._publish()
         self._task = asyncio.create_task(self._run(cfg), name="skelly-conversation")

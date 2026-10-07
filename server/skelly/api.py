@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio, audio_io, recorder, speaker, system, voices
+from . import audio, audio_io, recorder, scene, speaker, system, voices
 from . import protocol as proto
 from .conversation import (
     Conversation,
@@ -157,6 +157,8 @@ def create_app(
             resolve_output)
         app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor, on_known)
         app.state.conv.on_user_text = on_user_text
+        app.state.scene = scene.Scene()
+        app.state.conv.scene_context = app.state.scene.context
         app.state.recorder = recorder.Recorder()
         app.state.costumes_mentioned = set()
         costume_task = asyncio.create_task(costume_watch())
@@ -973,6 +975,60 @@ def create_app(
     @app.post("/api/playlist/skip")
     async def playlist_skip():
         return app.state.playlist.skip()
+
+    # -- the yard and display, from photos ------------------------------------
+
+    @app.get("/api/scene")
+    async def scene_list():
+        return app.state.scene.load()
+
+    @app.post("/api/scene")
+    async def scene_add(file: Annotated[UploadFile, File()]):
+        """Add a photo of the yard or display; the AI describes it for Skelly."""
+        raw = await file.read(25 * 1024 * 1024 + 1)
+        if len(raw) > 25 * 1024 * 1024:
+            raise HTTPException(413, "That photo is too big (25 MB max)")
+        try:
+            item = await asyncio.to_thread(app.state.scene.add, raw)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return await scene_describe(item["id"])
+
+    @app.post("/api/scene/{photo_id}/describe")
+    async def scene_describe(photo_id: str):
+        sc = app.state.scene
+        if not sc.path(photo_id).exists():
+            raise HTTPException(404, "No such photo")
+        try:
+            text = await scene.describe_photo(app.state.vault, sc.path(photo_id).read_bytes())
+        except Exception as exc:
+            log.info("describing a scene photo failed: %r", exc)
+            text = ""
+        item = sc.update(photo_id, description=text) if text else next(
+            (it for it in sc.load() if it["id"] == photo_id), {})
+        if not text:
+            item = {**item, "warning": "Couldn't describe it automatically (needs a Claude or OpenAI key)."
+                                       " Write what's in it yourself."}
+        return item
+
+    @app.put("/api/scene/{photo_id}")
+    async def scene_edit(photo_id: str, body: dict):
+        try:
+            return app.state.scene.update(photo_id, **body)
+        except KeyError as exc:
+            raise HTTPException(404, "No such photo") from exc
+
+    @app.delete("/api/scene/{photo_id}")
+    async def scene_remove(photo_id: str):
+        app.state.scene.remove(photo_id)
+        return app.state.scene.load()
+
+    @app.get("/api/scene/{photo_id}.jpg")
+    async def scene_photo(photo_id: str):
+        path = app.state.scene.path(photo_id)
+        if not path.exists():
+            raise HTTPException(404, "No such photo")
+        return FileResponse(path, media_type="image/jpeg")
 
     @app.post("/api/sounds/upload", status_code=202)
     async def upload_sound(file: Annotated[UploadFile, File()], name: Annotated[str, Form()] = "",

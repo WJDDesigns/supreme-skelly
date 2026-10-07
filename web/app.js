@@ -1318,3 +1318,41 @@ api("/voices").then(({ options, kokoro_ready }) => {
       el("div", {}, el("div", { className: "name", textContent: o.label }), meta)), el("div", { className: "end" }, play));
   }));
 }).catch(() => {});
+
+// ---------- Skelly's surroundings (photos of the yard and display) ----------
+async function loadScene() {
+  const items = await api("/scene").catch(() => []);
+  $("#scene-list").replaceChildren(...items.map((it) => {
+    const img = el("img", { src: `/api/scene/${it.id}.jpg?${it.added}`, alt: "", loading: "lazy" });
+    const desc = el("textarea", { rows: 3, value: it.description || "", placeholder: "What's in this photo" });
+    const note = el("input", { type: "text", value: it.note || "", placeholder: "Your note (optional)" });
+    let t;
+    const save = () => { clearTimeout(t); t = setTimeout(() => api(`/scene/${it.id}`, { description: desc.value, note: note.value }, "PUT").catch((e) => toast(e.message, true)), 700); };
+    desc.addEventListener("input", save);
+    note.addEventListener("input", save);
+    const redo = el("button", { className: "btn outline small", textContent: "Describe again" });
+    redo.addEventListener("click", () => run(redo, async () => { const r = await api(`/scene/${it.id}/describe`, {}); if (r.warning) toast(r.warning, true); loadScene(); }));
+    const del = el("button", { className: "btn outline small danger", textContent: "Remove" });
+    del.addEventListener("click", () => run(del, async () => { await api(`/scene/${it.id}`, undefined, "DELETE"); loadScene(); }));
+    return el("li", { className: "scene-item" }, img, el("div", { className: "scene-text" }, desc, note, el("div", { className: "row-btns" }, redo, del)));
+  }));
+}
+$("#scene-file").addEventListener("change", async (e) => {
+  const files = [...e.target.files];
+  e.target.value = "";
+  const btn = $("#scene-add-btn");
+  btn.classList.add("busy");
+  for (const [i, f] of files.entries()) {
+    $("#scene-hint").textContent = `Looking at photo ${i + 1} of ${files.length}…`;
+    const form = new FormData();
+    form.append("file", f);
+    const res = await fetch("/api/scene", { method: "POST", body: form });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) toast(typeof j.detail === "string" ? j.detail : `Upload failed (${res.status})`, true);
+    else if (j.warning) toast(j.warning, true);
+    await loadScene();
+  }
+  btn.classList.remove("busy");
+  $("#scene-hint").textContent = "Skelly will use these in his next conversation.";
+});
+loadScene();

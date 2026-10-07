@@ -668,3 +668,13 @@ a.btn { text-decoration: none; color: inherit; }
 .chip.costume { cursor: default; background: var(--accent-soft); border-color: rgba(255,138,0,.35); color: var(--accent-2); }
 
 .slider[hidden] { display: none; }
+
+/* Skelly's surroundings */
+.scene-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
+.scene-item { display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: start; }
+.scene-item img { width: 120px; height: 90px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line, #333); }
+.scene-text { display: grid; gap: 6px; min-width: 0; }
+.scene-text textarea, .scene-text input { width: 100%; box-sizing: border-box; }
+.scene-text .row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+#scene-add-btn.busy { opacity: .6; pointer-events: none; }
+@media (max-width: 520px) { .scene-item { grid-template-columns: 1fr; } .scene-item img { width: 100%; height: 160px; } }

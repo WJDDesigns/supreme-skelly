@@ -333,6 +333,13 @@
             <ul id="recordings" class="list"></ul>
           </div>
           <div class="card">
+            <div class="card-head"><div><h2>Skelly's surroundings</h2><p class="muted">Photos of the yard and your display, so he can talk about them</p></div>
+              <label class="btn outline small" id="scene-add-btn"><svg><use href="#i-upload"/></svg>Add photos
+                <input type="file" id="scene-file" accept="image/*" multiple hidden></label></div>
+            <p class="muted small" id="scene-hint">The AI describes each photo for Skelly. Add a note for anything it can't see, like "the witch cackles when you walk by".</p>
+            <ul id="scene-list" class="scene-list"></ul>
+          </div>
+          <div class="card">
             <div class="card-head"><div><h2>Voice test</h2><p class="muted">Hear the same line in each voice, through Skelly</p></div></div>
             <label class="field-row stack">Line<input type="text" id="vt-text" value="Well hello there! Come closer, I don't bite... much."></label>
             <label class="slider">Kokoro speed <output id="vt-speed-out">1.15×</output>
