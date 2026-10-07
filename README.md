@@ -21,7 +21,19 @@ stutters on small machines. Here:
 
 ## Run it
 
-**Recommended: a Linux mini PC** (Ubuntu Server 24.04 or Debian 12). One command
+**Fresh mini PC, hands-free:** build a USB installer that wipes the box and sets
+up Ubuntu Server, Bluetooth, Docker and Supreme Skelly with no questions asked:
+
+```bash
+cd deploy/usb && ./make-usb-image.sh     # needs xorriso (brew install xorriso)
+```
+
+Flash `supreme-skelly-installer.iso` to a USB stick (e.g. balenaEtcher), boot the
+mini PC from it (F7 on Beelink), and a few minutes after it reboots open
+`http://skelly.local:8420`. Remote access: `ssh skelly@skelly.local`
+(password `skelly`; change it with `passwd`).
+
+**Already running Linux** (Ubuntu Server 24.04 or Debian 12). One command
 sets everything up, including Bluetooth and Docker:
 
 ```bash
