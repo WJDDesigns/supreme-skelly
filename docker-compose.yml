@@ -28,5 +28,6 @@ services:
       - SKELLY_SIMULATE=0
       # Also serve the UI on port 80, so http://skelly.local works without ":8420".
       - SKELLY_EXTRA_PORTS=80
-      # Which Bluetooth radio to use (hci0, hci1...). Empty = the system default.
+      # Which Bluetooth radio to use: its MAC (stays put across reboots) or hci0, hci1...
+      # Set it whenever the box has more than one radio; the default then picks unreliably.
       - SKELLY_BT_ADAPTER=${SKELLY_BT_ADAPTER:-}

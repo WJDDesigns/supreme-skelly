@@ -70,6 +70,27 @@ async def _bluez_unstick(address: str | None = None) -> None:
         bus.disconnect()
 
 
+async def _restart_bluez() -> None:
+    """Last resort: restart the host's bluetoothd over systemd's D-Bus API.
+
+    After the app is killed mid-scan BlueZ can keep answering "InProgress" even
+    once discovery is stopped and the adapters are power-cycled; only a fresh
+    bluetoothd clears it.
+    """
+    from dbus_fast import BusType
+    from dbus_fast.aio import MessageBus
+
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    try:
+        path = "/org/freedesktop/systemd1"
+        obj = bus.get_proxy_object("org.freedesktop.systemd1", path,
+                                   await bus.introspect("org.freedesktop.systemd1", path))
+        await obj.get_interface("org.freedesktop.systemd1.Manager").call_restart_unit("bluetooth.service", "replace")
+    finally:
+        bus.disconnect()
+    await asyncio.sleep(4)  # adapters re-register and power on
+
+
 def _in_progress(exc: Exception) -> bool:
     return "InProgress" in str(exc)
 
@@ -81,9 +102,31 @@ class BleakLink:
         self.on_notify = None
         self.on_disconnect = None
         self._client = None
-        # e.g. "hci1" to use a USB dongle instead of the built-in radio; None = system default.
+        # "hci1", or an adapter's MAC (stable across reboots, unlike hciN numbering).
+        # None = BlueZ's default, which is unreliable once a second radio is plugged in.
         self.adapter = adapter or os.environ.get("SKELLY_BT_ADAPTER") or None
-        self._kw = {"adapter": self.adapter} if self.adapter else {}
+        self._kw = {"adapter": self.adapter} if self.adapter and ":" not in self.adapter else {}
+
+    async def _resolve_adapter(self) -> None:
+        """Turn an adapter MAC into its current hciN name, once."""
+        if not self.adapter or ":" not in self.adapter or self._kw:
+            return
+        from dbus_fast import BusType
+        from dbus_fast.aio import MessageBus
+
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        try:
+            for node in (await bus.introspect("org.bluez", "/org/bluez")).nodes:
+                path = f"/org/bluez/{node.name}"
+                props = bus.get_proxy_object("org.bluez", path, await bus.introspect("org.bluez", path))
+                addr = await props.get_interface("org.bluez.Adapter1").get_address()
+                if addr.upper() == self.adapter.upper():
+                    self._kw = {"adapter": node.name}
+                    log.info("using Bluetooth adapter %s (%s)", node.name, addr)
+                    return
+        finally:
+            bus.disconnect()
+        log.warning("Bluetooth adapter %s not found; using the default", self.adapter)
 
     @property
     def connected(self) -> bool:
@@ -96,6 +139,7 @@ class BleakLink:
     async def scan(self, timeout: float = 6.0) -> list[Found]:
         from bleak import BleakScanner
 
+        await self._resolve_adapter()
         try:
             found = await BleakScanner.discover(timeout=timeout, return_adv=True, **self._kw)
         except Exception as exc:
@@ -103,7 +147,14 @@ class BleakLink:
                 raise
             log.info("BlueZ was stuck mid-scan; clearing it and scanning again")
             await _bluez_unstick()
-            found = await BleakScanner.discover(timeout=timeout, return_adv=True, **self._kw)
+            try:
+                found = await BleakScanner.discover(timeout=timeout, return_adv=True, **self._kw)
+            except Exception as again:
+                if not _in_progress(again):
+                    raise
+                log.warning("BlueZ is still stuck; restarting bluetoothd")
+                await _restart_bluez()
+                found = await BleakScanner.discover(timeout=timeout, return_adv=True, **self._kw)
         out = [
             Found(dev.address, adv.local_name or dev.name or "", adv.rssi)
             for dev, adv in found.values()
@@ -118,6 +169,7 @@ class BleakLink:
             if self.on_disconnect:
                 self.on_disconnect()
 
+        await self._resolve_adapter()
         client = BleakClient(address, disconnected_callback=_gone, timeout=15.0, **self._kw)
         try:
             await client.connect()
