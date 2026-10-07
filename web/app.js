@@ -737,6 +737,9 @@ function secretRow(v) {
     el("div", { className: "who" },
       el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-key"/></svg>' }),
       el("div", {}, el("div", { className: "name", textContent: v.label }), el("div", { className: "meta", textContent: v.used_for }))),
+    v.how ? el("div", { className: "secret-how" },
+      el("span", { textContent: v.how }),
+      el("a", { className: "btn outline small", href: v.url, target: "_blank", rel: "noopener", textContent: "Get it ↗" })) : "",
     el("div", { className: "secret-edit" }, input, save), end);
 }
 function renderVault() {

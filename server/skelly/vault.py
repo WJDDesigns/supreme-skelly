@@ -17,13 +17,30 @@ log = logging.getLogger(__name__)
 
 # What the Settings page offers, in display order. Anything else is refused.
 SECRETS: dict[str, dict] = {
-    "elevenlabs_api_key": {"label": "ElevenLabs API key",
-                           "used_for": "ElevenLabs conversations, voices and speech-to-text"},
-    "openai_api_key": {"label": "OpenAI API key",
-                       "used_for": "OpenAI Realtime conversations, voices and speech-to-text"},
-    "anthropic_api_key": {"label": "Anthropic API key", "used_for": "Claude conversations and scene descriptions"},
-    "rtsp_url": {"label": "Camera stream address (RTSP)",
-                 "used_for": "Vision, e.g. a UniFi Protect camera's RTSPS link"},
+    "elevenlabs_api_key": {
+        "label": "ElevenLabs API key",
+        "used_for": "ElevenLabs conversations, voices and speech-to-text",
+        "url": "https://elevenlabs.io/app/settings/api-keys",
+        "how": "Sign in, open API Keys, click Create API Key, give it a name and copy it.",
+    },
+    "openai_api_key": {
+        "label": "OpenAI API key",
+        "used_for": "OpenAI Realtime conversations, voices and speech-to-text",
+        "url": "https://platform.openai.com/api-keys",
+        "how": "Sign in, click Create new secret key and copy it. API use needs credit on the account.",
+    },
+    "anthropic_api_key": {
+        "label": "Anthropic API key",
+        "used_for": "Claude conversations and scene descriptions",
+        "url": "https://console.anthropic.com/settings/keys",
+        "how": "Sign in to the Console (separate from a claude.ai plan), click Create Key and copy it.",
+    },
+    "rtsp_url": {
+        "label": "Camera stream address (RTSP)",
+        "used_for": "Vision, e.g. a UniFi Protect camera's RTSPS link",
+        "url": "https://unifi.ui.com",
+        "how": "In Protect open the camera, then Settings > Advanced > RTSP, turn on a stream and copy its link.",
+    },
 }
 
 
