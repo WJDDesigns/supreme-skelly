@@ -46,12 +46,14 @@ fi
 echo "==> Adding the unattended setup to the boot menu"
 xorriso -osirrox on -indev "$ISO_NAME" -extract /boot/grub/grub.cfg "$WORK/grub.cfg" >/dev/null 2>&1
 chmod u+w "$WORK/grub.cfg"
-# Boot straight into the unattended install after 3 seconds.
+# Boot straight into the unattended install after 3 seconds. The seed path is quoted
+# because GRUB ends a command at a bare ";", which drops the path and leaves the
+# installer asking questions.
 sed -i.bak \
   -e 's/^set timeout=.*/set timeout=3/' \
-  -e 's|linux\(.*\)/casper/vmlinuz  *---|linux\1/casper/vmlinuz autoinstall ds=nocloud\;s=/cdrom/nocloud/ ---|' \
+  -e 's|linux\(.*\)/casper/vmlinuz  *---|linux\1/casper/vmlinuz autoinstall "ds=nocloud;s=/cdrom/nocloud/" ---|' \
   "$WORK/grub.cfg"
-grep -q 'autoinstall ds=nocloud' "$WORK/grub.cfg" || { echo "Couldn't patch grub.cfg" >&2; exit 1; }
+grep -qF 'autoinstall "ds=nocloud;s=/cdrom/nocloud/"' "$WORK/grub.cfg" || { echo "Couldn't patch grub.cfg" >&2; exit 1; }
 
 echo "==> Writing $OUT"
 rm -f "$OUT"
