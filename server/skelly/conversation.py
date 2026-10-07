@@ -420,7 +420,8 @@ class Conversation:
         async with connect(url, additional_headers=headers, max_size=None, open_timeout=15) as ws:
             await ws.send(json.dumps({"type": "session.update", "session": {
                 "type": "realtime",
-                "instructions": f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n{talk_rule(cfg.talk_amount)}",
+                "instructions": (f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n"
+                                 f"{talk_rule(cfg.talk_amount)}"),
                 "audio": {
                     "input": {"format": {"type": "audio/pcm", "rate": rate},
                               "turn_detection": {"type": "server_vad"},
@@ -553,7 +554,8 @@ class Conversation:
                       history: list[dict]) -> str:
         """Streams Claude's reply and speaks it sentence by sentence as it arrives."""
         body = {"model": cfg.claude_model, "max_tokens": MAX_TOKENS.get(cfg.talk_amount, 200),
-                "system": f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n{SPOKEN_RULES} {talk_rule(cfg.talk_amount)}",
+                "system": (f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n{SPOKEN_RULES} "
+                           f"{talk_rule(cfg.talk_amount)}"),
                 "messages": history, "stream": True}
         headers = {"x-api-key": self.vault.get("anthropic_api_key"), "anthropic-version": "2023-06-01",
                    "content-type": "application/json"}
