@@ -189,6 +189,7 @@ _NOT_NAMES = set("""
 a an the here just so not very really good fine okay ok sorry happy hungry scared tired cold hot
 going gonna looking trying from with your you a skeleton ghost witch kid boy girl new back fine
 great doing well alright sure ready done excited spooky dressed wearing over about only still
+skelly skeleton bones mister mr
 """.split())
 
 
