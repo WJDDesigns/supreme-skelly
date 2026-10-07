@@ -721,6 +721,7 @@ function renderVisionCfg() {
     if (i.type === "checkbox") i.checked = !!v; else if (v != null) i.value = v;
   });
   $("#sens-out").textContent = visionCfg.sensitivity ?? 50;
+  if (typeof renderIgnore === "function" && $("#ignore-chips")) setTimeout(renderIgnore);
 }
 let vTimer;
 function saveVisionCfg(patch) {
@@ -741,7 +742,26 @@ $("#cam-describe").addEventListener("click", (ev) =>
     $("#cam-desc").hidden = false;
     $("#cam-desc").textContent = `${r.people ? `${r.people} ${r.people === 1 ? "person" : "people"}. ` : "Nobody there. "}${r.description ?? ""}`;
   }));
-api("/vision").then((r) => { visionCfg = r.config; cams = r.cameras; renderVisionCfg(); renderVision(r.state); renderZones(); }).catch(() => {});
+let ignorable = {};
+api("/vision").then((r) => { visionCfg = r.config; cams = r.cameras; ignorable = r.ignorable ?? {}; renderVisionCfg(); renderVision(r.state); renderZones(); renderIgnore(); }).catch(() => {});
+
+// "Don't react to" chips: the AI check tells these apart and they don't count as visitors.
+function renderIgnore() {
+  const on = new Set(visionCfg.ignore ?? []);
+  const needsAi = !visionCfg.ai_check;
+  $("#ignore-chips").replaceChildren(...Object.entries(ignorable).map(([key, label]) => {
+    const c = el("button", { className: "chip", textContent: label });
+    c.setAttribute("aria-pressed", on.has(key));
+    c.disabled = needsAi && key !== "weather";
+    c.title = c.disabled ? "Needs Check with AI" : "";
+    c.addEventListener("click", () => {
+      on.has(key) ? on.delete(key) : on.add(key);
+      saveVisionCfg({ ignore: [...on] });
+      renderIgnore();
+    });
+    return c;
+  }));
+}
 
 // ---------- ignored areas (Skelly himself, flags, trees) ----------
 const camKey = () => (visionCfg.source === "rtsp" ? "rtsp" : visionCfg.usb_device);

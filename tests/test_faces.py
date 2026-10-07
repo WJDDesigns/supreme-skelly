@@ -23,3 +23,17 @@ def test_memory_matches_and_forgets(tmp_path):
     assert (tmp_path / "faces.json").stat().st_mode & 0o777 == 0o600
     mem.forget(None)
     assert FaceMemory(tmp_path / "faces.json").people == []
+
+
+def test_ignore_chips():
+    from skelly.vision import worth_a_visit
+
+    default = ["vehicles", "weather", "passers"]
+    assert worth_a_visit({"people": 1, "approaching": True}, default)
+    assert not worth_a_visit({"people": 1, "approaching": False}, default)
+    assert worth_a_visit({"people": 1, "approaching": False}, ["vehicles"])
+    assert not worth_a_visit({"vehicles": 1}, default)
+    assert worth_a_visit({"vehicles": 1}, [])
+    assert worth_a_visit({"animals": 1}, default)
+    assert not worth_a_visit({"animals": 1}, ["animals"])
+    assert not worth_a_visit({}, default)  # nothing identifiable: shadows/weather

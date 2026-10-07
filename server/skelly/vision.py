@@ -36,6 +36,8 @@ class VisionConfig:
     auto_converse: bool = False  # start a conversation when a visitor is confirmed
     cooldown_s: int = 90  # minimum gap between visitor events
     faces: bool = False  # recognise faces and remember people who say their name
+    # What shouldn't set Skelly off, checked by the AI (see IGNORABLE).
+    ignore: list = field(default_factory=lambda: ["vehicles", "weather", "passers"])
     # Areas to ignore, per camera ("rtsp" or the USB device path): [[x, y, w, h], ...] as
     # fractions of the picture. Skelly himself goes here so his moving doesn't count.
     zones: dict = field(default_factory=dict)
@@ -64,6 +66,16 @@ class VisionState:
     description: str | None = None
     fps: float = 0.0
     faces: list = field(default_factory=list)  # faces in view right now (Seen.public)
+
+
+# Things the AI can tell apart when motion is spotted; any of them can be ignored.
+IGNORABLE = {
+    "vehicles": "Cars & trucks",
+    "passers": "People walking past",
+    "animals": "Animals & pets",
+    "bikes": "Bikes & scooters",
+    "weather": "Shadows, light & weather",
+}
 
 
 def list_cameras() -> list[dict]:
@@ -304,7 +316,11 @@ class Vision:
             if prev is not None:
                 changed = sum(1 for i in keep if abs(thumb[i] - prev[i]) > 24) / counted
                 self.state.motion = round(changed, 3)
-                busy_frames = busy_frames + 1 if changed > threshold else 0
+                # Most of the picture changing at once is a cloud, headlights or the camera's
+                # night switch, not someone walking up.
+                lighting = changed > 0.6
+                counts = changed > threshold and not (lighting and "weather" in cfg.ignore)
+                busy_frames = busy_frames + 1 if counts else 0
                 if busy_frames >= max(2, cfg.fps // 2):  # half a second of movement
                     busy_frames = 0
                     asyncio.create_task(self._maybe_visitor(cfg))
@@ -327,8 +343,8 @@ class Vision:
                 log.info("visitor check failed: %r", exc)
                 verdict = None
             if verdict is not None:
-                if not verdict.get("people"):
-                    self.state.last_visitor_at = None  # just leaves blowing about; stay ready
+                if not worth_a_visit(verdict, cfg.ignore):
+                    self.state.last_visitor_at = None  # a car, leaves blowing about...: stay ready
                     return
                 description = verdict.get("description")
         self.state.visitor = True
@@ -367,9 +383,28 @@ async def blackout(jpeg: bytes, zones: list[list[float]]) -> bytes:
 SEE_PROMPT = (
     "You are the eyes of a talking Halloween skeleton. Look at this camera frame. Skeletons, statues, "
     "inflatables and other Halloween decorations are props, not people; black areas are hidden on purpose. "
-    'Reply with JSON only: {"people": <number of real people>, "description": "<one short sentence about '
-    'them a skeleton could joke about: costumes, clothes colours, pets, what they hold>"}.'
+    "Reply with JSON only: "
+    '{"people": <number of real people>, "approaching": <true if any of them is coming towards the camera or '
+    'standing near it, false if they are only walking or driving past>, "animals": <number>, "vehicles": '
+    '<number of moving or arriving cars/trucks>, "bikes": <number of bikes or scooters>, '
+    '"description": "<one short sentence about the people (or animals) a skeleton could joke about: '
+    'costumes, clothes colours, pets, what they hold>"}.'
 )
+
+
+def worth_a_visit(verdict: dict, ignore: list[str]) -> bool:
+    """Whether what the AI saw should set Skelly off, given the ignore chips."""
+    people = int(verdict.get("people") or 0)
+    if people and ("passers" not in ignore or verdict.get("approaching", True)):
+        return True
+    if int(verdict.get("animals") or 0) and "animals" not in ignore:
+        return True
+    if int(verdict.get("vehicles") or 0) and "vehicles" not in ignore:
+        return True
+    if int(verdict.get("bikes") or 0) and "bikes" not in ignore:
+        return True
+    return not people and "weather" not in ignore and not any(
+        int(verdict.get(k) or 0) for k in ("animals", "vehicles", "bikes"))
 
 FIND_PROMPT = (
     "This image is {w}x{h} pixels. It shows a life-size Halloween skeleton decoration (an animatronic prop). "

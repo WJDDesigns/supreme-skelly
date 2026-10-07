@@ -618,3 +618,7 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 .people .p-name { font-weight: 600; color: var(--bone); }
 .people .meta { color: var(--muted); font-size: .78rem; }
 .p-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+
+.chips.small .chip { font-size: .85rem; padding: 8px 14px; }
+.chips.small .chip:disabled { opacity: .4; cursor: not-allowed; }
+.ignore-field { margin: 12px 0 6px; }

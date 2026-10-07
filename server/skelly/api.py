@@ -32,7 +32,7 @@ from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings
 from .vault import Vault
-from .vision import Vision, VisionConfig, describe, find_skelly, list_cameras
+from .vision import IGNORABLE, Vision, VisionConfig, describe, find_skelly, list_cameras
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 log = logging.getLogger(__name__)
@@ -500,7 +500,7 @@ def create_app(
 
     @app.get("/api/vision")
     async def vision_state():
-        return {"state": app.state.vision.snapshot(), "cameras": list_cameras(),
+        return {"state": app.state.vision.snapshot(), "cameras": list_cameras(), "ignorable": IGNORABLE,
                 "config": {**vars(VisionConfig()), **svc().settings.vision}}
 
     @app.put("/api/vision/config")
