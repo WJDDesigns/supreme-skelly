@@ -91,6 +91,47 @@ async def _restart_bluez() -> None:
     await asyncio.sleep(4)  # adapters re-register and power on
 
 
+_VENDORS = {"8087": "Intel", "0bda": "Realtek", "0a12": "CSR", "0b05": "ASUS", "2357": "TP-Link",
+            "0a5c": "Broadcom", "13d3": "IMC", "04ca": "Lite-On", "0cf3": "Qualcomm", "2b89": "UGREEN"}
+
+
+def _sysfs_info(name: str) -> dict:
+    """Vendor, product and whether the radio hangs off a hub (a plug-in dongle) or the board."""
+    from pathlib import Path
+
+    try:
+        usb = (Path("/sys/class/bluetooth") / name / "device").resolve().parent
+        read = lambda f: (usb / f).read_text().strip() if (usb / f).exists() else ""  # noqa: E731
+        vendor = read("idVendor")
+        port = usb.name  # e.g. "1-10" on the board, "1-3.1" behind a hub
+        return {"vendor": _VENDORS.get(vendor, read("manufacturer") or None),
+                "product": read("product") or None, "external": "." in port}
+    except OSError:
+        return {"vendor": None, "product": None, "external": False}
+
+
+async def _list_adapters() -> list[dict]:
+    from dbus_fast import BusType
+    from dbus_fast.aio import MessageBus
+
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    out = []
+    try:
+        for node in (await bus.introspect("org.bluez", "/org/bluez")).nodes:
+            path = f"/org/bluez/{node.name}"
+            ad = bus.get_proxy_object("org.bluez", path, await bus.introspect("org.bluez", path))
+            iface = ad.get_interface("org.bluez.Adapter1")
+            info = _sysfs_info(node.name)
+            kind = "USB adapter" if info["external"] else "Built-in"
+            label = " ".join(x for x in (info["vendor"], info["product"]) if x and x not in ("",))
+            out.append({"name": node.name, "address": (await iface.get_address()).upper(),
+                        "powered": await iface.get_powered(), "kind": kind,
+                        "label": f"{kind} ({label})" if label else kind})
+    finally:
+        bus.disconnect()
+    return sorted(out, key=lambda a: a["name"])
+
+
 def _in_progress(exc: Exception) -> bool:
     return "InProgress" in str(exc)
 
@@ -106,6 +147,18 @@ class BleakLink:
         # None = BlueZ's default, which is unreliable once a second radio is plugged in.
         self.adapter = adapter or os.environ.get("SKELLY_BT_ADAPTER") or None
         self._kw = {"adapter": self.adapter} if self.adapter and ":" not in self.adapter else {}
+
+    def set_adapter(self, adapter: str | None) -> None:
+        """Use this radio (MAC or hciN) from the next scan or connect on; None = the env default."""
+        self.adapter = adapter or os.environ.get("SKELLY_BT_ADAPTER") or None
+        self._kw = {"adapter": self.adapter} if self.adapter and ":" not in self.adapter else {}
+
+    @property
+    def adapter_in_use(self) -> str | None:
+        return self._kw.get("adapter")
+
+    async def list_adapters(self) -> list[dict]:
+        return await _list_adapters()
 
     async def _resolve_adapter(self) -> None:
         """Turn an adapter MAC into its current hciN name, once."""
@@ -240,6 +293,23 @@ class SimulatedLink:
 
     async def rssi(self) -> int | None:
         return -58 - (int(asyncio.get_running_loop().time()) * 7) % 9 if self._connected else None
+
+    adapter: str | None = None
+
+    def set_adapter(self, adapter: str | None) -> None:
+        self.adapter = adapter
+
+    @property
+    def adapter_in_use(self) -> str | None:
+        return {"AA:AA:AA:AA:AA:02": "hci1"}.get(self.adapter or "", "hci0")
+
+    async def list_adapters(self) -> list[dict]:
+        return [
+            {"name": "hci0", "address": "AA:AA:AA:AA:AA:01", "powered": True, "kind": "Built-in",
+             "label": "Built-in (Intel)"},
+            {"name": "hci1", "address": "AA:AA:AA:AA:AA:02", "powered": True, "kind": "USB adapter",
+             "label": "USB adapter (Realtek Bluetooth 6.0 Radio)"},
+        ]
 
     async def scan(self, timeout: float = 6.0) -> list[Found]:
         await asyncio.sleep(0.2)

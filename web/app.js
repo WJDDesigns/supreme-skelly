@@ -376,6 +376,40 @@ for (const [id, key] of [["set-auto-connect", "auto_connect"], ["set-auto-live",
   );
 }
 
+// ---------- Bluetooth radio ----------
+function renderAdapters(list) {
+  const ul = $("#adapters");
+  if (!list.length) {
+    ul.replaceChildren(el("li", {}, el("span", { className: "muted", textContent: "No Bluetooth radios found on the mini PC." })));
+    return;
+  }
+  ul.replaceChildren(
+    ...list.map((a) => {
+      const end = el("div", { className: "end" });
+      if (a.in_use) end.append(el("span", { className: "badge green", textContent: "In use" }));
+      if (!a.powered) end.append(el("span", { className: "badge red", textContent: "Off" }));
+      const btn = el("button", { className: a.in_use ? "btn outline" : "btn primary", textContent: a.in_use ? "Selected" : "Use this" });
+      btn.disabled = a.in_use;
+      btn.addEventListener("click", () =>
+        run(btn, async () => {
+          renderAdapters(await api("/adapter", { address: a.address }));
+          setTimeout(loadAdapters, 8000);  // shows the reconnect through the new radio
+        }, `Switching to ${a.kind.toLowerCase()}. Skelly will reconnect in a few seconds.`),
+      );
+      end.append(btn);
+      return el("li", {},
+        el("div", { className: "who" },
+          el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-bt"/></svg>' }),
+          el("div", {}, el("div", { className: "name", textContent: a.label }),
+            el("div", { className: "meta", textContent: `${a.name} · ${a.address}` }))),
+        end);
+    }),
+  );
+}
+const loadAdapters = () => api("/adapters").then(renderAdapters).catch(() => {});
+$("#adapters-refresh").addEventListener("click", (ev) => run(ev.currentTarget, loadAdapters));
+loadAdapters();
+
 // ---------- controls tab ----------
 let colorTimer;
 $("#color").addEventListener("input", (e) => {

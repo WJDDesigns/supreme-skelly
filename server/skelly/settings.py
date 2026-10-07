@@ -24,6 +24,7 @@ class Settings:
     look: dict | None = None  # {"lights": {light_key: {...}}, "eye": int | None}
     last_address: str | None = None
     last_name: str | None = None
+    bt_adapter: str | None = None  # MAC of the Bluetooth radio to use; None = SKELLY_BT_ADAPTER or the default
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:

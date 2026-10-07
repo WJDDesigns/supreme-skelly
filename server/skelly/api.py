@@ -60,6 +60,10 @@ class KeepLookBody(BaseModel):
     keep: bool
 
 
+class AdapterBody(BaseModel):
+    address: str
+
+
 class SettingsBody(BaseModel):
     auto_connect: bool | None = None
     auto_live_mode: bool | None = None
@@ -117,6 +121,14 @@ def create_app(
     @app.patch("/api/settings")
     async def patch_settings(body: SettingsBody):
         return svc().update_settings(**body.model_dump(exclude_none=True))
+
+    @app.get("/api/adapters")
+    async def adapters():
+        return await guarded(svc().adapters())
+
+    @app.post("/api/adapter")
+    async def choose_adapter(body: AdapterBody):
+        return await guarded(svc().choose_adapter(body.address))
 
     @app.get("/api/look")
     async def get_look():

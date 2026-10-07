@@ -89,6 +89,8 @@ class SkellyService:
         self._reapply: asyncio.Task | None = None
         self.look: dict = self.settings.look or {"lights": {}, "eye": None}
         self.state = DeviceState()
+        if self.settings.bt_adapter and hasattr(link, "set_adapter"):
+            link.set_adapter(self.settings.bt_adapter)
         self.profile: Profile = UNKNOWN
         self.auto_reconnect = auto_reconnect
         self._queue: asyncio.Queue[tuple[bytes, asyncio.Future | None]] = asyncio.Queue()
@@ -123,6 +125,36 @@ class SkellyService:
     def snapshot(self) -> dict:
         return {"device": asdict(self.state), "profile": self.profile.to_dict(),
                 "settings": self.settings.public(), "look": self.look}
+
+    # -- Bluetooth radio ----------------------------------------------------------
+
+    async def adapters(self) -> list[dict]:
+        lister = getattr(self.link, "list_adapters", None)
+        if not lister:
+            return []
+        found = await lister()
+        in_use = getattr(self.link, "adapter_in_use", None)
+        for a in found:
+            a["in_use"] = a["name"] == in_use
+            a["selected"] = bool(self.settings.bt_adapter) and a["address"] == self.settings.bt_adapter.upper()
+        return found
+
+    async def choose_adapter(self, address: str) -> list[dict]:
+        """Switch radios: save the choice, drop the current link and reconnect through the new one."""
+        known = {a["address"]: a for a in await self.adapters()}
+        if address.upper() not in known:
+            raise ValueError("No Bluetooth radio with that address")
+        self.settings.bt_adapter = address.upper()
+        self.settings.save()
+        self.link.set_adapter(self.settings.bt_adapter)
+        if self.link.connected or self.state.status != "disconnected":
+            if self._reconnector:
+                self._reconnector.cancel()
+            await self.link.disconnect()
+            self._set(status="disconnected", live_mode=False)
+        self._user_disconnected = False  # let auto-connect find Skelly again through the new radio
+        self.bus.publish("settings", self.settings.public())
+        return await self.adapters()
 
     def update_settings(self, **changes: Any) -> dict:
         for k, v in changes.items():
