@@ -91,7 +91,7 @@ class ConversationConfig:
     openai_tts_voice: str = "onyx"
     # Behaviour
     move_while_talking: bool = True
-    ignore_mic_while_talking: bool = True
+    ignore_mic_while_talking: bool = True  # always on now: his own voice is never sent to the AI
     allow_interrupt: bool = True  # a visitor speaking clearly over Skelly cuts him off
     interrupt_sensitivity: int = 50  # 0..100: how easily speech counts as interrupting
     talk_amount: int = 2  # 1..5: how much he says per reply
@@ -314,7 +314,7 @@ class Conversation:
             async for pcm in mic:
                 now = time.monotonic()
                 level = mic.level
-                was_hearing, hearing_self = hearing_self, cfg.ignore_mic_while_talking and speaker.echoing
+                was_hearing, hearing_self = hearing_self, speaker.echoing
                 if not hearing_self:
                     if was_hearing:
                         log.info("Skelly finished; mic open (his peak %.3f, mic now %.3f)", peak, level)
