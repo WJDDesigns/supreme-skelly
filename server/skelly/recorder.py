@@ -59,7 +59,9 @@ class Recorder:
                 audio_inputs += 1
         maps = ["-map", "0:v:0"]
         if audio_inputs == 2:
-            args += ["-filter_complex", "[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[a]"]
+            # Mic and voice summed, then a limiter: plain mixing clipped in the first test.
+            args += ["-filter_complex", "[1:a]volume=0.6[m];[2:a]volume=0.8[v];"
+                     "[m][v]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.8[a]"]
             maps += ["-map", "[a]"]
         elif audio_inputs == 1:
             maps += ["-map", "1:a"]
