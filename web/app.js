@@ -674,6 +674,7 @@ function connectEvents() {
     else if (msg.type === "vision_motion") setMotion(msg.data.motion);
     else if (msg.type === "visitor") onVisitor(msg.data);
     else if (msg.type === "meters") setMeters(msg.data);
+    else if (msg.type === "calling_over") toast(`📣 ${msg.data.line}`);
     else if (msg.type === "protect") renderProtectState(msg.data);
     else if (msg.type === "protect_faces") msg.data.faces.filter((f) => f.name).forEach((f) => toast(`👋 Protect sees ${f.name}`));
     else if (msg.type === "faces") renderFaceBoxes(msg.data.faces);

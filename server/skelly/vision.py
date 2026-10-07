@@ -36,6 +36,7 @@ class VisionConfig:
     auto_converse: bool = False  # start a conversation when a visitor is confirmed
     cooldown_s: int = 90  # minimum gap between visitor events
     faces: bool = False  # recognise faces and remember people who say their name
+    call_over: bool = True  # call out to people walking past to come and chat
     # UniFi Protect: use its person/face detections on these cameras (sharper faces, no extra load)
     protect: bool = False
     protect_host: str = ""
@@ -112,6 +113,7 @@ class Vision:
         self._config = config_getter
         self._on_visitor = on_visitor
         self._on_known = on_known
+        self._on_passerby = None  # set by the app: async (verdict, cfg) for people walking past
         self.engine = FaceEngine()
         self.memory = FaceMemory()
         self.seen: list = []  # Seen objects in the latest face frame
@@ -420,7 +422,17 @@ class Vision:
                 log.info("visitor check failed: %r", exc)
                 verdict = None
             if verdict is not None:
+                passing = int(verdict.get("people") or 0) and verdict.get("approaching") is False
+                if passing and cfg.call_over and self._on_passerby:
+                    self.state.costumes = costume_names(verdict)
+                    await self._on_passerby(verdict, cfg)
+                    return
                 if not worth_a_visit(verdict, cfg.ignore):
+                    if int(verdict.get("people") or 0) and cfg.call_over and self._on_passerby:
+                        # Walking past rather than coming up: Skelly calls them over.
+                        self.state.costumes = costume_names(verdict)
+                        await self._on_passerby(verdict, cfg)
+                        return
                     self.state.last_visitor_at = None  # a car, leaves blowing about...: stay ready
                     return
                 description = verdict.get("description")

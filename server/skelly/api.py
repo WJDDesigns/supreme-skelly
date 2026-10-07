@@ -170,6 +170,7 @@ def create_app(
                                             lambda: VisionConfig.from_dict(svc.settings.vision), on_protect_person)
         app.state.protect.start()
         app.state.vision.protect = app.state.protect
+        app.state.vision._on_passerby = on_passerby
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
                                   lambda: svc.settings.audio.get("mic_gain", 100) / 100)
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
@@ -388,6 +389,24 @@ def create_app(
     def costume_hint(costumes: list[str]) -> str:
         return (f" They're dressed as: {', '.join(costumes)}. Mention their costume in a fun, spooky way."
                 if costumes else "")
+
+    async def on_passerby(verdict: dict, cfg: VisionConfig) -> None:
+        """Someone walking past: Skelly calls them over, a different way each time."""
+        from .callouts import call_out
+
+        costumes = costume_names(verdict)
+        line = call_out(costumes)
+        svc().bus.publish("calling_over", {"line": line, "costumes": costumes})
+        conv = app.state.conv
+        if conv.running:
+            conv.add_context(f"Someone else is walking past at a distance. Call them over to join: {line}")
+            return
+        ctx = ("You just called out to someone walking past to come over and chat. When they come over, "
+               "welcome them warmly." + costume_hint(costumes))
+        try:
+            await conv.start(context=ctx, opening=line)
+        except (MissingKey, ValueError) as exc:
+            log.info("call-over not started: %s", exc)
 
     async def on_visitor(description: str | None, cfg: VisionConfig) -> None:
         costumes = list(app.state.vision.state.costumes)

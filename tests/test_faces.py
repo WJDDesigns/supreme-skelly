@@ -52,3 +52,11 @@ def test_greeting_skelly_is_not_a_name():
 
     assert heard_name("Hey, it's Skelly.") is None
     assert heard_name("Hi Skelly, my name is Wayne.") == "Wayne"
+
+
+def test_call_out_lines_vary_and_use_costumes():
+    from skelly.callouts import call_out
+
+    lines = {call_out([]) for _ in range(60)}
+    assert len(lines) > 5
+    assert any("vampire" in call_out(["Vampire"]) for _ in range(20))

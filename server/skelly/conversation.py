@@ -159,6 +159,7 @@ class Conversation:
         self.on_started = None  # async (cfg, sink) once his voice has somewhere to go
         self.on_ended = None  # async (transcript) when the conversation finishes
         self._override_ok = False
+        self._opening: str | None = None
         self._echo_gain = 0.15  # mic level per unit of played level (measured ~0.08); learned while he talks
 
     # -- public ---------------------------------------------------------------
@@ -170,7 +171,8 @@ class Conversation:
     def snapshot(self) -> dict:
         return asdict(self.state)
 
-    async def start(self, context: str | None = None) -> dict:
+    async def start(self, context: str | None = None, opening: str | None = None) -> dict:
+        """Begin a conversation. `opening` replaces the first thing he says (e.g. calling someone over)."""
         if self.running:
             if context:
                 self._context.append(context)
@@ -184,6 +186,9 @@ class Conversation:
             except Exception as exc:
                 log.info("no scene context: %r", exc)
         self._context = [c for c in (scene, context) if c]
+        self._opening = opening
+        if opening:
+            cfg.first_message = opening
         self.state = ConversationState(state="connecting", provider=cfg.provider, started_at=time.time())
         self._publish()
         self._task = asyncio.create_task(self._run(cfg), name="skelly-conversation")
@@ -437,6 +442,8 @@ class Conversation:
                 # prompt gets ignored.
                 init["conversation_config_override"] = {"agent": {"prompt": {
                     "prompt": f"{rule}\n\n{cfg.prompt}\n\n{rule}"}}}
+                if self._opening:
+                    init["conversation_config_override"]["agent"]["first_message"] = self._opening
             await ws.send(json.dumps(init))
             if not self._override_ok:  # second best: tell it as context
                 await ws.send(json.dumps({"type": "contextual_update", "text": f"Speaking style: {rule}"}))
@@ -772,12 +779,13 @@ async def _allow_prompt_override(key: str, agent_id: str) -> bool:
             r = await http.get(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}", headers={"xi-api-key": key})
             _raise_for(r, "ElevenLabs")
             o = ((r.json().get("platform_settings") or {}).get("overrides") or {})
-            ok = bool((((o.get("conversation_config_override") or {}).get("agent") or {}).get("prompt") or {})
-                      .get("prompt"))
-            if not ok:
+            agent_o = (o.get("conversation_config_override") or {}).get("agent") or {}
+            ok = bool((agent_o.get("prompt") or {}).get("prompt")) and bool(agent_o.get("first_message"))
+            if not ok:  # per-conversation prompt (Talk amount) and opening line (calling people over)
                 r = await http.patch(f"https://api.elevenlabs.io/v1/convai/agents/{agent_id}",
                                      headers={"xi-api-key": key}, json={"platform_settings": {"overrides": {
-                                         "conversation_config_override": {"agent": {"prompt": {"prompt": True}}}}}})
+                                         "conversation_config_override": {"agent": {
+                                             "prompt": {"prompt": True}, "first_message": True}}}}})
                 _raise_for(r, "ElevenLabs")
                 ok = True
     except Exception as exc:
