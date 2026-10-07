@@ -253,7 +253,13 @@ main { width: 100%; max-width: 1400px; margin: 0 auto; padding: 22px 16px 110px;
 .grow { flex: 1; margin: 0; min-width: 0; }
 .color-dot {
   width: 48px; height: 48px; border-radius: 50%; overflow: hidden; flex: none; cursor: pointer;
-  border: 2px solid var(--line-2); background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+  border: 2px solid var(--line-2);
+  /* Eyedropper on top of the colour wheel. border-box: no wheel colours repeating as a fringe under the border. */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2 22 1-1h3l9-9'/%3E%3Cpath d='M3 21v-3l9-9'/%3E%3Cpath d='m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z'/%3E%3C/svg%3E")
+      center / 22px no-repeat border-box,
+    radial-gradient(circle, rgba(0, 0, 0, .45) 0 30%, transparent 31%) border-box,
+    conic-gradient(red, yellow, lime, cyan, blue, magenta, red) border-box;
   box-shadow: 0 0 0 4px rgba(255, 255, 255, .03);
 }
 .color-dot input { opacity: 0; width: 100%; height: 100%; cursor: pointer; }
