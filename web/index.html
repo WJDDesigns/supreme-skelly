@@ -441,6 +441,22 @@
             <div class="card-head"><div><h2>API keys</h2><p class="muted">Stored only on the mini PC; only the last 4 characters are ever shown</p></div></div>
             <ul id="vault" class="list"></ul>
           </div>
+          <div class="card">
+            <div class="card-head"><div><h2>System</h2><p class="muted" id="sys-sub">The mini PC</p></div></div>
+            <dl class="facts" id="sys-facts">
+              <div><dt>Up for</dt><dd id="sys-up">–</dd></div>
+              <div><dt>Load</dt><dd id="sys-load">–</dd></div>
+              <div><dt>Memory free</dt><dd id="sys-mem">–</dd></div>
+              <div><dt>Disk free</dt><dd id="sys-disk">–</dd></div>
+            </dl>
+            <div class="restart-grid">
+              <button class="btn outline" data-restart="audio"><svg><use href="#i-volume"/></svg>Restart sound</button>
+              <button class="btn outline" data-restart="bluetooth"><svg><use href="#i-bt"/></svg>Restart Bluetooth</button>
+              <button class="btn outline" data-restart="camera"><svg><use href="#i-camera"/></svg>Restart camera</button>
+              <button class="btn outline" data-restart="app"><svg><use href="#i-refresh"/></svg>Restart app</button>
+              <button class="btn outline danger" data-restart="reboot"><svg><use href="#i-refresh"/></svg>Reboot mini PC</button>
+            </div>
+          </div>
         </section>
       </main>
 

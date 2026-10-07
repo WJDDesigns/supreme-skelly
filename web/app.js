@@ -1264,3 +1264,31 @@ async function loadRecordings() {
 }
 $("#rec-refresh").addEventListener("click", (ev) => run(ev.currentTarget, loadRecordings));
 loadRecordings();
+
+// ---------- system ----------
+const RESTART = {
+  audio: ["Restart sound? Any conversation stops for a few seconds.", "Sound restarted"],
+  bluetooth: ["Restart Bluetooth? Skelly disconnects and reconnects by himself.", "Bluetooth restarted. Skelly is reconnecting…"],
+  camera: [null, "Camera restarted"],
+  app: ["Restart the Skelly app? The page reconnects in about 15 seconds.", "Restarting the app…"],
+  reboot: ["Reboot the mini PC? Everything is back in about a minute.", "Rebooting. Back in about a minute…"],
+};
+function dur(s) { const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; }
+const gb = (b) => (b == null ? "–" : `${(b / 1024 ** 3).toFixed(1)} GB`);
+async function loadSystem() {
+  try {
+    const s = await api("/system");
+    $("#sys-up").textContent = dur(s.uptime_s);
+    $("#sys-load").textContent = `${Math.round((s.load / (s.cpus || 1)) * 100)}%`;
+    $("#sys-mem").textContent = `${gb(s.mem_free)} of ${gb(s.mem_total)}`;
+    $("#sys-disk").textContent = `${gb(s.disk_free)} of ${gb(s.disk_total)}`;
+  } catch {}
+}
+document.querySelectorAll("[data-restart]").forEach((b) =>
+  b.addEventListener("click", () => {
+    const [ask, done] = RESTART[b.dataset.restart];
+    if (ask && !confirm(ask)) return;
+    run(b, () => api(`/system/restart/${b.dataset.restart}`, {}), done);
+  }));
+loadSystem();
+setInterval(() => { if (!$("#tab-settings").hidden) loadSystem(); }, 15000);

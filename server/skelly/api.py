@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio, audio_io, recorder, speaker
+from . import audio, audio_io, recorder, speaker, system
 from . import protocol as proto
 from .conversation import (
     Conversation,
@@ -446,6 +446,41 @@ def create_app(
         if not recorder.delete(name):
             raise HTTPException(404, "No such recording")
         return await asyncio.to_thread(recorder.recordings)
+
+    # -- system ------------------------------------------------------------------
+
+    @app.get("/api/system")
+    async def system_status():
+        return system.status()
+
+    @app.post("/api/system/restart/{part}")
+    async def system_restart(part: str):
+        """Restart audio, Bluetooth, the camera or the app, or reboot the mini PC."""
+        s = svc()
+        try:
+            if part == "audio":
+                await app.state.conv.stop()
+                await system.restart_audio()
+            elif part == "bluetooth":
+                await app.state.conv.stop()
+                await s.link.disconnect()
+                await system.restart_bluetooth()
+                s._user_disconnected = False
+                s._set(status="disconnected", live_mode=False)  # auto-connect picks Skelly up again
+            elif part == "camera":
+                await app.state.vision.stop()
+                await app.state.vision.start()
+            elif part == "app":
+                system.restart_app_soon()
+            elif part == "reboot":
+                await app.state.conv.stop()
+                await app.state.recorder.stop()
+                asyncio.get_running_loop().call_later(0.5, lambda: asyncio.ensure_future(system.reboot()))
+            else:
+                raise HTTPException(404, "Unknown part")
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(502, f"Restart failed: {exc}") from exc
+        return {"ok": True, "part": part}
 
     @app.post("/api/speaker/connect")
     async def connect_live_speaker():
