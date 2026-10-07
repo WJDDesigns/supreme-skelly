@@ -81,7 +81,7 @@ async def sound_server_ok() -> bool:
 
 
 NO_SOUND_SERVER = ("Can't reach the mini PC's sound service, so the mic and Skelly's speaker are unavailable."
-                   " Restart the mini PC, then try again.")
+                   " Restart Sound in Settings > System, then try again.")
 
 
 def skelly_sink_name(mac: str | None) -> str | None:

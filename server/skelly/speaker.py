@@ -67,15 +67,19 @@ async def _call(bus, path: str, iface: str, member: str, sig: str = "", body=Non
                                    signature=sig, body=body or []))
     if reply.message_type == MessageType.ERROR:
         detail = str(reply.body[0]) if reply.body else ""
-        raise RuntimeError(FRIENDLY.get(detail, f"{reply.error_name}: {detail}"))
+        err = NoAudioProfile if detail == "br-connection-profile-unavailable" else RuntimeError
+        raise err(FRIENDLY.get(detail, f"{reply.error_name}: {detail}"))
     return reply.body
+
+
+class NoAudioProfile(RuntimeError):
+    """BlueZ has no audio profile to offer: PipeWire's Bluetooth side isn't registered with it."""
 
 
 # BlueZ errors people actually hit, in words that say what to do.
 FRIENDLY = {
-    # BlueZ has no audio profile to offer: the mini PC's sound service (PipeWire) isn't running.
-    "br-connection-profile-unavailable": "The mini PC's sound service isn't running, so it can't use Skelly's speaker."
-                                         " Restart the mini PC, then try again.",
+    "br-connection-profile-unavailable": "The mini PC's sound service isn't answering Bluetooth, so it can't use"
+                                         " Skelly's speaker. Restart Sound in Settings > System, then try again.",
     "br-connection-page-timeout": "Skelly's speaker didn't answer. Check Live Mode is on and he's in range.",
     "br-connection-canceled": "Connecting to Skelly's speaker was interrupted. Try again.",
 }

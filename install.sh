@@ -19,7 +19,8 @@ fi
 if command -v apt-get >/dev/null; then
   say "Installing Bluetooth and network discovery"
   $SUDO apt-get update -qq
-  $SUDO apt-get install -y -qq bluez avahi-daemon rfkill curl >/dev/null
+  $SUDO apt-get install -y -qq bluez avahi-daemon rfkill curl \
+    pipewire pipewire-pulse wireplumber libspa-0.2-bluetooth pulseaudio-utils >/dev/null
 else
   echo "Couldn't find apt-get. Install bluez and Docker yourself, then run: docker compose up -d --build" >&2
   exit 1
@@ -33,6 +34,23 @@ fi
 say "Turning on Bluetooth"
 $SUDO rfkill unblock bluetooth || true
 $SUDO systemctl enable --now bluetooth avahi-daemon docker >/dev/null
+
+say "Setting up sound (mic and Skelly's speaker)"
+# PipeWire runs in the login user's session. Linger starts that session at boot, and the
+# WirePlumber setting keeps Bluetooth audio on with nobody logged in (headless mini PC).
+AUDIO_USER="${SUDO_USER:-$(id -un)}"
+[ "$AUDIO_USER" = "root" ] && AUDIO_USER="$(id -nu 1000 2>/dev/null || echo root)"
+AUDIO_HOME="$(getent passwd "$AUDIO_USER" | cut -d: -f6)"
+$SUDO loginctl enable-linger "$AUDIO_USER"
+$SUDO install -d -o "$AUDIO_USER" "$AUDIO_HOME/.config/wireplumber/wireplumber.conf.d" \
+  "$AUDIO_HOME/.config/wireplumber/bluetooth.lua.d"
+$SUDO install -m 644 -o "$AUDIO_USER" deploy/audio/80-skelly-no-seat.conf \
+  "$AUDIO_HOME/.config/wireplumber/wireplumber.conf.d/"
+$SUDO install -m 644 -o "$AUDIO_USER" deploy/audio/80-skelly-no-seat.lua \
+  "$AUDIO_HOME/.config/wireplumber/bluetooth.lua.d/"
+AUDIO_UID="$(id -u "$AUDIO_USER")"
+$SUDO systemctl restart "user@${AUDIO_UID}.service" || true
+[ "$AUDIO_UID" != "1000" ] && echo "Note: set SKELLY_AUDIO_UNIT=user@${AUDIO_UID}.service and PULSE_SERVER for uid ${AUDIO_UID} in docker-compose.yml"
 
 say "Starting Supreme Skelly"
 mkdir -p data

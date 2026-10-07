@@ -198,6 +198,19 @@ def create_app(
 
     # -- Skelly's Live speaker ---------------------------------------------------
 
+    heal_lock = asyncio.Lock()
+
+    async def heal_audio(why: str) -> None:
+        """Restart the host's sound session once, instead of asking for a reboot."""
+        async with heal_lock:
+            if await audio_io.sound_server_ok() and why.startswith("the sound service"):
+                return  # another request already brought it back
+            log.warning("restarting the sound service: %s", why)
+            try:
+                await system.restart_audio()
+            except Exception as exc:
+                log.warning("couldn't restart the sound service: %s", exc)
+
     async def skelly_sink() -> str | None:
         """Make sure Live Mode is on and its speaker is paired and connected; return its sink."""
         s = svc()
@@ -209,10 +222,16 @@ def create_app(
             await s.enable_live_mode()
             await asyncio.sleep(3)
         if not await audio_io.sound_server_ok():
-            raise RuntimeError(audio_io.NO_SOUND_SERVER)
+            await heal_audio("the sound service didn't answer")
+            if not await audio_io.sound_server_ok():
+                raise RuntimeError(audio_io.NO_SOUND_SERVER)
         names = tuple(dict.fromkeys([*s.profile.live_audio_names, *([s.state.bt_name] if s.state.bt_name else [])]))
         adapter = getattr(s.link, "adapter_in_use", None) or "hci0"
-        info = await speaker.connect_speaker(adapter, names, s.state.pin or "1234")
+        try:
+            info = await speaker.connect_speaker(adapter, names, s.state.pin or "1234")
+        except speaker.NoAudioProfile:
+            await heal_audio("Bluetooth had no audio profile for Skelly's speaker")
+            info = await speaker.connect_speaker(adapter, names, s.state.pin or "1234")
         if info.get("address") and s.settings.live_speaker != info["address"]:
             s.settings.live_speaker = info["address"]
             s.settings.save()
@@ -239,7 +258,11 @@ def create_app(
             if sink not in have and sink.startswith("bluez_output."):
                 mac = sink.split(".")[1].replace("_", ":")
                 try:
-                    await speaker.connect_address(adapter_name(), mac)
+                    try:
+                        await speaker.connect_address(adapter_name(), mac)
+                    except speaker.NoAudioProfile:
+                        await heal_audio(f"Bluetooth had no audio profile for {mac}")
+                        await speaker.connect_address(adapter_name(), mac)
                     await asyncio.sleep(2)
                 except Exception as exc:
                     log.info("extra speaker %s not connected: %s", mac, exc)
@@ -289,7 +312,11 @@ def create_app(
     @app.post("/api/audio/pair")
     async def audio_pair(body: AddressBody):
         try:
-            info = await speaker.connect_address(adapter_name(), body.address)
+            try:
+                info = await speaker.connect_address(adapter_name(), body.address)
+            except speaker.NoAudioProfile:
+                await heal_audio(f"Bluetooth had no audio profile for {body.address}")
+                info = await speaker.connect_address(adapter_name(), body.address)
         except Exception as exc:
             raise HTTPException(502, f"Couldn't pair: {exc}. Is the speaker in pairing mode?") from exc
         sink = audio_io.skelly_sink_name(info["address"])
