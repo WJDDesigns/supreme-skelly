@@ -223,8 +223,13 @@ class Conversation:
         return time.monotonic() - self._last_heard
 
     def call_over(self, line: str) -> bool:
-        """Make Skelly call out to a passer-by now, if the AI supports being nudged mid-chat."""
+        """Make Skelly call out to a passer-by now, if the AI supports being nudged mid-chat.
+
+        Only when nobody has talked to him in this conversation: never in the middle of a chat.
+        """
         if not self.running or self._nudges is None:
+            return False
+        if any(t.get("role") == "user" for t in self.state.transcript):
             return False
         self._nudges.put_nowait(call_over_prompt(line))
         return True
