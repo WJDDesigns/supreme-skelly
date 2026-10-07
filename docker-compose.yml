@@ -23,3 +23,5 @@ services:
       - SKELLY_AUTOCONNECT=1
       # Set to 1 to try the UI without an animatronic.
       - SKELLY_SIMULATE=0
+      # Which Bluetooth radio to use (hci0, hci1...). Empty = the system default.
+      - SKELLY_BT_ADAPTER=${SKELLY_BT_ADAPTER:-}

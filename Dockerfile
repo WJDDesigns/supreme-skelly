@@ -6,6 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SKELLY_WEB_DIR=/app/web \
     SKELLY_PORT=8420
 
+# ffmpeg decodes whatever audio file you upload (mp3, wav, m4a, ogg, flac...).
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY pyproject.toml ./
 COPY server ./server

@@ -55,9 +55,9 @@ def test_pin_and_name():
 
 
 def test_filename_validation():
-    p.validate_filename("x" * 33)
+    p.validate_filename("x" * 16 + ".mp3")
     with pytest.raises(ValueError):
-        p.validate_filename("x" * 34)
+        p.validate_filename("x" * 17 + ".mp3")
     with pytest.raises(ValueError):
         p.validate_filename("bad/name.mp3")
 
@@ -101,3 +101,28 @@ def test_parse_keepalive_and_unknown():
     assert p.parse(bytes.fromhex("FEDC0102EF")).kind == "keepalive"
     assert p.parse(_notify(0x42, b"")).kind == "unknown"
     assert p.parse(b"\x01") is None
+
+
+def test_upload_names():
+    assert p.sanitize_upload_name("Evil Laugh!!") == "Evil_Laugh.mp3"
+    assert p.sanitize_upload_name("a" * 40 + ".mp3") == "a" * 16 + ".mp3"
+    assert p.sanitize_upload_name("???").startswith("Rec-")
+    assert p.device_name("\\Boo") == "Boo.mp3"
+
+
+def test_transfer_frames_are_not_padded():
+    f = p.transfer_chunk(3, b"\x01\x02")
+    assert f[:4] == bytes([0xAA, 0xC1, 0, 3]) and f[4:6] == b"\x01\x02" and len(f) == 7
+    start = p.start_transfer(1000, 5, "Boo")
+    assert start[2:8] == (1000).to_bytes(4, "big") + (5).to_bytes(2, "big")
+    assert start[8:10] == p.FILENAME_MARKER and start[10:-1] == "Boo.mp3".encode("utf-16le")
+
+
+def test_set_order_has_no_length_byte():
+    f = p.set_order(2, 1, 7, "Boo.mp3")
+    assert f[2:6] == bytes([2, 1, 0, 7]) and f[6:8] == p.FILENAME_MARKER
+
+
+def test_order_reply_is_little_endian():
+    ev = p.parse(_notify(p.Cmd.QUERY_ORDER, bytes([2, 0, 5, 0, 1, 1])))
+    assert ev.data["serials"] == [5, 257]

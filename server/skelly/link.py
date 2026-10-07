@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -31,24 +32,33 @@ class Link(Protocol):
     async def write(self, data: bytes) -> None: ...
     @property
     def connected(self) -> bool: ...
+    @property
+    def mtu(self) -> int: ...
 
 
 class BleakLink:
     """BLE via bleak. Works with BlueZ on Linux (also macOS/Windows for dev)."""
 
-    def __init__(self) -> None:
+    def __init__(self, adapter: str | None = None) -> None:
         self.on_notify = None
         self.on_disconnect = None
         self._client = None
+        # e.g. "hci1" to use a USB dongle instead of the built-in radio; None = system default.
+        self.adapter = adapter or os.environ.get("SKELLY_BT_ADAPTER") or None
+        self._kw = {"adapter": self.adapter} if self.adapter else {}
 
     @property
     def connected(self) -> bool:
         return bool(self._client and self._client.is_connected)
 
+    @property
+    def mtu(self) -> int:
+        return getattr(self._client, "mtu_size", 23) or 23
+
     async def scan(self, timeout: float = 6.0) -> list[Found]:
         from bleak import BleakScanner
 
-        found = await BleakScanner.discover(timeout=timeout, return_adv=True)
+        found = await BleakScanner.discover(timeout=timeout, return_adv=True, **self._kw)
         out = [
             Found(dev.address, adv.local_name or dev.name or "", adv.rssi)
             for dev, adv in found.values()
@@ -63,7 +73,7 @@ class BleakLink:
             if self.on_disconnect:
                 self.on_disconnect()
 
-        client = BleakClient(address, disconnected_callback=_gone, timeout=15.0)
+        client = BleakClient(address, disconnected_callback=_gone, timeout=15.0, **self._kw)
         await client.connect()
         await client.start_notify(proto.NOTIFY_UUID, lambda _c, data: self.on_notify and self.on_notify(bytes(data)))
         self._client = client
@@ -91,6 +101,7 @@ class SimulatedLink:
         self.sent: list[bytes] = []
         self._connected = False
         self.files = [("Spooky Laugh.mp3", 1, 1000), ("Welcome.mp3", 2, 2000), ("Boo.mp3", 3, 3000)]
+        self.upload: dict | None = None  # in-progress transfer: name, size, chunks
         self.volume = 120
         # Mimic the firmware: playback resets the live colour to the sound's saved scene.
         self.live_rgb = (255, 0, 0)
@@ -99,6 +110,10 @@ class SimulatedLink:
     @property
     def connected(self) -> bool:
         return self._connected
+
+    @property
+    def mtu(self) -> int:
+        return 247
 
     async def scan(self, timeout: float = 6.0) -> list[Found]:
         await asyncio.sleep(0.2)
@@ -142,11 +157,34 @@ class SimulatedLink:
             self._reply(cmd, b"\x01")
         elif cmd == C.QUERY_FILES:
             for name, serial, cluster in self.files:
+                ref = proto.FILENAME_MARKER + name.encode("utf-16le")
                 payload = (serial.to_bytes(2, "big") + cluster.to_bytes(4, "big")
-                           + len(self.files).to_bytes(2, "big") + bytes(2) + bytes([255])
-                           + bytes([1, 255, 255, 0, 0, 0, 0]) * 6 + bytes([serial, serial])
-                           + proto.FILENAME_MARKER + name.encode("utf-16le"))
+                           + len(self.files).to_bytes(2, "big") + (3000).to_bytes(2, "big") + bytes([255])
+                           + bytes([1, 255, 255, 0, 0, 0, 0]) * 6 + bytes([1, 0, serial, len(ref)]) + ref)
                 self._reply(cmd, payload)
+        elif cmd == C.START_TRANSFER:
+            name = data[10:-1].decode("utf-16le")
+            self.upload = {"name": name, "size": int.from_bytes(data[2:6], "big"), "chunks": {}}
+            self._reply(cmd, bytes([0]) + (0).to_bytes(4, "big"))
+        elif cmd == C.CHUNK and self.upload is not None:
+            self.upload["chunks"][int.from_bytes(data[2:4], "big")] = data[4:-1]
+        elif cmd == C.END_TRANSFER and self.upload is not None:
+            last = max(self.upload["chunks"], default=0)
+            self._reply(cmd, bytes([0]) + last.to_bytes(2, "big"))
+        elif cmd == C.CONFIRM_TRANSFER and self.upload is not None:
+            up, self.upload = self.upload, None
+            body = b"".join(up["chunks"][i] for i in sorted(up["chunks"]))
+            ok = len(body) == up["size"]
+            if ok:
+                serial = max((s for _, s, _ in self.files), default=0) + 1
+                self.files.append((up["name"], serial, serial * 1000))
+                self.uploaded = body
+            self._reply(cmd, bytes([0 if ok else 1]))
+        elif cmd == C.DELETE_FILE:
+            serial = int.from_bytes(data[2:4], "big")
+            before = len(self.files)
+            self.files = [f for f in self.files if f[1] != serial]
+            self._reply(cmd, bytes([0 if len(self.files) < before else 1]))
         elif cmd == C.SET_RGB:
             rgb = (data[3], data[4], data[5])
             name_len = data[11]

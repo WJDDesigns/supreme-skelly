@@ -22,7 +22,10 @@ NOTIFY_UUID = "0000ae02-0000-1000-8000-00805f9b34fb"
 
 MIN_PAYLOAD = 8
 FILENAME_MARKER = bytes.fromhex("5C55")
-MAX_FILENAME_LENGTH = 33  # longer names upload "successfully" but never appear
+# 20 including ".mp3": longer names that share a prefix with another sound can
+# corrupt the device's sound list (per the original controller).
+MAX_FILENAME_LENGTH = 20
+MAX_UPLOAD_STEM = MAX_FILENAME_LENGTH - 4
 ALL_CHANNELS = -1
 
 
@@ -71,8 +74,8 @@ def crc8(data: bytes) -> int:
     return crc
 
 
-def build(cmd: int, payload: bytes = b"") -> bytes:
-    if len(payload) < MIN_PAYLOAD:
+def build(cmd: int, payload: bytes = b"", *, pad: bool = True) -> bytes:
+    if pad and len(payload) < MIN_PAYLOAD:
         payload = payload + bytes(MIN_PAYLOAD - len(payload))
     frame = bytes([0xAA, cmd]) + payload
     return frame + bytes([crc8(frame)])
@@ -181,8 +184,10 @@ def delete_file(serial: int, cluster: int) -> bytes:
 
 
 def set_order(total: int, position: int, serial: int, filename: str) -> bytes:
+    """Playlist entry (1-based position). Unverified on hardware and known to corrupt
+    custom sounds on some firmware, so the service only uses it after a delete."""
     payload = _u8("total", total) + _u8("position", position) + serial.to_bytes(2, "big")
-    return build(Cmd.SET_ORDER, payload + filename_ref(filename))
+    return build(Cmd.SET_ORDER, payload + filename_ref(device_name(filename), with_length=False), pad=False)
 
 
 def factory_reset() -> bytes:
@@ -204,13 +209,15 @@ def set_pin_and_name(pin: str, name: str) -> bytes:
 # --- file transfer -------------------------------------------------------------
 
 def start_transfer(size: int, chunk_count: int, filename: str) -> bytes:
+    filename = device_name(filename)
     validate_filename(filename)
     payload = size.to_bytes(4, "big") + chunk_count.to_bytes(2, "big")
     return build(Cmd.START_TRANSFER, payload + filename_ref(filename, with_length=False))
 
 
 def transfer_chunk(index: int, data: bytes) -> bytes:
-    return build(Cmd.CHUNK, index.to_bytes(2, "big") + data)
+    # Never padded: padding would end up as junk bytes in the stored MP3.
+    return build(Cmd.CHUNK, index.to_bytes(2, "big") + data, pad=False)
 
 
 def end_transfer() -> bytes:
@@ -218,11 +225,33 @@ def end_transfer() -> bytes:
 
 
 def confirm_transfer(filename: str) -> bytes:
-    return build(Cmd.CONFIRM_TRANSFER, filename_ref(filename, with_length=False))
+    return build(Cmd.CONFIRM_TRANSFER, filename_ref(device_name(filename), with_length=False))
 
 
 def cancel_transfer() -> bytes:
     return build(Cmd.CANCEL_TRANSFER)
+
+
+def device_name(name: str) -> str:
+    """The name the device stores: no leading backslash, always ending in .mp3."""
+    name = name.strip().lstrip("\\")
+    return name if not name or name.lower().endswith(".mp3") else name + ".mp3"
+
+
+def sanitize_upload_name(raw: str) -> str:
+    """Turn any title into a safe device filename like ``Evil_Laugh.mp3``."""
+    import re
+    import secrets
+    import string
+
+    stem = raw.strip()
+    if stem.lower().endswith(".mp3"):
+        stem = stem[:-4]
+    stem = re.sub(r"\s+", "_", stem)
+    stem = re.sub(r"[^A-Za-z0-9_-]", "", stem)[:MAX_UPLOAD_STEM]
+    if not stem:
+        stem = "Rec-" + "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6))
+    return stem + ".mp3"
 
 
 def validate_filename(name: str) -> None:
@@ -304,8 +333,9 @@ def parse(raw: bytes) -> Event | None:
     if cmd == Cmd.QUERY_CAPACITY:
         return Event("capacity", {"free_kb": u(0, 4), "file_count": u(4, 5), "action_mode": u(5, 6)})
     if cmd == Cmd.QUERY_ORDER:
-        n = min(u(0, 1), (len(p) - 1) // 2)
-        return Event("order", {"serials": [u(1 + i * 2, 3 + i * 2) for i in range(n)]})
+        # Little-endian count, then little-endian 16-bit serials (diagnostic only).
+        n = min(int.from_bytes(p[0:2], "little"), max(0, (len(p) - 2) // 2))
+        return Event("order", {"serials": [int.from_bytes(p[2 + i * 2:4 + i * 2], "little") for i in range(n)]})
     if cmd == Cmd.QUERY_FILES:
         # The name follows the 5C 55 marker (normally at byte 57) and runs to the CRC.
         mark = raw.find(FILENAME_MARKER, 57)
@@ -314,10 +344,13 @@ def parse(raw: bytes) -> Event | None:
             "serial": u(0, 2),
             "cluster": u(2, 6),
             "total": u(6, 8),
+            "length": u(8, 10),
             "movement": u(10, 11),
             "lights": [vars(x) for x in _lights(p, 11)],
             "eye": u(53, 54),
-            "db_pos": u(54, 55),
+            "db_pos": u(55, 56),
+            # A just-uploaded sound shows up as a placeholder until the device finalises it.
+            "ready": not (u(55, 56) == 255 and u(8, 10) == 0 and u(10, 11) == 0),
             "name": name,
         })
     if cmd == Cmd.PLAY_FILE:

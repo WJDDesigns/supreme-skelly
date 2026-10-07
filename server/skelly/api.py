@@ -3,20 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import audio
+from . import protocol as proto
 from .link import BleakLink, Link, SimulatedLink
 from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+log = logging.getLogger(__name__)
 WEB_DIR = Path(os.environ.get("SKELLY_WEB_DIR", Path(__file__).resolve().parents[2] / "web"))
 
 
@@ -73,6 +79,7 @@ def create_app(
         if autoconnect if autoconnect is not None else os.environ.get("SKELLY_AUTOCONNECT", "1") == "1":
             svc.start_autoconnect()
         app.state.svc = svc
+        app.state.tasks = set()
         yield
         await svc.stop()
 
@@ -183,6 +190,44 @@ def create_app(
     async def play(serial: int, body: PlayBody | None = None):
         await guarded(svc().play_file(serial, body.play if body else True))
         return {"ok": True}
+
+    @app.delete("/api/files/{serial}")
+    async def delete_file(serial: int):
+        return await guarded(svc().delete_sound(serial))
+
+    @app.post("/api/sounds/upload", status_code=202)
+    async def upload_sound(file: Annotated[UploadFile, File()], name: Annotated[str, Form()] = "",
+                           normalize: Annotated[bool, Form()] = True):
+        """Convert any audio file to Skelly's format, then send it in the background.
+
+        Progress arrives on the event stream as ``upload`` messages.
+        """
+        s = svc()
+        if not s.link.connected:
+            raise HTTPException(409, "Connect to Skelly first")
+        data = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "That file is too big (50 MB max)")
+        title = name.strip() or Path(file.filename or "").stem
+        device_name = proto.sanitize_upload_name(title)
+        if any(f["name"].lower() == device_name.lower() for f in s.state.files):
+            raise HTTPException(400, f'Skelly already has a sound called "{device_name}"')
+        wake_ms = audio.WAKE_TONE_MS if s.profile.wake_tone_ms is None else s.profile.wake_tone_ms
+        try:
+            mp3, seconds = await asyncio.to_thread(audio.prepare, data, normalize=normalize, wake_ms=wake_ms)
+        except audio.AudioError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+        async def run() -> None:
+            try:
+                await s.upload_sound(mp3, device_name)
+            except Exception as exc:  # reported to the UI through the "upload" event
+                log.warning("upload of %s failed: %s", device_name, exc)
+
+        task = asyncio.create_task(run(), name=f"upload-{device_name}")
+        app.state.tasks.add(task)
+        task.add_done_callback(app.state.tasks.discard)
+        return {"name": device_name, "seconds": round(seconds, 1), "bytes": len(mp3)}
 
     @app.websocket("/api/events")
     async def events(ws: WebSocket):

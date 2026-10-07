@@ -22,6 +22,15 @@ log = logging.getLogger(__name__)
 
 WRITE_GAP_S = 0.04  # device drops back-to-back write-without-response packets
 REPLY_TIMEOUT_S = 3.0
+# Sound uploads (timings from the original controller).
+CHUNK_GAP_S = 0.111
+RESEND_GAP_S = 0.012
+VERIFY_WAITS_S = (2.0, 10.0)
+DELETE_SETTLE_S = 0.45
+ORDER_GAP_S = 0.08
+UPLOAD_FILE_LIMIT = 30  # firmware corrupts custom sounds once its counter reaches 30
+DEMO_HINT = (" If Skelly was factory reset recently he may still be in demo mode:"
+             " hold his button for 7 seconds, then try again.")
 AUTOCONNECT_INTERVAL_S = 10.0
 AUTOCONNECT_SCAN_S = 8.0
 # The firmware resets lights/eyes to the sound's stored scene when playback
@@ -86,6 +95,7 @@ class SkellyService:
         self._reconnector: asyncio.Task | None = None
         self._wanted: str | None = None  # address the user asked for
         self._files_buf: dict[int, dict] = {}
+        self._upload_lock = asyncio.Lock()
         self._files_done: asyncio.Event | None = None
         link.on_notify = self._on_notify
         link.on_disconnect = self._on_link_lost
@@ -454,3 +464,106 @@ class SkellyService:
 
     async def play_file(self, serial: int, play: bool = True) -> None:
         await self.send(proto.play_file(serial, play))
+
+    # -- sound library ----------------------------------------------------------
+
+    def _file(self, serial: int) -> dict:
+        for f in self.state.files:
+            if f["serial"] == serial:
+                return f
+        raise ValueError(f"No sound #{serial} on Skelly")
+
+    async def upload_sound(self, mp3: bytes, filename: str) -> dict:
+        """Send an already-prepared MP3 to the device (C0 → C1… → C2 → C3), then wait for it to appear.
+
+        Mirrors the original controller: chunk size from the MTU, fixed pacing with no
+        per-chunk replies, resend the tail if C2 reports a gap, and resume where the
+        device says it left off.
+        """
+        self._require_connected()
+        name = proto.device_name(filename)
+        proto.validate_filename(name)
+        if any(f["name"].lower() == name.lower() for f in self.state.files):
+            raise ValueError(f'Skelly already has a sound called "{name}"')
+        if not mp3:
+            raise ValueError("That sound is empty")
+        if self._upload_lock.locked():
+            raise ValueError("Another sound is uploading. Wait for it to finish.")
+
+        def progress(stage: str, percent: int) -> None:
+            self.bus.publish("upload", {"name": name, "stage": stage, "percent": percent})
+
+        async with self._upload_lock:
+            progress("starting", 0)
+            try:
+                cap = await self.request(proto.query(proto.Cmd.QUERY_CAPACITY), "capacity", 4.0)
+                if cap["file_count"] >= UPLOAD_FILE_LIMIT:
+                    raise ValueError(f"Skelly's sound list is full ({cap['file_count']} sounds). "
+                                     "Delete some first; only a factory reset fully clears it.")
+                size = max(20, min(239, self.link.mtu - 8))
+                chunks = [mp3[i:i + size] for i in range(0, len(mp3), size)]
+                if len(chunks) > 0xFFFF:
+                    raise ValueError("That sound is too big")
+                try:
+                    started = await self.request(proto.start_transfer(len(mp3), len(chunks), name),
+                                                 "transfer_started", 10.0)
+                except TimeoutError:
+                    raise TimeoutError("Skelly didn't answer the upload request." + DEMO_HINT) from None
+                if started["failed"]:
+                    raise ValueError("Skelly turned down the upload. Is he full?")
+                first = min(len(chunks), started["written"] // size)
+                for i in range(first, len(chunks)):
+                    self._require_connected()
+                    await self.send(proto.transfer_chunk(i, chunks[i]))
+                    await asyncio.sleep(CHUNK_GAP_S)
+                    if i % 8 == 0 or i == len(chunks) - 1:
+                        progress("sending", round((i + 1) * 100 / len(chunks)))
+                try:
+                    ended = await self.request(proto.end_transfer(), "transfer_ended", 240.0)
+                except TimeoutError:
+                    raise TimeoutError("Skelly didn't finish saving the sound." + DEMO_HINT) from None
+                if ended["failed"]:
+                    tail = max(0, min(ended["last_index"], len(chunks)))
+                    log.info("upload: device missed chunks from %d, resending", tail)
+                    for i in range(tail, len(chunks)):
+                        await self.send(proto.transfer_chunk(i, chunks[i]))
+                        await asyncio.sleep(RESEND_GAP_S)
+                try:
+                    confirmed = await self.request(proto.confirm_transfer(name), "transfer_confirmed", 10.0)
+                except TimeoutError:
+                    raise TimeoutError("Skelly didn't confirm the sound." + DEMO_HINT) from None
+                if confirmed["failed"]:
+                    raise ValueError("Skelly couldn't store the sound. Try again.")
+
+                progress("finishing", 100)
+                row = None
+                for wait in VERIFY_WAITS_S:
+                    await asyncio.sleep(wait)
+                    files = await self.refresh_files()
+                    row = next((f for f in files if f["name"].lower() == name.lower()), None)
+                    if row and row.get("ready", True):
+                        break
+                ready = bool(row and row.get("ready", True))
+                try:
+                    await self.request(proto.query(proto.Cmd.QUERY_CAPACITY), "capacity", 4.0)
+                except TimeoutError:
+                    pass
+            except Exception as exc:
+                self.bus.publish("upload", {"name": name, "stage": "error", "percent": 0, "error": str(exc)})
+                raise
+            self.bus.publish("upload", {"name": name, "stage": "done" if ready else "incomplete", "percent": 100})
+            return {"name": name, "ready": ready, "serial": row["serial"] if row else None}
+
+    async def delete_sound(self, serial: int) -> list[dict]:
+        self._require_connected()
+        f = self._file(serial)
+        res = await self.request(proto.delete_file(serial, f["cluster"]), "deleted", 6.0)
+        if not res["ok"]:
+            raise ValueError(f'Skelly couldn\'t delete "{f["name"]}"')
+        await asyncio.sleep(DELETE_SETTLE_S)
+        files = await self.refresh_files()
+        # Like the original: re-commit the play order of the remaining sounds after a delete.
+        for pos, g in enumerate(files, start=1):
+            await self.send(proto.set_order(len(files), pos, g["serial"], g["name"]))
+            await asyncio.sleep(ORDER_GAP_S)
+        return files

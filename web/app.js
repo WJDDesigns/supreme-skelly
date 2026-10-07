@@ -263,7 +263,13 @@ function renderFiles() {
       btn.addEventListener("click", () => run(btn, () => api(`/files/${f.serial}/play`, { play: !playing })));
       const end = el("div", { className: "end" });
       if (playing) end.append(el("span", { className: "badge orange", textContent: "Playing" }));
-      end.append(btn);
+      const del = el("button", { className: "btn outline icon-only", title: "Delete from Skelly" });
+      del.innerHTML = '<svg><use href="#i-trash"/></svg>';
+      del.addEventListener("click", () => {
+        if (!confirm(`Delete "${f.name}" from Skelly?`)) return;
+        run(del, () => api(`/files/${f.serial}`, undefined, "DELETE"), `Deleted ${f.name}`);
+      });
+      end.append(btn, del);
       const li = el("li", {},
         el("div", { className: "who" },
           el("span", { className: "num", textContent: String(i + 1).padStart(2, "0") }),
@@ -395,6 +401,7 @@ function connectEvents() {
     if (msg.type === "snapshot") applySnapshot(msg.data);
     else if (msg.type === "state") { state.device = msg.data; renderDevice(); }
     else if (msg.type === "settings") renderSettings(msg.data);
+    else if (msg.type === "upload") renderUpload(msg.data);
     else if (msg.type === "look") { state.look = msg.data; renderPreview(); }
     else if (msg.type === "profile") { state.profile = msg.data; state.moves.clear(); state.mode = null; renderProfile(); }
   };
@@ -403,3 +410,64 @@ function connectEvents() {
 // Load once over HTTP so the page works even before the live stream is up.
 api("/state").then(applySnapshot).catch(() => {});
 connectEvents();
+
+// ---------- sound upload ----------
+let pickedFile = null;
+const UPLOAD_STAGES = { starting: "Getting Skelly ready…", sending: "Sending to Skelly…", finishing: "Skelly is saving it…",
+  done: "Saved on Skelly 🎉", incomplete: "Sent, but Skelly hasn't finished saving it yet. Refresh in a minute.", error: "Upload failed" };
+
+function pickFile(file) {
+  if (!file) return;
+  pickedFile = file;
+  $("#drop").classList.add("has-file");
+  $("#drop-text").innerHTML = "";
+  $("#drop-text").append(el("strong", { textContent: file.name }), ` · ${(file.size / 1024 / 1024).toFixed(1)} MB`);
+  const stem = file.name.replace(/\.[^.]+$/, "").trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 16);
+  $("#upload-name").value = stem;
+  $("#upload-btn").disabled = false;
+}
+$("#upload-file").addEventListener("change", (e) => pickFile(e.target.files[0]));
+const drop = $("#drop");
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => pickFile(e.dataTransfer.files[0]));
+
+$("#upload-btn").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => {
+    if (!pickedFile) return;
+    renderUpload({ stage: "converting", percent: 0 });
+    $("#upload-stage").textContent = "Tuning it for Skelly's speaker…";
+    const form = new FormData();
+    form.append("file", pickedFile);
+    form.append("name", $("#upload-name").value);
+    const res = await fetch("/api/sounds/upload", { method: "POST", body: form });
+    if (!res.ok) {
+      let msg = `Upload failed (${res.status})`;
+      try { const j = await res.json(); if (typeof j.detail === "string") msg = j.detail; } catch {}
+      renderUpload({ stage: "error", error: msg, percent: 0 });
+      throw new Error(msg);
+    }
+    const info = await res.json();
+    toast(`Sending ${info.name} (${info.seconds}s) to Skelly…`);
+  }),
+);
+
+function renderUpload(u) {
+  const box = $("#upload-progress");
+  box.hidden = false;
+  box.classList.toggle("error", u.stage === "error");
+  $("#upload-stage").textContent = u.stage === "error" ? u.error || UPLOAD_STAGES.error : UPLOAD_STAGES[u.stage] ?? "Working…";
+  $("#upload-pct").textContent = u.stage === "error" ? "" : `${u.percent ?? 0}%`;
+  $("#upload-bar").style.width = `${u.percent ?? 0}%`;
+  const busy = !["done", "error", "incomplete"].includes(u.stage);
+  $("#upload-btn").disabled = busy || !pickedFile;
+  if (u.stage === "done") {
+    toast(`${u.name} is on Skelly 🎉`);
+    pickedFile = null;
+    $("#upload-file").value = "";
+    $("#upload-name").value = "";
+    $("#drop").classList.remove("has-file");
+    $("#drop-text").innerHTML = "<strong>Drop a sound here</strong> or tap to pick one";
+    $("#upload-btn").disabled = true;
+  }
+}

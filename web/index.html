@@ -22,6 +22,8 @@
       <symbol id="i-move" viewBox="0 0 24 24"><path d="M5 9 2 12l3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></symbol>
       <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
       <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></symbol>
       <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></symbol>
     </defs>
   </svg>
@@ -199,6 +201,25 @@
 
         <!-- Sounds -->
         <section id="tab-sounds" class="tab" hidden>
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Add a sound</h2><p class="muted">Any audio file: MP3, WAV, M4A, OGG or FLAC, up to 5 minutes. It's tuned for Skelly's speaker automatically.</p></div>
+            </div>
+            <label class="drop" id="drop">
+              <input type="file" id="upload-file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.aif,.aiff" hidden>
+              <svg><use href="#i-upload"/></svg>
+              <span id="drop-text"><strong>Drop a sound here</strong> or tap to pick one</span>
+            </label>
+            <div class="upload-row">
+              <label class="field grow"><span class="muted">Name on Skelly</span>
+                <input type="text" id="upload-name" maxlength="16" placeholder="Evil_Laugh" autocomplete="off"></label>
+              <button id="upload-btn" class="btn primary" disabled><svg><use href="#i-upload"/></svg>Send to Skelly</button>
+            </div>
+            <div class="progress" id="upload-progress" hidden>
+              <div class="progress-top"><span id="upload-stage">Starting…</span><span id="upload-pct">0%</span></div>
+              <div class="bar"><i id="upload-bar"></i></div>
+            </div>
+          </div>
           <div class="card">
             <div class="card-head">
               <div><h2>Sounds on Skelly</h2><p class="muted">Stored on the animatronic</p></div>

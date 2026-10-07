@@ -16,7 +16,7 @@ Everything the original Ultra Skelly Controller (v3.1 beta) does. Ticked items a
 
 **Sounds tab (Sound Library)**
 - [ ] Sync the on-device sound list; playlist with checkboxes, drag-to-reorder, per-sound delay, hide factory sounds, preview, delete, restore factory sounds.
-- [ ] Upload: import any audio file or record from the mic, loudness-normalise, encode to the Skelly's MP3 profile, chunked BLE upload with verification.
+- [x] Upload: import any audio file, loudness-normalise, encode to the Skelly's MP3 profile, chunked BLE upload with verification (spec: docs/sound-upload.md). Recording from the mic is still to do.
 - [ ] Per-sound "Live Performance": which movement, eyes, light colour/mode/speed fire when that sound plays.
 - [ ] Text-to-speech via ElevenLabs, then upload.
 - [ ] Play playlist with start watchdog and progression driven by device events.

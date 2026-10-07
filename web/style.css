@@ -422,3 +422,29 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 @media (max-width: 639px) {
   .skelly-svg { max-height: 300px; }
 }
+
+/* ---------- sound upload ---------- */
+.drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center;
+  padding: 26px 16px; border: 1.5px dashed rgba(255, 255, 255, .16); border-radius: 16px; cursor: pointer;
+  color: var(--muted); background: rgba(255, 255, 255, .015); transition: border-color .15s, background .15s;
+}
+.drop svg { width: 30px; height: 30px; color: var(--accent); }
+.drop strong { color: var(--text); }
+.drop:hover, .drop.over { border-color: var(--accent); background: rgba(255, 140, 26, .06); }
+.drop.has-file { border-style: solid; border-color: rgba(255, 140, 26, .5); }
+.upload-row { display: flex; gap: 12px; align-items: flex-end; margin-top: 14px; flex-wrap: wrap; }
+.upload-row .field { display: grid; gap: 6px; min-width: 180px; }
+.upload-row input[type="text"] {
+  font: inherit; color: var(--text); background: var(--panel-2, #18181b); border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 12px; padding: 10px 12px; width: 100%;
+}
+.upload-row input[type="text"]:focus { outline: none; border-color: var(--accent); }
+.progress { margin-top: 16px; }
+.progress-top { display: flex; justify-content: space-between; font-size: .9rem; color: var(--muted); margin-bottom: 6px; }
+.progress .bar { height: 8px; border-radius: 99px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.progress .bar i { display: block; height: 100%; width: 0; border-radius: inherit;
+  background: linear-gradient(90deg, #ff7a1a, #ffb547); transition: width .3s; }
+.progress.error .bar i { background: #ff5d6c; }
+.icon-only { padding: 8px; }
+.icon-only svg { margin: 0; }
