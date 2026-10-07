@@ -285,24 +285,43 @@ SEE_PROMPT = (
 )
 
 FIND_PROMPT = (
-    "This camera frame shows a life-size Halloween skeleton decoration (an animatronic prop). "
-    "Give the box around the whole skeleton, including head, arms and feet, as fractions of the image width "
-    'and height. Reply with JSON only: {"found": true, "x": <left>, "y": <top>, "w": <width>, "h": <height>} '
-    'or {"found": false} if there is no skeleton.'
+    "This image is {w}x{h} pixels. It shows a life-size Halloween skeleton decoration (an animatronic prop). "
+    "Give pixel coordinates of: the top of its skull, the bottom of its lowest foot, leg or stand, its leftmost "
+    "point and its rightmost point (arms included). "
+    'Reply with JSON only: {{"found": true, "top": y, "bottom": y, "left": x, "right": x}} or {{"found": false}}.'
 )
 
 
+def jpeg_size(jpeg: bytes) -> tuple[int, int]:
+    """Width and height from a JPEG's start-of-frame marker."""
+    i = 2
+    while i + 9 < len(jpeg):
+        if jpeg[i] != 0xFF:
+            i += 1
+            continue
+        marker, length = jpeg[i + 1], int.from_bytes(jpeg[i + 2:i + 4], "big")
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            return int.from_bytes(jpeg[i + 7:i + 9], "big"), int.from_bytes(jpeg[i + 5:i + 7], "big")
+        i += 2 + length
+    return 640, 360
+
+
 async def find_skelly(vault, jpeg: bytes) -> list[float] | None:
-    """Where Skelly stands in the picture, padded a little, as [x, y, w, h] fractions."""
-    r = await _ask_vision(vault, jpeg, FIND_PROMPT)
+    """Where Skelly stands in the picture, padded a little, as [x, y, w, h] fractions.
+
+    Asks for his extreme points in pixels with a stronger model: in testing, asking for a
+    fractional box (or using Haiku) reliably cut off his legs.
+    """
+    w, h = jpeg_size(jpeg)
+    r = await _ask_vision(vault, jpeg, FIND_PROMPT.format(w=w, h=h), precise=True)
     if not r or not r.get("found"):
         return None
-    x, y, w, h = (float(r[k]) for k in ("x", "y", "w", "h"))
-    if max(x, y, w, h) > 1.5:  # some models answer in percent
-        x, y, w, h = x / 100, y / 100, w / 100, h / 100
-    pad_w, pad_h = w * 0.15, h * 0.08
-    x, y = max(0.0, x - pad_w), max(0.0, y - pad_h)
-    return [round(x, 4), round(y, 4), round(min(1 - x, w + 2 * pad_w), 4), round(min(1 - y, h + 2 * pad_h), 4)]
+    left, right = sorted((float(r["left"]) / w, float(r["right"]) / w))
+    top, bottom = sorted((float(r["top"]) / h, float(r["bottom"]) / h))
+    pad_x, pad_y = (right - left) * 0.2, (bottom - top) * 0.08
+    x0, y0 = max(0.0, left - pad_x), max(0.0, top - pad_y)
+    x1, y1 = min(1.0, right + pad_x), min(1.0, bottom + pad_y)
+    return [round(x0, 4), round(y0, 4), round(x1 - x0, 4), round(y1 - y0, 4)]
 
 
 async def describe(vault, jpeg: bytes, zones: list[list[float]] | None = None) -> dict | None:
@@ -310,21 +329,23 @@ async def describe(vault, jpeg: bytes, zones: list[list[float]] | None = None) -
     return await _ask_vision(vault, await blackout(jpeg, zones or []), SEE_PROMPT)
 
 
-async def _ask_vision(vault, jpeg: bytes, prompt: str) -> dict | None:
+async def _ask_vision(vault, jpeg: bytes, prompt: str, *, precise: bool = False) -> dict | None:
     b64 = base64.b64encode(jpeg).decode()
-    async with httpx.AsyncClient(timeout=20) as http:
+    async with httpx.AsyncClient(timeout=60 if precise else 20) as http:
         if key := vault.get("anthropic_api_key"):
             r = await http.post("https://api.anthropic.com/v1/messages", headers={
                 "x-api-key": key, "anthropic-version": "2023-06-01"}, json={
-                "model": "claude-haiku-4-5-20251001", "max_tokens": 150, "messages": [{"role": "user", "content": [
+                "model": "claude-sonnet-5-5" if precise else "claude-haiku-4-5-20251001",
+                "max_tokens": 1000 if precise else 150, "messages": [{"role": "user", "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
                     {"type": "text", "text": prompt}]}]})
             r.raise_for_status()
-            text = "".join(b.get("text", "") for b in r.json().get("content", []))
+            text = "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text")
         elif key := vault.get("openai_api_key"):
             r = await http.post("https://api.openai.com/v1/chat/completions", headers={
                 "Authorization": f"Bearer {key}"}, json={
-                "model": "gpt-4o-mini", "max_tokens": 150, "messages": [{"role": "user", "content": [
+                "model": "gpt-4o" if precise else "gpt-4o-mini", "max_tokens": 150,
+                "messages": [{"role": "user", "content": [
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                     {"type": "text", "text": prompt}]}]})
             r.raise_for_status()
