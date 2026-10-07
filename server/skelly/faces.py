@@ -27,7 +27,8 @@ MODEL_DIR = Path(os.environ.get("SKELLY_MODEL_DIR", "/app/models"))
 DETECTOR = "face_detection_yunet_2023mar.onnx"
 RECOGNIZER = "face_recognition_sface_2021dec.onnx"
 MATCH = 0.40  # SFace cosine similarity; OpenCV suggests 0.363, a bit stricter avoids mix-ups
-MIN_FACE_PX = 36  # smaller faces are too blurry to remember reliably
+MIN_FACE_PX = 16  # below this there's nothing to recognise
+SHARPEN_BELOW_PX = 64  # small faces are enlarged and re-found before fingerprinting
 MAX_SAMPLES = 12  # fingerprints kept per person (different angles and light)
 
 
@@ -70,11 +71,14 @@ class FaceEngine:
         import cv2
 
         if self._det is None:
-            self._det = cv2.FaceDetectorYN.create(str(MODEL_DIR / DETECTOR), "", (320, 320), 0.8, 0.3, 50)
+            self._det = cv2.FaceDetectorYN.create(str(MODEL_DIR / DETECTOR), "", (320, 320), 0.7, 0.3, 50)
             self._rec = cv2.FaceRecognizerSF.create(str(MODEL_DIR / RECOGNIZER), "")
         return cv2
 
-    def process(self, jpeg: bytes, ignore: list[list[float]]) -> list[Seen]:
+    def process(self, jpeg: bytes, ignore: list[list[float]], focus: list[float] | None = None) -> list[Seen]:
+        """All faces in the frame. `focus` ([x, y, w, h]) is also searched enlarged 2.5×,
+        so faces too small to find in the whole picture (people far from the camera but right
+        in front of Skelly) are still found."""
         import numpy as np
 
         with self._lock:
@@ -85,8 +89,11 @@ class FaceEngine:
             h, w = img.shape[:2]
             self._det.setInputSize((w, h))
             _, faces = self._det.detect(img)
+            faces = list(faces) if faces is not None else []
+            if focus:
+                faces += self._focus_faces(cv2, img, focus, faces)
             out = []
-            for f in faces if faces is not None else []:
+            for f in faces:
                 x, y, fw, fh = (float(v) for v in f[:4])
                 if min(fw, fh) < MIN_FACE_PX:
                     continue
@@ -94,13 +101,63 @@ class FaceEngine:
                 cx, cy = box[0] + box[2] / 2, box[1] + box[3] / 2
                 if any(zx <= cx <= zx + zw and zy <= cy <= zy + zh for zx, zy, zw, zh in ignore):
                     continue  # Skelly's own skull, a poster, a mask on the porch
-                aligned = self._rec.alignCrop(img, f)
+                aligned = self._aligned(cv2, img, f) if min(fw, fh) < SHARPEN_BELOW_PX else None
+                if aligned is None:
+                    aligned = self._rec.alignCrop(img, f)
                 emb = self._rec.feature(aligned).flatten()
                 emb = emb / (np.linalg.norm(emb) or 1.0)
                 ok, thumb = cv2.imencode(".jpg", cv2.resize(aligned, (96, 96)), [cv2.IMWRITE_JPEG_QUALITY, 80])
                 out.append(Seen(box=box, embedding=emb.astype(float).tolist(),
                                 thumb=base64.b64encode(thumb.tobytes()).decode() if ok else ""))
             return out
+
+
+    def _focus_faces(self, cv2, img, focus, already) -> list:
+        import numpy as np
+
+        h, w = img.shape[:2]
+        fx, fy, fw, fh = focus
+        x0, y0 = int(max(0, fx * w)), int(max(0, fy * h))
+        x1, y1 = int(min(w, (fx + fw) * w)), int(min(h, (fy + fh) * h))
+        if x1 - x0 < 20 or y1 - y0 < 20:
+            return []
+        k = 2.5
+        crop = cv2.resize(img[y0:y1, x0:x1], None, fx=k, fy=k, interpolation=cv2.INTER_CUBIC)
+        ch, cw = crop.shape[:2]
+        self._det.setInputSize((cw, ch))
+        _, found = self._det.detect(crop)
+        self._det.setInputSize((w, h))
+        out = []
+        for g in found if found is not None else []:
+            # YuNet rows: x, y, w, h, then five landmarks (x, y), then the score.
+            g = g.copy()
+            g[2:4] = g[2:4] / k
+            for i in (0, 4, 6, 8, 10, 12):
+                g[i] = g[i] / k + x0
+                g[i + 1] = g[i + 1] / k + y0
+            cx, cy = g[0] + g[2] / 2, g[1] + g[3] / 2
+            if any(abs(cx - (a[0] + a[2] / 2)) < a[2] and abs(cy - (a[1] + a[3] / 2)) < a[3] for a in already):
+                continue  # the whole-picture pass found this one already
+            out.append(np.asarray(g, dtype=np.float32))
+        return out
+
+    def _aligned(self, cv2, img, f):
+        """Enlarge the area around a small, distant face and find it again for cleaner landmarks."""
+        h, w = img.shape[:2]
+        x, y, fw, fh = (float(v) for v in f[:4])
+        pad = max(fw, fh)
+        x0, y0 = int(max(0, x - pad)), int(max(0, y - pad))
+        x1, y1 = int(min(w, x + fw + pad)), int(min(h, y + fh + pad))
+        scale = 96 / max(fw, fh)
+        crop = cv2.resize(img[y0:y1, x0:x1], None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        ch, cw = crop.shape[:2]
+        self._det.setInputSize((cw, ch))
+        _, found = self._det.detect(crop)
+        self._det.setInputSize((w, h))
+        if found is None or not len(found):
+            return None
+        best = max(found, key=lambda g: g[2] * g[3])
+        return self._rec.alignCrop(crop, best)
 
 
 class FaceMemory:

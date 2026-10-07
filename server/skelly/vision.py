@@ -164,8 +164,8 @@ class Vision:
         outs = ["-map", "[preview]", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "7", "pipe:1",
                 "-map", "[thumb]", "-f", "rawvideo", f"pipe:{thumb_fd}"]
         if face_fd:
-            # Faces need detail: a sharper 1280-wide frame twice a second.
-            graph += ";[c]fps=2,scale='min(1280,iw)':-2[faces]"
+            # Faces need detail: the full picture (up to 1920 wide) twice a second.
+            graph += ";[c]fps=2,scale='min(1920,iw)':-2[faces]"
             outs += ["-map", "[faces]", "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "3", f"pipe:{face_fd}"]
         return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-fflags", "nobuffer", *src,
                 "-filter_complex", graph, *outs]
@@ -258,7 +258,7 @@ class Vision:
                 continue  # still working on the last one: skip rather than fall behind
             busy = True
             try:
-                seen = await asyncio.to_thread(self.engine.process, frame, cfg.active_zones)
+                seen = await asyncio.to_thread(self.engine.process, frame, cfg.active_zones, _focus(cfg))
                 self._recognise(seen)
             except Exception as exc:
                 log.warning("face check failed: %r", exc)
@@ -359,6 +359,16 @@ class Vision:
         await asyncio.sleep(10)
         self.state.visitor = False
         self._publish()
+
+
+def _focus(cfg: VisionConfig) -> list[float] | None:
+    """Where visitors talking to Skelly stand: around his ignored area, wider and a bit lower."""
+    zones = cfg.active_zones
+    if not zones:
+        return None
+    x, y, w, h = zones[0]
+    fx, fy = max(0.0, x - 2.5 * w), max(0.0, y - 0.15 * h)
+    return [fx, fy, min(1.0, x + 3.5 * w) - fx, min(1.0, y + 1.3 * h) - fy]
 
 
 def _mask(zones: list[list[float]]) -> list[int]:
