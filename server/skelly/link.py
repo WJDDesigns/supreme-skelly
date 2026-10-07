@@ -103,9 +103,11 @@ def _sysfs_info(name: str) -> dict:
         usb = (Path("/sys/class/bluetooth") / name / "device").resolve().parent
         read = lambda f: (usb / f).read_text().strip() if (usb / f).exists() else ""  # noqa: E731
         vendor = read("idVendor")
-        port = usb.name  # e.g. "1-10" on the board, "1-3.1" behind a hub
+        # Ports you can plug into report "removable"; the board's own radio reports "fixed"
+        # or "unknown". Anything behind a hub ("1-3.1") is plugged in too.
+        external = read("removable") == "removable" or "." in usb.name
         return {"vendor": _VENDORS.get(vendor, read("manufacturer") or None),
-                "product": read("product") or None, "external": "." in port}
+                "product": read("product") or None, "external": external}
     except OSError:
         return {"vendor": None, "product": None, "external": False}
 
