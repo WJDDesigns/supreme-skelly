@@ -24,6 +24,9 @@ WRITE_GAP_S = 0.04  # device drops back-to-back write-without-response packets
 REPLY_TIMEOUT_S = 3.0
 AUTOCONNECT_INTERVAL_S = 10.0
 AUTOCONNECT_SCAN_S = 8.0
+# The firmware resets lights/eyes to the sound's stored scene when playback
+# starts, so a locked look is re-applied shortly after each START.
+REAPPLY_DELAY_S = 0.3
 
 
 class EventBus:
@@ -72,6 +75,8 @@ class SkellyService:
         self.settings = settings or Settings()
         self._autoconnector: asyncio.Task | None = None
         self._user_disconnected = False
+        self._reapply: asyncio.Task | None = None
+        self.look: dict = self.settings.look or {"lights": {}, "eye": None}
         self.state = DeviceState()
         self.profile: Profile = UNKNOWN
         self.auto_reconnect = auto_reconnect
@@ -102,7 +107,8 @@ class SkellyService:
         await self.link.disconnect()
 
     def snapshot(self) -> dict:
-        return {"device": asdict(self.state), "profile": self.profile.to_dict(), "settings": self.settings.public()}
+        return {"device": asdict(self.state), "profile": self.profile.to_dict(),
+                "settings": self.settings.public(), "look": self.look}
 
     def update_settings(self, **changes: Any) -> dict:
         for k, v in changes.items():
@@ -168,6 +174,8 @@ class SkellyService:
 
     async def _after_connect(self) -> None:
         await self.refresh_all()
+        if self.settings.keep_look:
+            await self._apply_look_safely()
         if self.settings.auto_live_mode and not self.state.live_mode and self.link.connected:
             try:
                 await self.enable_live_mode()
@@ -275,6 +283,8 @@ class SkellyService:
             self._set(live_mode=bool(d["status"]))
         elif ev.kind == "playback":
             self._set(playing=d["serial"] if d["playing"] else None)
+            if d["playing"] and self.settings.keep_look:
+                self._schedule_reapply()
         elif ev.kind == "file":
             self._files_buf[d["serial"]] = d
             if self._files_done and len(self._files_buf) >= d["total"]:
@@ -330,6 +340,8 @@ class SkellyService:
 
     async def set_eye(self, value: int) -> None:
         await self.send(proto.eye(value))
+        self.look["eye"] = value
+        self._look_changed()
 
     def _channel(self, light: str | None) -> int:
         if light in (None, "all"):
@@ -352,6 +364,83 @@ class SkellyService:
             await self.send(proto.color(ch, *rgb, cycle=cycle))
         if speed is not None:
             await self.send(proto.speed(ch, proto.ui_speed_to_device(speed)))
+        key = light if light not in (None, "all") else "all"
+        lights = self.look["lights"]
+        if key == "all":
+            # "All" overrides any per-light choice; keep only what was just set.
+            prev = lights.get("all", {})
+            lights.clear()
+            lights["all"] = prev
+        entry = lights.setdefault(key, {})
+        for k, v in (("mode", mode), ("brightness", brightness), ("speed", speed)):
+            if v is not None:
+                entry[k] = v
+        if rgb is not None:
+            entry["rgb"] = list(rgb)
+            entry["cycle"] = cycle
+        self._look_changed()
+
+    # -- keep this look ---------------------------------------------------------
+
+    def _look_changed(self) -> None:
+        if self.settings.keep_look:
+            self.settings.look = self.look
+            self.settings.save()
+        self.bus.publish("look", self.look)
+
+    def set_keep_look(self, keep: bool) -> dict:
+        self.settings.keep_look = keep
+        self.settings.look = self.look if keep else None
+        self.settings.save()
+        self.bus.publish("settings", self.settings.public())
+        return self.settings.public()
+
+    def _schedule_reapply(self) -> None:
+        if self._reapply and not self._reapply.done():
+            self._reapply.cancel()
+
+        async def later() -> None:
+            await asyncio.sleep(REAPPLY_DELAY_S)
+            await self._apply_look_safely()
+
+        self._reapply = asyncio.create_task(later())
+
+    async def _apply_look_safely(self) -> None:
+        try:
+            await self.apply_look()
+        except (ConnectionError, ValueError) as exc:
+            log.info("couldn't re-apply look: %s", exc)
+
+    async def apply_look(self, cluster: int = 0, filename: str = "") -> None:
+        """Send the stored look live, or into one sound's saved scene when ``filename`` is given."""
+        for key, e in self.look.get("lights", {}).items():
+            if key == "all":
+                # Per-sound scenes are stored per channel, so expand "all" there.
+                chans = [li.channel for li in self.profile.lights] if filename else [proto.ALL_CHANNELS]
+            else:
+                chans = [self._channel(key)]
+            for ch in chans:
+                if "mode" in e:
+                    await self.send(proto.light_mode(ch, e["mode"], cluster, filename))
+                if "brightness" in e:
+                    await self.send(proto.brightness(ch, e["brightness"], cluster, filename))
+                if "rgb" in e:
+                    await self.send(proto.color(ch, *e["rgb"], cycle=e.get("cycle", False),
+                                                cluster=cluster, filename=filename))
+                if "speed" in e:
+                    await self.send(proto.speed(ch, proto.ui_speed_to_device(e["speed"]), cluster, filename))
+        if self.look.get("eye") and self.profile.eyes:
+            await self.send(proto.eye(self.look["eye"], cluster, filename))
+
+    async def save_look_to_sounds(self) -> int:
+        """Write the current look into every sound on the device, so it sticks even
+        when Skelly plays sounds on his own (motion sensor, no controller running)."""
+        self._require_connected()
+        files = self.state.files or await self.refresh_files()
+        for f in files:
+            if f.get("name"):
+                await self.apply_look(f["cluster"], f["name"])
+        return sum(1 for f in files if f.get("name"))
 
     async def set_volume(self, value: int) -> None:
         await self.send(proto.volume(value))

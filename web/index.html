@@ -63,10 +63,43 @@
 
     <!-- Controls -->
     <section id="tab-controls" class="tab" hidden>
+      <div class="card look-card">
+        <div class="card-head">
+          <h2>Pick a look</h2>
+          <label class="lock" title="Skelly goes back to his own colors whenever a sound starts. This puts yours back automatically.">
+            <input type="checkbox" id="keep-look"> <span>📌 Keep this look</span>
+          </label>
+        </div>
+        <div id="scenes" class="scenes"></div>
+
+        <div class="custom">
+          <label class="color-dot" title="Pick any color">
+            <input type="color" id="color" value="#00ff3c" aria-label="Pick any color">
+          </label>
+          <label class="slider grow">Brightness <output id="bright-out">255</output>
+            <input type="range" id="bright" min="0" max="255" value="255"></label>
+        </div>
+
+        <details class="more">
+          <summary>More light options</summary>
+          <div class="more-body">
+            <div class="field"><span class="muted">Which lights</span><div id="light-targets" class="seg"></div></div>
+            <div class="field"><span class="muted">Effect</span><div id="light-modes" class="seg"></div></div>
+            <label class="slider">Effect speed <output id="speed-out">127</output>
+              <input type="range" id="speed" min="0" max="254" value="127"></label>
+          </div>
+        </details>
+
+        <div class="row split">
+          <button id="lights-off" class="btn ghost">🌑 Lights off</button>
+          <button id="save-sounds" class="btn" title="Writes this look into every sound on Skelly, so it sticks even when he plays sounds on his own.">💾 Save to every sound</button>
+        </div>
+      </div>
+
       <div class="card">
-        <h2>Movement</h2>
+        <h2>Move</h2>
+        <p class="muted">Tap the parts you want moving.</p>
         <div id="moves" class="chips"></div>
-        <div class="row end"><button id="moves-apply" class="btn primary">Apply movement</button></div>
       </div>
 
       <div class="card" id="eyes-card">
@@ -75,29 +108,7 @@
       </div>
 
       <div class="card">
-        <div class="card-head">
-          <h2>Lights</h2>
-          <div id="light-targets" class="seg"></div>
-        </div>
-        <div id="light-modes" class="seg wide"></div>
-        <div class="color-row">
-          <input type="color" id="color" value="#ff4400" aria-label="Light colour">
-          <div class="swatches" id="swatches"></div>
-          <label class="toggle"><input type="checkbox" id="cycle"> Colour cycle</label>
-        </div>
-        <label class="slider">Brightness <output id="bright-out">255</output>
-          <input type="range" id="bright" min="0" max="255" value="255"></label>
-        <label class="slider">Effect speed <output id="speed-out">127</output>
-          <input type="range" id="speed" min="0" max="254" value="127"></label>
-        <div class="row end">
-          <button id="lights-off" class="btn ghost">Lights off</button>
-          <button id="lights-apply" class="btn primary">Apply lights</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Volume</h2>
-        <label class="slider">Speaker volume <output id="vol-out">–</output>
+        <label class="slider">🔊 Volume <output id="vol-out">–</output>
           <input type="range" id="vol" min="0" max="255" value="128"></label>
       </div>
     </section>

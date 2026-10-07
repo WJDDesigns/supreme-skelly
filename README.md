@@ -32,13 +32,10 @@ git clone https://github.com/WJDDesigns/supreme-skelly && cd supreme-skelly
 Then open `http://<mini-pc-name>.local:8420` on your phone. Switch Skelly on and
 it connects by itself; after a reboot everything comes back on its own.
 
-Docker Desktop on Windows can't reach the PC's Bluetooth radio, so on Windows
-run it natively instead:
-
-```bash
-pip install .
-supreme-skelly
-```
+**Windows:** install [Python](https://www.python.org/downloads/) (tick "Add
+python.exe to PATH"), then double-click `start-windows.bat`. It sets itself up the
+first time and opens the UI at `http://localhost:8420`. (Docker Desktop on
+Windows can't reach the PC's Bluetooth radio, so Windows runs it natively.)
 
 **Try it without a prop:** `SKELLY_SIMULATE=1 supreme-skelly` (or set
 `SKELLY_SIMULATE=1` in `docker-compose.yml`).

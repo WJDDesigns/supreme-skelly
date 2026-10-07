@@ -20,6 +20,8 @@ def data_dir() -> Path:
 class Settings:
     auto_connect: bool = True  # find and connect to Skelly on startup and after drops
     auto_live_mode: bool = False  # turn on Live Mode (Bluetooth speaker) once connected
+    keep_look: bool = False  # re-apply the chosen lights/eyes whenever the device resets them
+    look: dict | None = None  # {"lights": {light_key: {...}}, "eye": int | None}
     last_address: str | None = None
     last_name: str | None = None
 

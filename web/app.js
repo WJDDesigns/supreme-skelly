@@ -7,7 +7,27 @@ const el = (tag, props = {}, ...kids) => {
   return n;
 };
 
-const state = { device: null, profile: null, moves: new Set(), light: "all", mode: null, eye: null };
+const state = { device: null, profile: null, moves: new Set(), light: "all", mode: null, eye: null, scene: null };
+
+// One-tap looks. `effect` is matched to whatever this prop calls its modes.
+const SCENES = [
+  { key: "toxic", name: "Toxic Green", emoji: "🧪", color: "#00ff3c", effect: "solid" },
+  { key: "blood", name: "Blood Moon", emoji: "🩸", color: "#ff0000", effect: "pulse" },
+  { key: "pumpkin", name: "Pumpkin", emoji: "🎃", color: "#ff6a00", effect: "solid" },
+  { key: "ghost", name: "Ghostly", emoji: "👻", color: "#cfe8ff", effect: "pulse" },
+  { key: "witch", name: "Witchy", emoji: "🔮", color: "#8a2be2", effect: "pulse" },
+  { key: "frozen", name: "Frozen", emoji: "🧊", color: "#00c8ff", effect: "solid" },
+  { key: "storm", name: "Lightning", emoji: "⚡", color: "#ffffff", effect: "strobe" },
+  { key: "party", name: "Party", emoji: "🌈", color: "#ff004c", effect: "solid", cycle: true },
+];
+const EYE_EMOJI = {
+  "Blue Eyes": "🔵", "Hazel Eyes": "🟤", "Green Eyes": "🟢", "Orange Eyes": "🟠", "Red Eyes": "🔴",
+  "Grey Eyes": "⚪", "Brown Eyes": "🟤", "Yellow Reptile Eye": "🦎", "Orange Reptile Eye": "🐍",
+  "Rainbow Swirl": "🌀", "Flames": "🔥", "Gold Star": "⭐", "Skull and Crossbones": "☠️", "Fireworks": "🎆",
+  "American Flag": "🇺🇸", "Heart": "❤️", "Four-Leaf Clover": "🍀", "Snowflake": "❄️", "Confetti": "🎉",
+  "Ice Eye": "🧊", "Peppermint Swirl": "🍬", "Cyber Eye": "🤖",
+};
+const EFFECT_LABELS = { solid: ["Static"], pulse: ["Pulsing"], strobe: ["Strobe", "Flickering"], flicker: ["Flickering"] };
 
 // ---------- API ----------
 async function api(path, body, method = body === undefined ? "GET" : "POST") {
@@ -108,6 +128,7 @@ function renderProfile() {
           state.moves.has(m.key) ? state.moves.delete(m.key) : state.moves.add(m.key);
         }
         renderProfile();
+        run(null, () => api("/movement", { parts: [...state.moves] }));
       });
       return c;
     }),
@@ -116,7 +137,7 @@ function renderProfile() {
   $("#eyes-card").hidden = !p.eyes.length;
   $("#eyes").replaceChildren(
     ...p.eyes.map((e) => {
-      const b = el("button", { className: "eye" }, el("span", { className: "num", textContent: e.value }), e.label);
+      const b = el("button", { className: "eye" }, el("span", { className: "num", textContent: EYE_EMOJI[e.label] ?? e.value }), e.label);
       b.setAttribute("aria-pressed", state.eye === e.value);
       b.addEventListener("click", () =>
         run(null, async () => {
@@ -134,8 +155,49 @@ function renderProfile() {
     ...targets.map((t) => segButton(t.label, state.light === t.key, () => { state.light = t.key; renderProfile(); })),
   );
   $("#light-modes").replaceChildren(
-    ...p.light_modes.map((m) => segButton(m.label, state.mode === m.value, () => { state.mode = m.value; renderProfile(); })),
+    ...p.light_modes.map((m) =>
+      segButton(m.label, state.mode === m.value, () => {
+        state.mode = m.value;
+        state.scene = null;
+        renderProfile();
+        sendLight({ mode: m.value });
+      }),
+    ),
   );
+  renderScenes();
+}
+
+function modeFor(effect) {
+  const modes = state.profile?.light_modes ?? [];
+  const wanted = EFFECT_LABELS[effect] ?? [];
+  return (modes.find((m) => wanted.includes(m.label)) ?? modes[0])?.value;
+}
+
+function renderScenes() {
+  $("#scenes").replaceChildren(
+    ...SCENES.map((sc) => {
+      const b = el("button", { className: `scene${sc.cycle ? " party" : ""}` },
+        el("span", { className: "emoji", textContent: sc.emoji }), sc.name);
+      b.style.setProperty("--c", sc.color);
+      b.setAttribute("aria-pressed", state.scene === sc.key);
+      b.addEventListener("click", () => applyScene(sc));
+      return b;
+    }),
+  );
+}
+
+async function applyScene(sc) {
+  state.scene = sc.key;
+  state.mode = modeFor(sc.effect) ?? null;
+  $("#color").value = sc.color;
+  $("#bright").value = 255;
+  $("#bright-out").textContent = 255;
+  renderProfile();
+  await sendLight({ color: sc.color, brightness: 255, mode: state.mode ?? undefined, cycle: !!sc.cycle }, `${sc.emoji} ${sc.name}`);
+}
+
+function sendLight(fields, okMsg) {
+  return run(null, () => api("/light", { light: state.light, ...fields }), okMsg);
 }
 
 function segButton(label, pressed, onClick) {
@@ -203,6 +265,7 @@ function renderSettings(st) {
   state.settings = st;
   $("#set-auto-connect").checked = st.auto_connect;
   $("#set-auto-live").checked = st.auto_live_mode;
+  $("#keep-look").checked = st.keep_look;
 }
 for (const [id, key] of [["set-auto-connect", "auto_connect"], ["set-auto-live", "auto_live_mode"]]) {
   $(`#${id}`).addEventListener("change", (e) =>
@@ -211,36 +274,39 @@ for (const [id, key] of [["set-auto-connect", "auto_connect"], ["set-auto-live",
 }
 
 // ---------- controls tab ----------
-$("#moves-apply").addEventListener("click", (ev) =>
-  run(ev.currentTarget, () => api("/movement", { parts: [...state.moves] }),
-    state.moves.size ? "Movement updated" : "Movement off"),
+let colorTimer;
+$("#color").addEventListener("input", (e) => {
+  state.scene = null;
+  renderScenes();
+  clearTimeout(colorTimer);
+  colorTimer = setTimeout(() => sendLight({ color: e.target.value, cycle: false }), 120);
+});
+let brightTimer;
+$("#bright").addEventListener("input", (e) => {
+  $("#bright-out").textContent = e.target.value;
+  clearTimeout(brightTimer);
+  brightTimer = setTimeout(() => sendLight({ brightness: Number(e.target.value) }), 120);
+});
+let speedTimer;
+$("#speed").addEventListener("input", (e) => {
+  $("#speed-out").textContent = e.target.value;
+  clearTimeout(speedTimer);
+  speedTimer = setTimeout(() => sendLight({ speed: Number(e.target.value) }), 120);
+});
+$("#lights-off").addEventListener("click", (ev) => {
+  state.scene = null;
+  renderScenes();
+  run(ev.currentTarget, () => api("/light", { light: state.light, brightness: 0 }), "Lights off");
+});
+$("#keep-look").addEventListener("change", (e) =>
+  run(null, () => api("/look/keep", { keep: e.target.checked }),
+    e.target.checked ? "📌 Locked in. Skelly will keep this look." : "Unlocked"),
 );
-
-const SWATCHES = ["#ff0000", "#ff7a1a", "#ffd000", "#00ff40", "#00c8ff", "#7a00ff", "#ff00c8", "#ffffff"];
-$("#swatches").replaceChildren(
-  ...SWATCHES.map((c) => {
-    const b = el("button", { title: c });
-    b.style.background = c;
-    b.addEventListener("click", () => { $("#color").value = c; });
-    return b;
+$("#save-sounds").addEventListener("click", (ev) =>
+  run(ev.currentTarget, async () => {
+    const { sounds } = await api("/look/save-to-sounds", {});
+    toast(`💾 Saved to ${sounds} sound${sounds === 1 ? "" : "s"}. Skelly will stay this way.`);
   }),
-);
-for (const [id, out] of [["bright", "bright-out"], ["speed", "speed-out"]]) {
-  $(`#${id}`).addEventListener("input", (e) => { $(`#${out}`).textContent = e.target.value; });
-}
-$("#lights-apply").addEventListener("click", (ev) =>
-  run(ev.currentTarget, () =>
-    api("/light", {
-      light: state.light,
-      mode: state.mode ?? undefined,
-      brightness: Number($("#bright").value),
-      color: $("#color").value,
-      cycle: $("#cycle").checked,
-      speed: Number($("#speed").value),
-    }), "Lights updated"),
-);
-$("#lights-off").addEventListener("click", (ev) =>
-  run(ev.currentTarget, () => api("/light", { light: state.light, brightness: 0 }), "Lights off"),
 );
 
 let volTimer;

@@ -43,6 +43,7 @@ button { font: inherit; color: inherit; }
 @keyframes pulse { 50% { opacity: .3; } }
 
 .tabs {
+  position: sticky; top: 57px; z-index: 4; background: rgba(13, 15, 20, .92); backdrop-filter: blur(8px);
   display: flex; gap: 4px; padding: 8px 12px; overflow-x: auto;
   border-bottom: 1px solid var(--line);
 }
@@ -95,12 +96,13 @@ main { max-width: 880px; margin: 0 auto; padding: 16px; display: grid; gap: 16px
 }
 .chip[aria-pressed="true"] { background: rgba(255, 122, 26, .18); border-color: var(--accent); color: var(--accent-2); }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
 .eye {
-  padding: 12px 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2);
-  cursor: pointer; text-align: center; font-size: .85rem;
+  padding: 8px 4px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2);
+  cursor: pointer; text-align: center; font-size: .72rem; line-height: 1.2; transition: transform .1s;
 }
-.eye .num { display: block; font-size: 1.2rem; font-weight: 700; color: var(--accent-2); }
+.eye:active { transform: scale(.94); }
+.eye .num { display: block; font-size: 1.5rem; margin-bottom: 2px; }
 .eye[aria-pressed="true"] { border-color: var(--accent); background: rgba(255, 122, 26, .14); }
 
 .seg { display: inline-flex; background: var(--panel-2); border-radius: 10px; padding: 3px; gap: 2px; flex-wrap: wrap; }
@@ -145,3 +147,42 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 }
 .switch-row input:checked { background: var(--accent); }
 .switch-row input:checked::after { transform: translateX(18px); }
+
+/* ---------- look card ---------- */
+.scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+.scene {
+  position: relative; aspect-ratio: 1 / 1; border-radius: 18px; border: 2px solid transparent;
+  cursor: pointer; display: grid; place-items: center; align-content: center; gap: 4px;
+  color: #fff; font-weight: 600; font-size: .85rem; text-shadow: 0 1px 3px rgba(0,0,0,.7);
+  background: radial-gradient(circle at 50% 35%, var(--c) 0%, color-mix(in srgb, var(--c) 35%, #000) 75%);
+  box-shadow: 0 0 0 1px var(--line) inset, 0 6px 18px -8px var(--c);
+  transition: transform .12s, box-shadow .2s;
+}
+.scene .emoji { font-size: 1.9rem; line-height: 1; }
+.scene:hover { transform: translateY(-2px); }
+.scene:active { transform: scale(.95); }
+.scene[aria-pressed="true"] { border-color: #fff; box-shadow: 0 0 0 1px #fff inset, 0 0 22px -2px var(--c); }
+.scene.party { background: conic-gradient(from 0deg, #ff004c, #ffb700, #3dff00, #00d5ff, #8a2be2, #ff004c); }
+.scene.party:not([aria-pressed="true"]) .emoji { animation: spin 6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.custom { display: flex; align-items: center; gap: 14px; }
+.grow { flex: 1; margin: 0; }
+.color-dot {
+  width: 46px; height: 46px; border-radius: 50%; overflow: hidden; flex: none; cursor: pointer;
+  border: 2px solid var(--line); background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+}
+.color-dot input { opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+
+.lock { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel-2); user-select: none; font-size: .9rem; }
+.lock input { accent-color: var(--accent); width: 16px; height: 16px; }
+.lock:has(input:checked) { border-color: var(--accent); color: var(--accent-2); background: rgba(255,122,26,.12); }
+
+.more { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.more summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.more-body { display: grid; gap: 10px; padding-top: 8px; }
+.field { display: grid; gap: 6px; }
+.row.split { justify-content: space-between; }
+
+.chip { font-size: 1rem; padding: 12px 20px; }

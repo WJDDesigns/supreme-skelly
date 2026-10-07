@@ -92,6 +92,9 @@ class SimulatedLink:
         self._connected = False
         self.files = [("Spooky Laugh.mp3", 1, 1000), ("Welcome.mp3", 2, 2000), ("Boo.mp3", 3, 3000)]
         self.volume = 120
+        # Mimic the firmware: playback resets the live colour to the sound's saved scene.
+        self.live_rgb = (255, 0, 0)
+        self.file_rgb: dict[str, tuple[int, int, int]] = {}
 
     @property
     def connected(self) -> bool:
@@ -141,8 +144,19 @@ class SimulatedLink:
             for name, serial, cluster in self.files:
                 payload = (serial.to_bytes(2, "big") + cluster.to_bytes(4, "big")
                            + len(self.files).to_bytes(2, "big") + bytes(2) + bytes([255])
-                           + bytes([1, 255, 255, 0, 0, 0, 0]) * 6 + bytes([serial, serial]) + bytes(2)
-                           + ("\\" + name).encode("utf-16le"))
+                           + bytes([1, 255, 255, 0, 0, 0, 0]) * 6 + bytes([serial, serial])
+                           + proto.FILENAME_MARKER + name.encode("utf-16le"))
                 self._reply(cmd, payload)
+        elif cmd == C.SET_RGB:
+            rgb = (data[3], data[4], data[5])
+            name_len = data[11]
+            if name_len:
+                self.file_rgb[data[14:12 + name_len].decode("utf-16le")] = rgb
+            else:
+                self.live_rgb = rgb
         elif cmd == C.PLAY_FILE:
+            serial = int.from_bytes(data[2:4], "big")
+            if data[4]:
+                name = next((n for n, s, _ in self.files if s == serial), "")
+                self.live_rgb = self.file_rgb.get(name, (255, 0, 0))
             self._reply(cmd, data[2:5] + (5).to_bytes(2, "big"))

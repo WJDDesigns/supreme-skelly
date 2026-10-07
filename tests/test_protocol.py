@@ -90,7 +90,7 @@ def test_parse_live_state_and_file():
     assert ev.data["lights"][0] == {"mode": 2, "brightness": 100, "rgb": (1, 2, 3), "cycle": False, "speed": 7}
 
     payload = ((3).to_bytes(2, "big") + (77).to_bytes(4, "big") + (2).to_bytes(2, "big") + bytes(2)
-               + bytes([255]) + light * 6 + bytes([4, 1]) + bytes(2) + "\\Boo.mp3".encode("utf-16le"))
+               + bytes([255]) + light * 6 + bytes([4, 1]) + bytes.fromhex("5C55") + "Boo.mp3".encode("utf-16le"))
     ev = p.parse(_notify(0xD0, payload))
     assert ev.kind == "file"
     assert ev.data["serial"] == 3 and ev.data["cluster"] == 77 and ev.data["total"] == 2

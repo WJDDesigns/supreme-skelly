@@ -50,6 +50,10 @@ class PlayBody(BaseModel):
     play: bool = True
 
 
+class KeepLookBody(BaseModel):
+    keep: bool
+
+
 class SettingsBody(BaseModel):
     auto_connect: bool | None = None
     auto_live_mode: bool | None = None
@@ -106,6 +110,21 @@ def create_app(
     @app.patch("/api/settings")
     async def patch_settings(body: SettingsBody):
         return svc().update_settings(**body.model_dump(exclude_none=True))
+
+    @app.get("/api/look")
+    async def get_look():
+        return {"look": svc().look, "keep": svc().settings.keep_look}
+
+    @app.post("/api/look/keep")
+    async def keep_look(body: KeepLookBody):
+        out = svc().set_keep_look(body.keep)
+        if body.keep and svc().link.connected:
+            await guarded(svc().apply_look())
+        return out
+
+    @app.post("/api/look/save-to-sounds")
+    async def save_look_to_sounds():
+        return {"sounds": await guarded(svc().save_look_to_sounds())}
 
     @app.post("/api/scan")
     async def scan(timeout: float = 6.0):

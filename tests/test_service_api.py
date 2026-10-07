@@ -103,3 +103,38 @@ def test_settings_api(tmp_path):
         assert c.get("/api/settings").json()["auto_connect"] is True
         assert c.patch("/api/settings", json={"auto_live_mode": True}).json()["auto_live_mode"] is True
     assert Settings.load(tmp_path / "s.json").auto_live_mode is True
+
+
+async def test_kept_look_survives_playback_reset(monkeypatch):
+    from skelly import service as service_mod
+
+    monkeypatch.setattr(service_mod, "REAPPLY_DELAY_S", 0.05)
+    svc, link = await _connected_service()
+    await svc.set_light("all", rgb=(0, 255, 0))
+    assert link.live_rgb == (0, 255, 0)
+
+    # Without the lock, playing a sound resets Skelly to the sound's own colour.
+    await svc.play_file(1)
+    await asyncio.sleep(0.3)
+    assert link.live_rgb == (255, 0, 0)
+
+    svc.set_keep_look(True)
+    await svc.apply_look()
+    await svc.play_file(2)
+    await asyncio.sleep(0.3)
+    assert link.live_rgb == (0, 255, 0)
+    assert svc.settings.look["lights"]["all"]["rgb"] == [0, 255, 0]
+    await svc.stop()
+
+
+async def test_save_look_to_sounds_writes_every_file():
+    svc, link = await _connected_service()
+    await svc.set_light("all", rgb=(0, 255, 0), brightness=255)
+    assert await svc.save_look_to_sounds() == 3
+    await asyncio.sleep(0.5)
+    assert link.file_rgb == {"Spooky Laugh.mp3": (0, 255, 0), "Welcome.mp3": (0, 255, 0), "Boo.mp3": (0, 255, 0)}
+    # Now even device-triggered playback stays green, with no lock needed.
+    await svc.play_file(3)
+    await asyncio.sleep(0.2)
+    assert link.live_rgb == (0, 255, 0)
+    await svc.stop()

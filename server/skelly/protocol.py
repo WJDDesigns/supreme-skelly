@@ -307,9 +307,9 @@ def parse(raw: bytes) -> Event | None:
         n = min(u(0, 1), (len(p) - 1) // 2)
         return Event("order", {"serials": [u(1 + i * 2, 3 + i * 2) for i in range(n)]})
     if cmd == Cmd.QUERY_FILES:
-        name = raw[59:-1].decode("utf-16le", "ignore").strip("\x00")
-        if name.startswith("\\"):
-            name = name[1:]
+        # The name follows the 5C 55 marker (normally at byte 57) and runs to the CRC.
+        mark = raw.find(FILENAME_MARKER, 57)
+        name = raw[mark + 2:-1].decode("utf-16le", "ignore").strip("\x00 ") if mark >= 0 else ""
         return Event("file", {
             "serial": u(0, 2),
             "cluster": u(2, 6),
