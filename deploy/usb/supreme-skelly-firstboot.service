@@ -1,0 +1,18 @@
+[Unit]
+Description=Build and start Supreme Skelly (first boot)
+Wants=network-online.target
+After=network-online.target docker.service bluetooth.service
+ConditionPathExists=!/opt/supreme-skelly/data/.installed
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/supreme-skelly
+ExecStartPre=/usr/bin/mkdir -p /opt/supreme-skelly/data
+ExecStart=/usr/bin/docker compose up -d --build
+ExecStartPost=/usr/bin/touch /opt/supreme-skelly/data/.installed
+# The network may not be up yet on first boot; keep trying until the build works.
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

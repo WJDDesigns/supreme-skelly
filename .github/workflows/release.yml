@@ -1,0 +1,26 @@
+name: Release
+# Bump VERSION in a PR and merge it: this publishes release vX.Y.Z (tag + notes) from main.
+# Every mini PC with automatic updates installs it within about 15 minutes.
+on:
+  push:
+    branches: [main]
+    paths: [VERSION, .github/workflows/release.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish release if this version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$(cat VERSION)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG is already released"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Supreme Skelly $TAG" --generate-notes
+          fi
