@@ -102,6 +102,9 @@ class ConversationConfig:
     quiet_from: str = "22:00"
     quiet_to: str = "16:00"
     idle_timeout_s: int = 45  # end the conversation after this long with nobody talking
+    # A chat Skelly started on his own (someone seen on camera) ends this long after he stops
+    # talking if nobody has answered yet: whoever set it off walked on, or it was a false alarm.
+    no_answer_s: int = 15
     max_minutes: int = 5  # hard stop, so a stuck or self-talking chat can't burn credits all night
     record: bool = False  # save each conversation as a video with sound
     keep_days: int = 30  # delete recordings older than this
@@ -124,6 +127,8 @@ class ConversationState:
     error: str | None = None
     started_at: float | None = None
     transcript: list[dict] = field(default_factory=list)
+    trigger: str | None = None  # why it started, e.g. "Front Door camera saw someone walk up"
+    answered: bool = False  # a visitor has said something real
 
 
 # Interrupting Skelly: the mic must beat his own echo, after a moment to learn how loud it is.
@@ -180,6 +185,17 @@ def season_note(now=None) -> str:
             "their shirt, their dog or what they're doing.")
 
 
+# What speech-to-text often "hears" in wind, traffic or a quiet yard.
+NOT_SPEECH = {"you", "thank you", "thanks", "thank you for watching", "bye", "uh", "um", "hmm", "mm",
+              "oh", "ah", "huh", "okay", "ok"}
+
+
+def said_something(text: str) -> bool:
+    """Whether a visitor transcript is real talk rather than noise the speech-to-text made words of."""
+    words = re.sub(r"[^\w' ]+", " ", text.lower()).split()
+    return bool(words) and " ".join(words) not in NOT_SPEECH and sum(len(w) for w in words) >= 2
+
+
 class MissingKey(ValueError):
     pass
 
@@ -217,8 +233,12 @@ class Conversation:
     def snapshot(self) -> dict:
         return asdict(self.state)
 
-    async def start(self, context: str | None = None, opening: str | None = None) -> dict:
-        """Begin a conversation. `opening` replaces the first thing he says (e.g. calling someone over)."""
+    async def start(self, context: str | None = None, opening: str | None = None, trigger: str | None = None) -> dict:
+        """Begin a conversation. `opening` replaces the first thing he says (e.g. calling someone over).
+
+        `trigger` says what set it off when Skelly starts on his own; such a chat ends quickly if
+        nobody answers. None means someone pressed Start.
+        """
         if self.running:
             if context:
                 self._context.append(context)
@@ -235,7 +255,11 @@ class Conversation:
         self._opening = opening
         if opening:
             cfg.first_message = opening
-        self.state = ConversationState(state="connecting", provider=cfg.provider, started_at=time.time())
+        self.state = ConversationState(state="connecting", provider=cfg.provider, started_at=time.time(),
+                                       trigger=trigger)
+        if trigger:
+            log.info("conversation started on its own: %s", trigger)
+            self.state.transcript.append({"role": "note", "text": f"Started because: {trigger}", "ts": time.time()})
         self._publish()
         self._task = asyncio.create_task(self._run(cfg), name="skelly-conversation")
         return self.snapshot()
@@ -316,8 +340,9 @@ class Conversation:
                 log.exception("Conversation picture failed")
         self.state.transcript = (self.state.transcript + [entry])[-60:]
         self.svc.bus.publish("transcript", entry)
-        if role == "user":
+        if role == "user" and said_something(text):  # not a cough or a mis-heard car going by
             self._last_heard = time.monotonic()
+            self.state.answered = True
             if self.on_user_text:
                 try:
                     self.on_user_text(text)
@@ -379,6 +404,10 @@ class Conversation:
                 return
             if speaker.speaking:
                 self._last_heard = time.monotonic()
+            elif (self.state.trigger and not self.state.answered
+                  and time.monotonic() - self._last_heard > cfg.no_answer_s):
+                log.info("nobody answered within %ss (%s); ending", cfg.no_answer_s, self.state.trigger)
+                return
             elif time.monotonic() - self._last_heard > cfg.idle_timeout_s:
                 log.info("conversation idle for %ss; ending", cfg.idle_timeout_s)
                 return
