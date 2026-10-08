@@ -102,6 +102,7 @@ class ConversationConfig:
     quiet_from: str = "22:00"
     quiet_to: str = "16:00"
     idle_timeout_s: int = 45  # end the conversation after this long with nobody talking
+    max_minutes: int = 5  # hard stop, so a stuck or self-talking chat can't burn credits all night
     record: bool = False  # save each conversation as a video with sound
     keep_days: int = 30  # delete recordings older than this
     mic: str = ""  # PipeWire source; empty = default
@@ -358,6 +359,9 @@ class Conversation:
         """Ends the conversation once nobody has spoken for a while."""
         while True:
             await asyncio.sleep(1)
+            if self.state.started_at and time.time() - self.state.started_at > cfg.max_minutes * 60:
+                log.info("conversation hit the %s-minute limit; ending", cfg.max_minutes)
+                return
             if speaker.speaking:
                 self._last_heard = time.monotonic()
             elif time.monotonic() - self._last_heard > cfg.idle_timeout_s:
