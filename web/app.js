@@ -892,6 +892,21 @@ function lineEl(t) {
   }
   return li;
 }
+// Tapping a bubble's picture shows it big over the page instead of opening a new tab.
+$("#transcript").addEventListener("click", (e) => {
+  const a = e.target.closest("a.snap");
+  if (!a) return;
+  e.preventDefault();
+  const li = a.closest("li");
+  $("#snap-view-img").src = a.href;
+  const tag = li?.querySelector(".who-tag");
+  const who = [tag?.firstChild?.textContent, tag?.querySelector("time")?.textContent].filter(Boolean).join(" at ");
+  $("#snap-view-cap").textContent = [who, li?.querySelector(".who-tag + span")?.textContent].filter(Boolean).join(": ");
+  $("#snap-view").showModal();
+});
+$("#snap-view-close").addEventListener("click", () => $("#snap-view").close());
+$("#snap-view").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
 function addLine(t) {
   const ul = $("#transcript");
   ul.append(lineEl(t));

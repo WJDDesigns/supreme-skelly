@@ -166,6 +166,20 @@ def is_quiet(cfg: ConversationConfig, now=None) -> bool:
     return start <= t < end if start < end else t >= start or t < end
 
 
+def season_note(now=None) -> str:
+    """What time of year it is, so Skelly doesn't treat every neighbour out walking as a trick-or-treater."""
+    now = now or clock.now()
+    day = f"Today is {now:%A, %B} {now.day}."
+    if now.month == 10 and now.day == 31:
+        return f"{day} It's Halloween night: expect trick-or-treaters in costumes."
+    halloween = now.replace(year=now.year + (now.month > 10), month=10, day=31).date()
+    days = (halloween - now.date()).days
+    return (f"{day} Halloween is {days} days away, so the people passing by are neighbours out for a walk, "
+            "a jog or with their dog, not trick-or-treaters. Don't ask about candy, trick-or-treating or "
+            "costumes unless they're actually dressed up; compliment something you can see instead, like "
+            "their shirt, their dog or what they're doing.")
+
+
 class MissingKey(ValueError):
     pass
 
@@ -217,7 +231,7 @@ class Conversation:
                 scene = self.scene_context()
             except Exception as exc:
                 log.info("no scene context: %r", exc)
-        self._context = [c for c in (scene, context) if c]
+        self._context = [c for c in (season_note(), scene, context) if c]
         self._opening = opening
         if opening:
             cfg.first_message = opening

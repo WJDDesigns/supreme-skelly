@@ -28,9 +28,30 @@ COSTUME = [
     "Psst, {c}! Come here, I've got a spooky question for you!",
 ]
 
+# Something friendly Skelly noticed, as a noun phrase: "blue shirt", "cute dog", "running shoes".
+NOTICE = [
+    "Hey! Love the {n}! Come over and say hi to a lonely skeleton!",
+    "Ooh, nice {n}! Got a minute to chat with a skeleton?",
+    "Excuse me! Yes, you with the {n}! Come here, I've got to tell you something!",
+    "Psst! Hey, great {n}! Come say hello, I don't bite!",
+    "Hey neighbour! That {n} caught my eye socket! Come over here!",
+    "Wow, look at that {n}! Come closer, I want a better look!",
+]
+DOG = [
+    "Is that a dog? Bring them over! My dog Bonez would love to meet them!",
+    "Hey! What a good pup! Come say hi, I love dogs!",
+    "Ooh, a doggo! Come over here, I've got a bone… well, I am one!",
+    "Psst! Your dog looks like my kind of friend! Come say hello!",
+]
 
-def call_out(costumes: list[str] | None = None) -> str:
-    """A random shout to get someone's attention, about their costume when there is one."""
+
+def call_out(costumes: list[str] | None = None, noticed: str = "") -> str:
+    """A random shout to get someone's attention: about their costume, or something friendly Skelly noticed."""
     if costumes and random.random() < 0.75:
         return random.choice(COSTUME).format(c=random.choice(costumes).lower())
+    if noticed and random.random() < 0.8:
+        n = noticed.lower()
+        if any(w in n.split() for w in ("dog", "dogs", "puppy", "pup", "doggo")) and random.random() < 0.6:
+            return random.choice(DOG)
+        return random.choice(NOTICE).format(n=n)
     return random.choice(PLAIN)
