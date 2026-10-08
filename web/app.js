@@ -1530,7 +1530,8 @@ function renderUsageStat(r) {
   const max = Math.max(60, ...days.map((d) => secs(d.day)));
   $("#st-ai-spark").innerHTML = days.map((d, i) => {
     const s = secs(d.day), h = Math.max(6, Math.round((100 * s) / max));
-    return `<i class="${i === 6 ? "today" : ""}" style="height:${h}%" title="${d.key}: ${fmtMins(s)}, $${(d.day?.usd || 0).toFixed(2)}"></i>`;
+    const wd = "SMTWTFS"[new Date(`${d.key}T12:00`).getDay()];
+    return `<b class="${i === 6 ? "today" : ""}" title="${d.key}: ${fmtMins(s)}, $${(d.day?.usd || 0).toFixed(2)}"><i style="height:${h}%"></i><small>${wd}</small></b>`;
   }).join("");
 }
 $("#usage-refresh").addEventListener("click", loadUsage);
