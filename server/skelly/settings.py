@@ -38,6 +38,8 @@ class Settings:
     timezone: str = ""  # IANA name, e.g. "America/New_York"; empty = the mini PC's own clock zone
     setup_done: bool = False  # the first-run welcome has been finished or skipped
     auto_update: bool = True  # install new releases by itself (the host's skelly-update timer reads this)
+    wallpaper: str = "classic"  # a built-in from web/wallpapers, "classic" (no picture) or "custom" (uploaded)
+    wallpaper_dim: int = 55  # how much the wallpaper is darkened behind the cards, in percent
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:

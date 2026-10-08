@@ -34,7 +34,7 @@ from .meters import Meters
 from .playlist import Playlist
 from .profiles import PROFILES
 from .service import SkellyService
-from .settings import Settings
+from .settings import Settings, data_dir
 from .vault import Vault
 from .vision import IGNORABLE, Vision, VisionConfig, costume_names, describe, find_skelly, list_cameras
 
@@ -144,6 +144,24 @@ class SettingsBody(BaseModel):
     timezone: str | None = Field(None, max_length=64)
     setup_done: bool | None = None
     auto_update: bool | None = None
+    wallpaper: str | None = Field(None, pattern=r"^[a-z0-9-]{1,32}$")
+    wallpaper_dim: int | None = Field(None, ge=0, le=90)
+
+
+WALLPAPER_MAX = 15 * 1024 * 1024
+
+
+def _image_type(head: bytes) -> str | None:
+    """The picture's media type from its first bytes, or None when it isn't a picture we show."""
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "image/webp"
+    if head[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return None
 
 
 # Reachable without signing in: the health check and what the login form needs.
@@ -1114,6 +1132,40 @@ def create_app(
             return svc().update_settings(**body.model_dump(exclude_none=True))
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    # -- wallpaper behind the page ----------------------------------------------
+
+    def wallpaper_path() -> Path:
+        return data_dir() / "wallpaper.img"
+
+    @app.post("/api/wallpaper")
+    async def wallpaper_upload(file: Annotated[UploadFile, File()]):
+        """Use your own picture as the page background. Kept on the mini PC only."""
+        raw = await file.read(WALLPAPER_MAX + 1)
+        if len(raw) > WALLPAPER_MAX:
+            raise HTTPException(413, "That picture is too big (15 MB max)")
+        if not _image_type(raw):
+            raise HTTPException(400, "That isn't a picture Skelly can show (use JPG, PNG, WebP or GIF)")
+        path = wallpaper_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        await asyncio.to_thread(tmp.write_bytes, raw)
+        tmp.replace(path)
+        return svc().update_settings(wallpaper="custom")
+
+    @app.get("/api/wallpaper/custom")
+    async def wallpaper_custom():
+        path = wallpaper_path()
+        if not path.exists():
+            raise HTTPException(404, "No picture uploaded")
+        return FileResponse(path, media_type=_image_type(path.read_bytes()[:16]) or "application/octet-stream",
+                            headers={"Cache-Control": "no-cache"})
+
+    @app.delete("/api/wallpaper/custom")
+    async def wallpaper_remove():
+        wallpaper_path().unlink(missing_ok=True)
+        st = svc().settings
+        return svc().update_settings(wallpaper="classic") if st.wallpaper == "custom" else st.public()
 
     @app.get("/api/adapters")
     async def adapters():

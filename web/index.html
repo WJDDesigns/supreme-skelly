@@ -33,6 +33,7 @@
     </defs>
   </svg>
 
+  <div class="wall" id="wall" aria-hidden="true"></div>
   <div class="haunt" aria-hidden="true">
     <div class="moon"></div>
     <svg class="web web-tr" viewBox="0 0 200 200"><g fill="none" stroke="currentColor" stroke-width=".8">
@@ -449,6 +450,26 @@
               </div>
             </form>
             <label class="field-row">Time zone<select id="set-tz"></select></label>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div><h2>Wallpaper</h2><p class="muted">The picture behind this page, on every screen you open it on</p></div></div>
+            <div class="wall-grid" id="wall-grid">
+              <button type="button" class="wall-pick" data-wall="classic"><span class="wall-thumb wall-classic"></span>Classic</button>
+              <button type="button" class="wall-pick" data-wall="supreme"><span class="wall-thumb" style="background-image:url(/static/wallpapers/supreme.svg)"></span>Supreme Skelly</button>
+              <button type="button" class="wall-pick" data-wall="graveyard"><span class="wall-thumb" style="background-image:url(/static/wallpapers/graveyard.svg)"></span>Graveyard</button>
+              <button type="button" class="wall-pick" data-wall="pumpkins"><span class="wall-thumb" style="background-image:url(/static/wallpapers/pumpkins.svg)"></span>Pumpkin patch</button>
+              <button type="button" class="wall-pick" data-wall="web"><span class="wall-thumb" style="background-image:url(/static/wallpapers/web.svg)"></span>Spider web</button>
+              <button type="button" class="wall-pick" data-wall="bones"><span class="wall-thumb" style="background-image:url(/static/wallpapers/bones.svg)"></span>Bone yard</button>
+              <button type="button" class="wall-pick" data-wall="custom" id="wall-custom-pick"><span class="wall-thumb wall-add" id="wall-custom-thumb"><svg><use href="#i-upload"/></svg></span>Your picture</button>
+            </div>
+            <input type="file" id="wall-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+            <div class="row">
+              <button class="btn outline small" type="button" id="wall-upload"><svg><use href="#i-upload"/></svg>Upload a picture</button>
+              <button class="btn outline small" type="button" id="wall-remove" hidden><svg><use href="#i-trash"/></svg>Remove my picture</button>
+            </div>
+            <label class="slider">Darken it so the cards stay easy to read <output id="wall-dim-out">55%</output>
+              <input type="range" id="wall-dim" min="0" max="90" step="5" value="55"></label>
           </div>
 
           <div class="card">

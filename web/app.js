@@ -551,9 +551,66 @@ function renderSettings(st) {
   $("#keep-look").checked = st.keep_look;
   if (!$("#set-tz").options.length || ($("#set-tz").value !== st.timezone && st.timezone)) timeZones($("#set-tz"), st.timezone);
   renderFiles();
+  renderWallpaper(st);
 }
 $("#set-tz").addEventListener("change", (e) =>
   run(null, async () => renderSettings(await api("/settings", { timezone: e.target.value }, "PATCH")), "Time zone saved"));
+
+// ---------- wallpaper ----------
+// The choice lives on the mini PC so every phone and laptop shows the same one; this browser
+// remembers the last one only to avoid a flash of the old background while the page loads.
+let wallVer = Date.now();
+function wallUrl(name) {
+  if (name === "custom") return `/api/wallpaper/custom?v=${wallVer}`;
+  return /^[a-z0-9-]+$/.test(name) && name !== "classic" ? `/static/wallpapers/${name}.svg` : "";
+}
+function applyWallpaper(name, dim) {
+  const url = wallUrl(name);
+  $("#wall").style.backgroundImage = url ? `url("${url}")` : "";
+  $("#wall").style.setProperty("--dim", (dim ?? 55) / 100);
+  document.body.classList.toggle("has-wall", !!url);
+  try { localStorage.setItem("wallpaper", JSON.stringify({ name, dim })); } catch {}
+}
+try { const w = JSON.parse(localStorage.getItem("wallpaper") || "null"); if (w && w.name !== "custom") applyWallpaper(w.name, w.dim); } catch {}
+function renderWallpaper(st) {
+  applyWallpaper(st.wallpaper, st.wallpaper_dim);
+  document.querySelectorAll(".wall-pick").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.wall === st.wallpaper)));
+  const custom = st.wallpaper === "custom";
+  $("#wall-custom-thumb").style.backgroundImage = custom ? `url("${wallUrl("custom")}")` : "";
+  $("#wall-custom-thumb").classList.toggle("wall-add", !custom);
+  $("#wall-remove").hidden = !custom;
+  if (document.activeElement !== $("#wall-dim")) $("#wall-dim").value = st.wallpaper_dim;
+  $("#wall-dim-out").textContent = `${$("#wall-dim").value}%`;
+}
+$("#wall-grid").addEventListener("click", (e) => {
+  const b = e.target.closest(".wall-pick");
+  if (!b) return;
+  if (b.dataset.wall === "custom" && $("#wall-custom-thumb").classList.contains("wall-add")) return $("#wall-file").click();
+  run(null, async () => renderSettings(await api("/settings", { wallpaper: b.dataset.wall }, "PATCH")), "Wallpaper saved");
+});
+$("#wall-upload").addEventListener("click", () => $("#wall-file").click());
+$("#wall-file").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  run($("#wall-upload"), async () => {
+    const form = new FormData();
+    form.append("file", f);
+    const res = await fetch("/api/wallpaper", { method: "POST", body: form });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof j.detail === "string" ? j.detail : `Upload failed (${res.status})`);
+    wallVer = Date.now();
+    renderSettings(j);
+  }, "Wallpaper saved");
+});
+$("#wall-remove").addEventListener("click", (e) =>
+  run(e.currentTarget, async () => renderSettings(await api("/wallpaper/custom", undefined, "DELETE")), "Picture removed"));
+$("#wall-dim").addEventListener("input", (e) => {
+  $("#wall-dim-out").textContent = `${e.target.value}%`;
+  applyWallpaper(state.settings?.wallpaper ?? "classic", +e.target.value);
+});
+$("#wall-dim").addEventListener("change", (e) =>
+  run(null, async () => renderSettings(await api("/settings", { wallpaper_dim: +e.target.value }, "PATCH")), "Saved"));
 
 // ---------- password ----------
 async function loadSecurity() {

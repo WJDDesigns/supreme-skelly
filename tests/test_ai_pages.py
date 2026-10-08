@@ -110,3 +110,21 @@ def test_ignored_zones_are_per_camera_and_masked(tmp_path):
         assert c.put("/api/vision/zones", json={"zones": []}).json()["zones"]["rtsp"] == [[0.0, 0.2, 0.25, 0.6]]
     keep = _mask([[0.0, 0.0, 0.5, 1.0]])
     assert len(keep) == THUMB_W * THUMB_H // 2 and all(i % THUMB_W >= THUMB_W // 2 for i in keep)
+
+
+def test_wallpaper_pick_upload_and_remove(tmp_path):
+    c, _ = make(tmp_path)
+    with c:
+        assert c.get("/api/settings").json()["wallpaper"] == "classic"
+        st = c.patch("/api/settings", json={"wallpaper": "graveyard", "wallpaper_dim": 40}).json()
+        assert st["wallpaper"] == "graveyard" and st["wallpaper_dim"] == 40
+        assert c.patch("/api/settings", json={"wallpaper": "../etc"}).status_code == 422
+        assert c.get("/static/wallpapers/graveyard.svg").status_code == 200
+        bad = c.post("/api/wallpaper", files={"file": ("x.txt", b"hello", "text/plain")})
+        assert bad.status_code == 400
+        png = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
+        assert c.post("/api/wallpaper", files={"file": ("me.png", png, "image/png")}).json()["wallpaper"] == "custom"
+        got = c.get("/api/wallpaper/custom")
+        assert got.status_code == 200 and got.headers["content-type"] == "image/png" and got.content == png
+        assert c.delete("/api/wallpaper/custom").json()["wallpaper"] == "classic"
+        assert c.get("/api/wallpaper/custom").status_code == 404

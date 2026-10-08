@@ -723,3 +723,25 @@ a.btn { text-decoration: none; color: inherit; }
 .spark b.today small { color: var(--accent); }
 #usage-card { scroll-margin-top: 90px; }
 @media (max-width: 639px) { .spark { position: static; height: 46px; align-self: stretch; justify-content: space-between; } }
+
+/* ---------- wallpaper ---------- */
+.wall { position: fixed; inset: 0; z-index: 0; pointer-events: none; background: center / cover no-repeat; --dim: .55; }
+.wall::after { content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, var(--dim)); }
+body.has-wall .haunt { display: none; }
+@media (min-width: 1000px) {
+  body.has-wall .app { background: rgba(7, 7, 7, .5); backdrop-filter: blur(3px); }
+}
+.wall-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin: 6px 0 14px; }
+.wall-pick {
+  display: grid; gap: 6px; padding: 0; border: 0; background: none; color: var(--muted);
+  font-size: .85rem; text-align: left; cursor: pointer;
+}
+.wall-thumb {
+  display: grid; place-items: center; aspect-ratio: 16 / 10; border-radius: 12px; border: 2px solid var(--line-2);
+  background: #111 center / cover no-repeat; transition: border-color .15s;
+}
+.wall-pick:hover .wall-thumb { border-color: rgba(255, 138, 0, .5); }
+.wall-pick[aria-pressed="true"] { color: var(--accent-2); }
+.wall-pick[aria-pressed="true"] .wall-thumb { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.wall-classic { background: radial-gradient(circle at 85% 10%, rgba(234, 223, 198, .22), transparent 35%), #000; }
+.wall-add { background: var(--panel-2); color: var(--muted); border-style: dashed; }
