@@ -506,6 +506,9 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 .transcript li.skelly { justify-self: start; background: var(--accent-soft); border: 1px solid rgba(255, 138, 0, .25); border-bottom-left-radius: 4px; }
 .transcript .who-tag { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
 .transcript li.skelly .who-tag { color: var(--accent-2); }
+.transcript .who-tag time { margin-left: 8px; color: var(--muted); letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
+.transcript .snap { display: block; margin-top: 6px; width: 160px; max-width: 100%; }
+.transcript .snap img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .08); }
 .seg.wide { display: flex; width: 100%; margin-bottom: 14px; }
 .seg.wide button { flex: 1; }
 .prov { display: grid; gap: 12px; margin-bottom: 12px; }

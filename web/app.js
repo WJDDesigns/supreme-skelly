@@ -809,12 +809,22 @@ function renderTalk(c) {
 function setTalkLevel(level) {
   $("#talk-ring").style.setProperty("--lvl", Math.min(1, level * 12).toFixed(2));
 }
+// One chat bubble: who, when, what was said, and what the camera saw at that moment.
+function lineEl(t) {
+  const when = t.ts ? new Date(t.ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }) : "";
+  const li = el("li", { className: t.role === "user" ? "you" : "skelly" },
+    el("span", { className: "who-tag" }, t.role === "user" ? "Visitor" : "Skelly", el("time", { textContent: when })),
+    el("span", { textContent: t.text }));
+  if (t.snap) {
+    const src = `/api/snaps/${t.snap}`;
+    li.append(el("a", { className: "snap", href: src, target: "_blank", title: "What the camera saw" },
+      el("img", { src, alt: "Camera at this moment", loading: "lazy" })));
+  }
+  return li;
+}
 function addLine(t) {
   const ul = $("#transcript");
-  const li = el("li", { className: t.role === "user" ? "you" : "skelly" },
-    el("span", { className: "who-tag", textContent: t.role === "user" ? "Visitor" : "Skelly" }),
-    el("span", { textContent: t.text }));
-  ul.append(li);
+  ul.append(lineEl(t));
   while (ul.children.length > 60) ul.firstChild.remove();
   ul.scrollTop = ul.scrollHeight;
 }
@@ -1292,8 +1302,7 @@ async function loadRecordings() {
       $("#rec-video").src = `/api/recordings/${r.name}`;
       $("#rec-video").play().catch(() => {});
       const t = await api(`/recordings/${r.name}/transcript`).catch(() => []);
-      $("#rec-transcript").replaceChildren(...t.map((x) => el("li", { className: x.role === "user" ? "you" : "skelly" },
-        el("span", { className: "who-tag", textContent: x.role === "user" ? "Visitor" : "Skelly" }), el("span", { textContent: x.text }))));
+      $("#rec-transcript").replaceChildren(...t.map(lineEl));
       $("#rec-player").scrollIntoView({ behavior: "smooth", block: "center" });
     });
     const dl = el("a", { className: "btn outline small", href: `/api/recordings/${r.name}?download=true`, textContent: "Download" });
