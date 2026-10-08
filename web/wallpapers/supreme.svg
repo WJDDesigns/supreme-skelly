@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="bg" cx=".5" cy=".45" r=".7">
+      <stop offset="0" stop-color="#2b1102"/><stop offset=".6" stop-color="#0b0503"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+    <radialGradient id="eye" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#fff2c0"/><stop offset=".25" stop-color="#ffb547"/><stop offset=".6" stop-color="#ff8a00" stop-opacity=".6"/><stop offset="1" stop-color="#ff8a00" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3024"/><stop offset="1" stop-color="#14100c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <g stroke="#ff8a00" stroke-opacity=".07" stroke-width="40">
+    <path d="M960 470 L0 0 M960 470 L480 0 M960 470 L1440 0 M960 470 L1920 0 M960 470 L1920 540 M960 470 L0 540 M960 470 L0 1080 M960 470 L1920 1080"/>
+  </g>
+  <g transform="translate(960 470)">
+    <path d="M0 -330 C-190 -330 -290 -200 -290 -40 C-290 70 -240 140 -180 170 L-170 260 C-120 300 -60 310 0 310 C60 310 120 300 170 260 L180 170 C240 140 290 70 290 -40 C290 -200 190 -330 0 -330Z" fill="url(#bone)" stroke="#eadfc6" stroke-opacity=".18" stroke-width="4"/>
+    <path d="M-200 -30 C-200 -100 -150 -120 -95 -110 C-50 -100 -40 -60 -50 -20 C-60 20 -100 50 -150 40 C-190 30 -200 0 -200 -30Z" fill="#050302"/>
+    <path d="M200 -30 C200 -100 150 -120 95 -110 C50 -100 40 -60 50 -20 C60 20 100 50 150 40 C190 30 200 0 200 -30Z" fill="#050302"/>
+    <circle cx="-120" cy="-35" r="120" fill="url(#eye)"/><circle cx="120" cy="-35" r="120" fill="url(#eye)"/>
+    <path d="M0 60 L-32 130 H32Z" fill="#050302"/>
+    <path d="M-130 190 H130 M-90 175 V250 M-45 180 V262 M0 182 V266 M45 180 V262 M90 175 V250" stroke="#050302" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <text x="960" y="1000" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="92" letter-spacing="28" fill="#eadfc6" fill-opacity=".1">SUPREME SKELLY</text>
+</svg>

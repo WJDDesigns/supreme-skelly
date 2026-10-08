@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="bg" cx=".7" cy=".2" r=".9">
+      <stop offset="0" stop-color="#3a1800"/><stop offset=".55" stop-color="#0d0603"/><stop offset="1" stop-color="#000"/>
+    </radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <g transform="translate(1500 160)" fill="none" stroke="#eadfc6" stroke-opacity=".22" stroke-width="2">
+    <path d="M0 0 L-1500 -160 M0 0 L-1200 500 M0 0 L-700 920 M0 0 L-150 920 M0 0 L420 920 M0 0 L420 300 M0 0 L420 -160 M0 0 L-600 -160"/>
+    <path d="M-120 -13 Q-110 40 -100 42 Q-40 70 -15 77 Q20 70 34 76 Q40 30 42 22 Q42 -5 42 -16 Q10 -18 -51 -16Z"/>
+    <path d="M-280 -30 Q-250 90 -233 97 Q-110 170 -35 180 Q40 160 79 179 Q90 80 98 52 Q100 -10 98 -37 Q20 -40 -120 -37Z"/>
+    <path d="M-480 -51 Q-440 140 -400 166 Q-200 280 -61 308 Q70 270 135 307 Q150 140 168 89 Q170 -20 168 -64 Q40 -70 -205 -64Z"/>
+    <path d="M-740 -79 Q-680 200 -617 256 Q-320 430 -94 475 Q100 420 208 473 Q230 220 260 137 Q262 -30 260 -99 Q60 -110 -316 -99Z"/>
+    <path d="M-1060 -113 Q-980 300 -883 366 Q-460 610 -135 680 Q140 600 298 677 Q330 300 372 196 Q375 -40 372 -142 Q90 -160 -453 -142Z"/>
+  </g>
+  <g transform="translate(1420 520)">
+    <path d="M80 -360 V-30" stroke="#eadfc6" stroke-opacity=".3" stroke-width="2"/>
+    <g fill="#050302">
+      <ellipse cx="80" cy="0" rx="34" ry="42"/><circle cx="80" cy="-46" r="20"/>
+      <g stroke="#050302" stroke-width="6" fill="none" stroke-linecap="round">
+        <path d="M54 -18 Q10 -60 -10 -10 M50 -4 Q0 -10 -20 30 M52 12 Q10 30 0 80 M58 26 Q30 60 30 110"/>
+        <path d="M106 -18 Q150 -60 170 -10 M110 -4 Q160 -10 180 30 M108 12 Q150 30 160 80 M102 26 Q130 60 130 110"/>
+      </g>
+    </g>
+    <circle cx="72" cy="-50" r="4" fill="#ff8a00"/><circle cx="88" cy="-50" r="4" fill="#ff8a00"/>
+  </g>
+</svg>
