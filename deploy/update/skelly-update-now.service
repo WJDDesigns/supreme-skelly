@@ -1,0 +1,8 @@
+[Unit]
+Description=Install the newest Supreme Skelly release now (the "Update now" button)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=@DIR@/deploy/update/skelly-update.sh --now

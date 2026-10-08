@@ -708,3 +708,7 @@ a.btn { text-decoration: none; color: inherit; }
 .gate-error { color: var(--bad); font-size: .9rem; }
 .btn.link { background: none; border-color: transparent; color: var(--muted); padding: 4px; }
 .btn.link:hover { color: var(--text); background: none; }
+
+.update-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.row.tight { margin-top: 0; gap: 8px; }
+.btn[hidden] { display: none; }

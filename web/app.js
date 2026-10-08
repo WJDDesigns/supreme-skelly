@@ -1340,6 +1340,26 @@ document.querySelectorAll("[data-restart]").forEach((b) =>
 loadSystem();
 setInterval(() => { if (!$("#tab-settings").hidden) loadSystem(); }, 15000);
 
+// ---------- version and updates ----------
+async function loadVersion(check = false) {
+  let v;
+  try { v = await api(`/version${check ? "?check=true" : ""}`); } catch { return; }
+  $("#upd-version").textContent = `Version ${v.version}`;
+  $("#foot-version").textContent = `v${v.version}`;
+  $("#upd-status").textContent = v.update_available ? `· v${v.latest} is available`
+    : v.error ? `· ${v.error}` : v.latest ? "· Up to date" : "";
+  $("#upd-now").hidden = !v.update_available;
+  $("#set-auto-update").checked = v.auto_update;
+}
+$("#upd-check").addEventListener("click", (ev) => run(ev.currentTarget, () => loadVersion(true)));
+$("#upd-now").addEventListener("click", (ev) => run(ev.currentTarget, async () => {
+  await api("/update", {});
+  $("#upd-status").textContent = "· Updating. The page reconnects in a few minutes.";
+}, "Update started"));
+$("#set-auto-update").addEventListener("change", (e) =>
+  run(null, () => api("/settings", { auto_update: e.target.checked }, "PATCH"), "Saved"));
+loadVersion();
+
 // ---------- voice test ----------
 $("#vt-speed").addEventListener("input", (e) => ($("#vt-speed-out").textContent = `${Number(e.target.value).toFixed(2)}×`));
 api("/voices").then(({ options, kokoro_ready }) => {

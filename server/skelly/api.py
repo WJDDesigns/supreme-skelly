@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio, audio_io, protect, recorder, scene, speaker, system, usage, voices
+from . import audio, audio_io, protect, recorder, scene, speaker, system, updates, usage, voices
 from . import protocol as proto
 from .auth import COOKIE, SESSION_DAYS, Auth
 from .conversation import (
@@ -143,6 +143,7 @@ class SettingsBody(BaseModel):
     auto_live_mode: bool | None = None
     timezone: str | None = Field(None, max_length=64)
     setup_done: bool | None = None
+    auto_update: bool | None = None
 
 
 # Reachable without signing in: the health check and what the login form needs.
@@ -759,6 +760,19 @@ def create_app(
     @app.get("/api/system")
     async def system_status():
         return system.status()
+
+    @app.get("/api/version")
+    async def version(check: bool = False):
+        return {**await updates.status(force=check), "auto_update": svc().settings.auto_update}
+
+    @app.post("/api/update")
+    async def update_now():
+        try:
+            await updates.install_now()
+        except Exception as exc:
+            raise HTTPException(502, "Couldn't start the update. Run get.sh on the mini PC once to set up updates.") \
+                from exc
+        return {"started": True}
 
     @app.post("/api/system/restart/{part}")
     async def system_restart(part: str):

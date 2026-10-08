@@ -38,7 +38,10 @@ Works with the Skelly-family Bluetooth animatronics: Ultra Skelly v2, Animated S
 4. **Switch Skelly on.** He's found and connected automatically, and everything comes
    back on its own after a power cut or reboot.
 
-To **update** later, run the same line again. Your settings, keys and faces are kept.
+**Updates are automatic.** The mini PC checks for a new version every 15 minutes and installs
+it by itself, keeping your settings, keys and faces. The version you're on is shown at the
+bottom of the page and in **Settings > System**, where you can also tap **Update now** or switch
+automatic updates off. (Running the install line again also updates.)
 
 ## Making him talk
 
@@ -135,6 +138,10 @@ SKELLY_SIMULATE=1 supreme-skelly   # then open http://localhost:8420
 ```
 
 Plain Python (FastAPI) service in `server/skelly`, a no-build web page in `web/`.
+
+**Publishing a release:** bump `VERSION` (and `version` in `pyproject.toml`), merge to `main`,
+then push a matching tag, e.g. `git tag v0.3.0 && git push origin v0.3.0`. GitHub Actions
+publishes the release, and every box with automatic updates installs it.
 Protocol notes are in [docs/protocol.md](docs/protocol.md).
 
 ## Credits and license
