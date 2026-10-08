@@ -521,6 +521,16 @@
               <div><dt>Memory free</dt><dd id="sys-mem">–</dd></div>
               <div><dt>Disk free</dt><dd id="sys-disk">–</dd></div>
             </dl>
+            <div class="update-row">
+              <span><strong id="upd-version">Version –</strong> <span class="muted" id="upd-status"></span></span>
+              <span class="row tight">
+                <button class="btn outline small" id="upd-check" type="button"><svg><use href="#i-refresh"/></svg>Check</button>
+                <button class="btn primary small" id="upd-now" type="button" hidden>Update now</button>
+              </span>
+            </div>
+            <label class="switch-row"><span><strong>Update automatically</strong>
+              <span class="muted">Installs new versions by itself, checking every 15 minutes. Settings, keys and faces are kept.</span></span>
+              <input type="checkbox" id="set-auto-update" role="switch"></label>
             <div class="restart-grid">
               <button class="btn outline" data-restart="audio"><svg><use href="#i-volume"/></svg>Restart sound</button>
               <button class="btn outline" data-restart="bluetooth"><svg><use href="#i-bt"/></svg>Restart Bluetooth</button>
@@ -532,7 +542,7 @@
         </section>
       </main>
 
-      <footer class="foot"><span>Supreme Skelly</span><span id="foot-host"></span></footer>
+      <footer class="foot"><span>Supreme Skelly <span id="foot-version"></span></span><span id="foot-host"></span></footer>
     </div>
   </div>
 

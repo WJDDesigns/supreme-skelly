@@ -62,6 +62,14 @@ mkdir -p data
 $SUDO chmod 700 data || true  # API keys, faces and recordings live here
 $SUDO docker compose up -d --build
 
+say "Turning on automatic updates"
+# Checks GitHub for a newer release every 15 minutes; switch it off in Settings > System.
+for unit in skelly-update.service skelly-update-now.service skelly-update.timer; do
+  sed "s#@DIR@#$PWD#g" "deploy/update/$unit" | $SUDO tee "/etc/systemd/system/$unit" >/dev/null
+done
+$SUDO systemctl daemon-reload
+$SUDO systemctl enable --now skelly-update.timer >/dev/null
+
 HOST="$(hostname).local"
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 say "Done. Open one of these on your phone or computer:"
