@@ -391,7 +391,12 @@ def create_app(
         return {"sink": sink}
 
     def quiet() -> bool:
-        """Quiet hours (Settings): visitors and passers-by don't start conversations."""
+        """Quiet hours (Settings), or Skelly switched off: visitors and passers-by don't start conversations.
+
+        Home Assistant powers Skelly down on a schedule; a chat then would talk to nobody but still cost credits.
+        """
+        if not svc().link.connected:
+            return True
         return is_quiet(ConversationConfig.from_dict(svc().settings.conversation))
 
     async def quiet_watch() -> None:
@@ -476,7 +481,7 @@ def create_app(
         if cfg.faces and vision.engine.available():
             seen = await asyncio.to_thread(vision.engine.process, jpeg, zones)
             vision.recognise_external(seen)
-        if cfg.ai_check:
+        if cfg.ai_check and (app.state.conv.running or not quiet()):  # no paid AI look while he's off
             if app.state.conv.running and cfg.call_over:
                 await call_over_live(jpeg, zones)  # he's mid-chat: invite them in rather than restart
             else:
