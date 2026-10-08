@@ -517,7 +517,8 @@ def create_app(
                "welcome them warmly." + costume_hint(costumes)
                + (f" You noticed their {noticed}; mention it in a friendly way." if noticed else ""))
         try:
-            await conv.start(context=ctx, opening=line)
+            await conv.start(context=ctx, opening=line,
+                             trigger=f"called over someone walking past ({app.state.vision.source})")
         except (MissingKey, ValueError) as exc:
             log.info("call-over not started: %s", exc)
 
@@ -530,7 +531,7 @@ def create_app(
             ctx = (f"Someone just walked up. What the camera sees: {description}{costume_hint(costumes)}"
                    if description else None)
             try:
-                await app.state.conv.start(context=ctx)
+                await app.state.conv.start(context=ctx, trigger=f"someone walked up ({app.state.vision.source})")
             except (MissingKey, ValueError) as exc:
                 log.info("visitor conversation not started: %s", exc)
 
@@ -568,7 +569,7 @@ def create_app(
             if app.state.conv.running and cfg.call_over:
                 await call_over_live(jpeg, zones)  # he's mid-chat: invite them in rather than restart
             else:
-                await vision.maybe_visitor_from(jpeg, zones)
+                await vision.maybe_visitor_from(jpeg, zones, f"{camera} camera")
 
     @app.get("/api/usage")
     async def usage_state():
@@ -653,7 +654,8 @@ def create_app(
             conv.add_context(f"{name} just joined; you've met them before ({person.get('visits', 1)} visits).")
         elif VisionConfig.from_dict(svc().settings.vision).auto_converse and not quiet():
             try:
-                await conv.start(context=f"Your friend {name} just walked up; you've met before. Greet them by name.")
+                await conv.start(context=f"Your friend {name} just walked up; you've met before. Greet them by name.",
+                                 trigger=f"recognised {name}'s face")
             except (MissingKey, ValueError) as exc:
                 log.info("greeting %s not started: %s", name, exc)
 
