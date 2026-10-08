@@ -712,3 +712,10 @@ a.btn { text-decoration: none; color: inherit; }
 .update-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 .row.tight { margin-top: 0; gap: 8px; }
 .btn[hidden] { display: none; }
+
+/* AI usage stat: a 7-day bar graph of talking time */
+.stat-link { font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%; }
+.spark { position: absolute; top: 18px; right: 20px; display: flex; align-items: flex-end; gap: 3px; height: 30px; }
+.spark i { width: 5px; border-radius: 2px; background: #4a4a4a; }
+.spark i.today { background: linear-gradient(180deg, var(--accent-2), var(--accent)); }
+#usage-card { scroll-margin-top: 90px; }

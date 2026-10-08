@@ -1508,6 +1508,35 @@ async function loadUsage() {
     return `<tr><td>${d.day}</td><td>${chats} chats, ${fmtMins(secs)}</td><td>${vis}</td><td>${tok.toLocaleString()}</td><td>$${d.usd.toFixed(2)}</td></tr>`;
   });
   $("#usage-rows").innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">Nothing used yet.</td></tr>`;
+  renderUsageStat(r);
+}
+
+// Top card: today's talking time (what ElevenLabs bills) and a 7-day bar graph of it.
+function renderUsageStat(r) {
+  const talk = (d) => Object.entries(d?.items || {}).filter(([k]) => k.startsWith("conversation:"));
+  const secs = (d) => talk(d).reduce((a, [, v]) => a + v.seconds, 0);
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const t = new Date(Date.now() - i * 864e5);
+    const key = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    days.push({ key, day: r.days.find((d) => d.day === key) });
+  }
+  const today = days[6].day;
+  const chats = talk(today).reduce((a, [, v]) => a + v.calls, 0);
+  $("#st-ai").textContent = fmtMins(secs(today));
+  const el = r.elevenlabs;
+  const credits = el && el.limit ? ` · ${Math.round((100 * el.used) / el.limit)}% credits used` : "";
+  $("#st-ai-sub").textContent = `${chats} chat${chats === 1 ? "" : "s"}${credits}`;
+  const max = Math.max(60, ...days.map((d) => secs(d.day)));
+  $("#st-ai-spark").innerHTML = days.map((d, i) => {
+    const s = secs(d.day), h = Math.max(6, Math.round((100 * s) / max));
+    return `<i class="${i === 6 ? "today" : ""}" style="height:${h}%" title="${d.key}: ${fmtMins(s)}, $${(d.day?.usd || 0).toFixed(2)}"></i>`;
+  }).join("");
 }
 $("#usage-refresh").addEventListener("click", loadUsage);
+$("#st-ai-card").addEventListener("click", () => {
+  document.querySelector('[data-tab="settings"]')?.click();
+  setTimeout(() => $("#usage-card").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+});
 loadUsage();
+setInterval(() => { if (!document.hidden) loadUsage(); }, 60000);

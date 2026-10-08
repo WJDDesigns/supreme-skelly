@@ -98,9 +98,9 @@
           <div class="stat"><span class="stat-ico"><svg><use href="#i-music"/></svg></span>
             <div><p class="stat-label">Sounds</p><p class="stat-value" id="st-sounds">–</p><p class="stat-sub" id="st-free">on Skelly</p></div>
             </div>
-          <div class="stat"><span class="stat-ico"><svg><use href="#i-chip"/></svg></span>
-            <div><p class="stat-label">Firmware</p><p class="stat-value" id="st-fw">–</p><p class="stat-sub" id="st-model">No device</p></div>
-            </div>
+          <button class="stat stat-link" id="st-ai-card" title="See AI usage in Settings"><span class="stat-ico"><svg><use href="#i-chip"/></svg></span>
+            <div><p class="stat-label">AI usage today</p><p class="stat-value" id="st-ai">–</p><p class="stat-sub" id="st-ai-sub">Talking time</p></div>
+            <span class="spark" id="st-ai-spark" aria-hidden="true"></span></button>
         </div>
 
         <!-- Device -->
@@ -462,6 +462,14 @@
           </div>
 
           <div class="card">
+            <div class="card-head"><div><h2>Skelly</h2><p class="muted">The animatronic this mini PC talks to</p></div></div>
+            <dl class="facts">
+              <div><dt>Firmware</dt><dd id="st-fw">–</dd></div>
+              <div><dt>Model</dt><dd id="st-model">No device</dd></div>
+            </dl>
+          </div>
+
+          <div class="card" id="usage-card">
             <div class="card-head">
               <div><h2>Usage</h2><p class="muted">What Skelly spent on paid AI, per day (local time)</p></div>
               <button id="usage-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>
