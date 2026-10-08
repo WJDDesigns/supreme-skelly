@@ -1,9 +1,10 @@
 name: Release
-# Push a tag like v0.3.0 (matching the VERSION file) and this publishes the GitHub release.
+# Bump VERSION in a PR and merge it: this publishes release vX.Y.Z (tag + notes) from main.
 # Every mini PC with automatic updates installs it within about 15 minutes.
 on:
   push:
-    tags: ["v*.*.*"]
+    branches: [main]
+    paths: [VERSION, .github/workflows/release.yml]
 
 permissions:
   contents: write
@@ -13,9 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Tag matches VERSION
-        run: test "v$(cat VERSION)" = "$GITHUB_REF_NAME"
-      - name: Publish release
+      - name: Publish release if this version is new
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "Supreme Skelly $GITHUB_REF_NAME" --generate-notes
+        run: |
+          TAG="v$(cat VERSION)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG is already released"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Supreme Skelly $TAG" --generate-notes
+          fi

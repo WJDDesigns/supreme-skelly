@@ -139,9 +139,9 @@ SKELLY_SIMULATE=1 supreme-skelly   # then open http://localhost:8420
 
 Plain Python (FastAPI) service in `server/skelly`, a no-build web page in `web/`.
 
-**Publishing a release:** bump `VERSION` (and `version` in `pyproject.toml`), merge to `main`,
-then push a matching tag, e.g. `git tag v0.3.0 && git push origin v0.3.0`. GitHub Actions
-publishes the release, and every box with automatic updates installs it.
+**Publishing a release:** bump `VERSION` (and `version` in `pyproject.toml`) and merge to
+`main`. GitHub Actions tags and publishes the release, and every box with automatic updates
+installs it.
 Protocol notes are in [docs/protocol.md](docs/protocol.md).
 
 ## Credits and license
