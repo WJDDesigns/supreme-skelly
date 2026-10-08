@@ -187,6 +187,7 @@ class Conversation:
         self.on_user_text: Callable[[str], None] | None = None  # e.g. listening for names
         self.on_started = None  # async (cfg, sink) once his voice has somewhere to go
         self.on_ended = None  # async (transcript) when the conversation finishes
+        self.snap: Callable[[], str | None] | None = None  # saves the camera picture for a line
         self._override_ok = False
         self._opening: str | None = None
         self._nudges: asyncio.Queue | None = None
@@ -293,6 +294,12 @@ class Conversation:
         if not text:
             return
         entry = {"role": role, "text": text, "ts": time.time()}
+        if self.snap:
+            try:
+                if name := self.snap():
+                    entry["snap"] = name
+            except Exception:  # a picture is a nice-to-have; never break the chat for it
+                log.exception("Conversation picture failed")
         self.state.transcript = (self.state.transcript + [entry])[-60:]
         self.svc.bus.publish("transcript", entry)
         if role == "user":
