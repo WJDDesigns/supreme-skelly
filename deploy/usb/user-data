@@ -1,0 +1,43 @@
+#cloud-config
+# Unattended Ubuntu Server 24.04 install for a Supreme Skelly mini PC.
+# WARNING: wipes the whole internal disk.
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  timezone: geoip
+  identity:
+    hostname: skelly
+    username: skelly
+    # Filled in by make-usb-image.sh with the password picked when building the image.
+    password: "__PASSWORD_HASH__"
+  ssh:
+    install-server: true
+    allow-pw: true
+  storage:
+    layout:
+      name: direct
+  packages:
+    - bluez
+    - avahi-daemon
+    - rfkill
+    - docker.io
+    - docker-compose-v2
+    - git
+    - curl
+  late-commands:
+    - curtin in-target -- systemctl enable bluetooth avahi-daemon docker ssh
+    - curtin in-target -- usermod -aG docker,bluetooth skelly
+    # Keep the Bluetooth radio on across reboots.
+    - curtin in-target -- sh -c 'sed -i "s/^#\?AutoEnable=.*/AutoEnable=true/" /etc/bluetooth/main.conf'
+    # Install Supreme Skelly from the USB stick; it builds and starts on first boot
+    # and then restarts automatically on every boot after that.
+    - mkdir -p /target/opt/supreme-skelly
+    - tar -xzf /cdrom/supreme-skelly.tar.gz -C /target/opt/supreme-skelly
+    - cp /target/opt/supreme-skelly/deploy/usb/supreme-skelly-firstboot.service /target/etc/systemd/system/
+    - curtin in-target -- systemctl enable supreme-skelly-firstboot.service
+    - curtin in-target -- chown -R skelly:skelly /opt/supreme-skelly
+    # Don't let a missing network cable stall boot for minutes.
+    - curtin in-target -- systemctl mask systemd-networkd-wait-online.service
+  shutdown: reboot
