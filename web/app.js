@@ -1409,3 +1409,35 @@ $("#protect-find").addEventListener("click", (ev) => run(ev.currentTarget, async
 }));
 loadProtect();
 setInterval(() => { if (!$("#tab-vision").hidden) loadProtect(); }, 20000);
+
+// -- usage meter ---------------------------------------------------------------
+
+function fmtMins(sec) {
+  const m = Math.round((sec || 0) / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+}
+
+async function loadUsage() {
+  let r;
+  try { r = await api("/usage"); } catch { return; }
+  const el = r.elevenlabs;
+  const box = $("#usage-eleven");
+  if (el && el.limit) {
+    const pct = Math.min(100, Math.round((100 * el.used) / el.limit));
+    const resets = el.resets ? new Date(el.resets * 1000).toLocaleDateString() : "";
+    box.innerHTML = `<div class="field-row"><span>ElevenLabs credits</span><span>${el.used.toLocaleString()} of ${el.limit.toLocaleString()} used (${pct}%)${resets ? ` · resets ${resets}` : ""}</span></div>
+      <div class="lvl-bar"><i style="clip-path:inset(0 ${100 - pct}% 0 0)"></i></div>`;
+  } else {
+    box.innerHTML = `<p class="muted">${r.elevenlabs_error || "Add your ElevenLabs key to see credits."}</p>`;
+  }
+  const rows = r.days.map((d) => {
+    const it = d.items, talk = Object.entries(it).filter(([k]) => k.startsWith("conversation:"));
+    const secs = talk.reduce((a, [, v]) => a + v.seconds, 0), chats = talk.reduce((a, [, v]) => a + v.calls, 0);
+    const vis = (it.vision?.calls || 0) + (it.photo?.calls || 0);
+    const tok = Object.values(it).reduce((a, v) => a + v.tokens_in + v.tokens_out, 0);
+    return `<tr><td>${d.day}</td><td>${chats} chats, ${fmtMins(secs)}</td><td>${vis}</td><td>${tok.toLocaleString()}</td><td>$${d.usd.toFixed(2)}</td></tr>`;
+  });
+  $("#usage-rows").innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">Nothing used yet.</td></tr>`;
+}
+$("#usage-refresh").addEventListener("click", loadUsage);
+loadUsage();

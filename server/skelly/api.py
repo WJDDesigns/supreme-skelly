@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio, audio_io, protect, recorder, scene, speaker, system, voices
+from . import audio, audio_io, protect, recorder, scene, speaker, system, usage, voices
 from . import protocol as proto
 from .conversation import (
     Conversation,
@@ -481,6 +481,16 @@ def create_app(
                 await call_over_live(jpeg, zones)  # he's mid-chat: invite them in rather than restart
             else:
                 await vision.maybe_visitor_from(jpeg, zones)
+
+    @app.get("/api/usage")
+    async def usage_state():
+        """What the paid AI services cost per day, and ElevenLabs credits left this period."""
+        credits, err = None, None
+        try:
+            credits = await usage.elevenlabs_credits(app.state.vault.get("elevenlabs_api_key") or "")
+        except Exception as exc:
+            err = f"Couldn't read ElevenLabs credits: {exc}"
+        return {"days": usage.summary(7), "elevenlabs": credits, "elevenlabs_error": err}
 
     @app.get("/api/protect")
     async def protect_state():

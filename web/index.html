@@ -448,6 +448,16 @@
           </div>
 
           <div class="card">
+            <div class="card-head">
+              <div><h2>Usage</h2><p class="muted">What Skelly spent on paid AI, per day (Indiana time)</p></div>
+              <button id="usage-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>
+            </div>
+            <div id="usage-eleven" class="usage-eleven"></div>
+            <table class="usage-table"><thead><tr><th>Day</th><th>Talking</th><th>Camera AI checks</th><th>Claude tokens</th><th>Est. Claude cost</th></tr></thead>
+              <tbody id="usage-rows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table>
+          </div>
+
+          <div class="card">
             <div class="card-head"><div><h2>Quiet hours</h2><p class="muted">When Skelly stops chatting with people on his own (Indiana time)</p></div></div>
             <label class="switch-row"><span><strong>Quiet at night</strong>
               <span class="muted">No conversations or call-outs when people walk by. Anything still going ends when quiet hours start. The Start button still works.</span></span>

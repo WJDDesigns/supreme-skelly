@@ -29,6 +29,7 @@ from dataclasses import asdict, dataclass, field
 
 import httpx
 
+from . import usage
 from .audio_io import ECHO_DELAY_S, FRAME_MS, Mic, Speaker, rms
 
 log = logging.getLogger(__name__)
@@ -340,6 +341,8 @@ class Conversation:
             self._set("idle")
         finally:
             self._nudges = None
+            if self.state.started_at:  # conversation minutes are what the voice services bill
+                usage.add(f"conversation:{cfg.provider}", seconds=time.time() - self.state.started_at)
             if mover:
                 mover.cancel()
             if speaker:
@@ -737,6 +740,7 @@ class Conversation:
         headers = {"x-api-key": self.vault.get("anthropic_api_key"), "anthropic-version": "2023-06-01",
                    "content-type": "application/json"}
         full, pending = "", ""
+        tok_in = tok_out = 0
         speaking = asyncio.Queue()
 
         async def voice():
@@ -754,6 +758,10 @@ class Conversation:
                     if not line.startswith("data:"):
                         continue
                     ev = json.loads(line[5:].strip() or "{}")
+                    if ev.get("type") == "message_start":
+                        tok_in = (ev.get("message", {}).get("usage") or {}).get("input_tokens", 0)
+                    elif ev.get("type") == "message_delta":
+                        tok_out = (ev.get("usage") or {}).get("output_tokens", 0)
                     if ev.get("type") == "content_block_delta" and ev["delta"].get("type") == "text_delta":
                         chunk = ev["delta"]["text"]
                         full += chunk
@@ -767,6 +775,7 @@ class Conversation:
             await voicer
         finally:
             voicer.cancel()
+            usage.add("chat", model=cfg.claude_model, tokens_in=tok_in, tokens_out=tok_out)
         self._say("skelly", speakable(full))
         return full
 

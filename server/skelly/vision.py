@@ -19,6 +19,8 @@ from pathlib import Path
 
 import httpx
 
+from . import usage
+
 log = logging.getLogger(__name__)
 
 THUMB_W, THUMB_H = 80, 45
@@ -577,7 +579,11 @@ async def _ask_vision(vault, jpeg: bytes, prompt: str, *, precise: bool = False)
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
                     {"type": "text", "text": prompt}]}]})
             r.raise_for_status()
-            text = "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text")
+            body = r.json()
+            u = body.get("usage") or {}
+            usage.add("photo" if precise else "vision", model=body.get("model", ""),
+                      tokens_in=u.get("input_tokens", 0), tokens_out=u.get("output_tokens", 0))
+            text = "".join(b.get("text", "") for b in body.get("content", []) if b.get("type") == "text")
         elif key := vault.get("openai_api_key"):
             r = await http.post("https://api.openai.com/v1/chat/completions", headers={
                 "Authorization": f"Bearer {key}"}, json={
@@ -586,7 +592,11 @@ async def _ask_vision(vault, jpeg: bytes, prompt: str, *, precise: bool = False)
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                     {"type": "text", "text": prompt}]}]})
             r.raise_for_status()
-            text = r.json()["choices"][0]["message"]["content"]
+            body = r.json()
+            u = body.get("usage") or {}
+            usage.add("photo" if precise else "vision", model=body.get("model", ""),
+                      tokens_in=u.get("prompt_tokens", 0), tokens_out=u.get("completion_tokens", 0))
+            text = body["choices"][0]["message"]["content"]
         else:
             return None
     start, end = text.find("{"), text.rfind("}")
