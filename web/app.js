@@ -564,16 +564,20 @@ function wallUrl(name) {
   if (name === "custom") return `/api/wallpaper/custom?v=${wallVer}`;
   return /^[a-z0-9-]+$/.test(name) && name !== "classic" ? `/static/wallpapers/${name}.svg` : "";
 }
-function applyWallpaper(name, dim) {
+function applyClear(pct) {
+  document.documentElement.style.setProperty("--ui", 1 - (pct ?? 0) / 100);
+}
+function applyWallpaper(name, dim, clear) {
   const url = wallUrl(name);
+  if (clear !== undefined) applyClear(clear);
   $("#wall").style.backgroundImage = url ? `url("${url}")` : "";
   $("#wall").style.setProperty("--dim", (dim ?? 55) / 100);
   document.body.classList.toggle("has-wall", !!url);
-  try { localStorage.setItem("wallpaper", JSON.stringify({ name, dim })); } catch {}
+  try { localStorage.setItem("wallpaper", JSON.stringify({ name, dim, clear: clear ?? state.settings?.ui_transparency })); } catch {}
 }
-try { const w = JSON.parse(localStorage.getItem("wallpaper") || "null"); if (w && w.name !== "custom") applyWallpaper(w.name, w.dim); } catch {}
+try { const w = JSON.parse(localStorage.getItem("wallpaper") || "null"); if (w) applyWallpaper(w.name === "custom" ? "classic" : w.name, w.dim, w.clear); } catch {}
 function renderWallpaper(st) {
-  applyWallpaper(st.wallpaper, st.wallpaper_dim);
+  applyWallpaper(st.wallpaper, st.wallpaper_dim, st.ui_transparency);
   document.querySelectorAll(".wall-pick").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.wall === st.wallpaper)));
   const custom = st.wallpaper === "custom";
   $("#wall-custom-thumb").style.backgroundImage = custom ? `url("${wallUrl("custom")}")` : "";
@@ -581,6 +585,8 @@ function renderWallpaper(st) {
   $("#wall-remove").hidden = !custom;
   if (document.activeElement !== $("#wall-dim")) $("#wall-dim").value = st.wallpaper_dim;
   $("#wall-dim-out").textContent = `${$("#wall-dim").value}%`;
+  if (document.activeElement !== $("#ui-clear")) $("#ui-clear").value = st.ui_transparency;
+  $("#ui-clear-out").textContent = `${$("#ui-clear").value}%`;
 }
 $("#wall-grid").addEventListener("click", (e) => {
   const b = e.target.closest(".wall-pick");
@@ -611,6 +617,13 @@ $("#wall-dim").addEventListener("input", (e) => {
 });
 $("#wall-dim").addEventListener("change", (e) =>
   run(null, async () => renderSettings(await api("/settings", { wallpaper_dim: +e.target.value }, "PATCH")), "Saved"));
+
+$("#ui-clear").addEventListener("input", (e) => {
+  $("#ui-clear-out").textContent = `${e.target.value}%`;
+  applyClear(+e.target.value);
+});
+$("#ui-clear").addEventListener("change", (e) =>
+  run(null, async () => renderSettings(await api("/settings", { ui_transparency: +e.target.value }, "PATCH")), "Saved"));
 
 // ---------- password ----------
 async function loadSecurity() {

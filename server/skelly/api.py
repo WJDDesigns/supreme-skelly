@@ -146,6 +146,7 @@ class SettingsBody(BaseModel):
     auto_update: bool | None = None
     wallpaper: str | None = Field(None, pattern=r"^[a-z0-9-]{1,32}$")
     wallpaper_dim: int | None = Field(None, ge=0, le=90)
+    ui_transparency: int | None = Field(None, ge=0, le=80)
 
 
 WALLPAPER_MAX = 15 * 1024 * 1024

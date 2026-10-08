@@ -119,6 +119,8 @@ def test_wallpaper_pick_upload_and_remove(tmp_path):
         st = c.patch("/api/settings", json={"wallpaper": "graveyard", "wallpaper_dim": 40}).json()
         assert st["wallpaper"] == "graveyard" and st["wallpaper_dim"] == 40
         assert c.patch("/api/settings", json={"wallpaper": "../etc"}).status_code == 422
+        assert c.patch("/api/settings", json={"ui_transparency": 50}).json()["ui_transparency"] == 50
+        assert c.patch("/api/settings", json={"ui_transparency": 95}).status_code == 422
         assert c.get("/static/wallpapers/graveyard.svg").status_code == 200
         bad = c.post("/api/wallpaper", files={"file": ("x.txt", b"hello", "text/plain")})
         assert bad.status_code == 400

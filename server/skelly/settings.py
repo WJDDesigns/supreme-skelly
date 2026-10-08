@@ -40,6 +40,7 @@ class Settings:
     auto_update: bool = True  # install new releases by itself (the host's skelly-update timer reads this)
     wallpaper: str = "classic"  # a built-in from web/wallpapers, "classic" (no picture) or "custom" (uploaded)
     wallpaper_dim: int = 55  # how much the wallpaper is darkened behind the cards, in percent
+    ui_transparency: int = 0  # how see-through the cards and bars are, in percent (0 = solid)
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:
