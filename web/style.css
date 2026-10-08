@@ -763,3 +763,14 @@ body.has-wall .haunt { display: none; }
   body.has-wall .app { background: rgb(7 7 7 / calc(.5 * var(--ui))); }
   .side-card { background: linear-gradient(180deg, rgb(26 26 26 / var(--ui)), rgb(12 12 12 / var(--ui))); }
 }
+
+/* the usage card's bar graph sits beside the text, and drops below it when the card is too narrow */
+#st-ai-card { flex-wrap: wrap; }
+#st-ai-card > div { flex: 1 1 150px; }
+#st-ai-card .spark { position: static; height: 58px; margin-left: auto; align-self: center; }
+#st-ai-sub { white-space: normal; overflow: visible; }
+@media (max-width: 639px) {
+  #st-ai-card { flex-wrap: nowrap; }
+  #st-ai-card > div { flex: none; max-width: 100%; }
+  #st-ai-card .spark { align-self: stretch; height: 46px; margin-left: 0; }
+}
