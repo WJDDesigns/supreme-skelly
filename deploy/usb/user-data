@@ -10,7 +10,7 @@ autoinstall:
   identity:
     hostname: skelly
     username: skelly
-    # Default password "skelly". Change it after first login with `passwd`.
+    # Filled in by make-usb-image.sh with the password picked when building the image.
     password: "__PASSWORD_HASH__"
   ssh:
     install-server: true

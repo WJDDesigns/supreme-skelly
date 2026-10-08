@@ -427,7 +427,7 @@
             <label class="switch-row"><span><strong>Use Protect detections</strong>
               <span class="muted">Sharp faces from full-resolution snapshots, and visitors spotted on several cameras at no extra load.</span></span>
               <input type="checkbox" data-vcfg="protect" role="switch"></label>
-            <label class="field-row">Protect console address<input type="text" data-vcfg="protect_host" placeholder="192.168.1.218" autocomplete="off"></label>
+            <label class="field-row">Protect console address<input type="text" data-vcfg="protect_host" placeholder="e.g. 192.168.1.1" autocomplete="off"></label>
             <div class="field"><span class="muted">Cameras that see Skelly's visitors</span>
               <div class="chips small" id="protect-cams"></div></div>
             <div class="row"><button id="protect-find" class="btn outline small"><svg><use href="#i-skull"/></svg>Find Skelly in these cameras</button>
@@ -437,6 +437,20 @@
 
         <!-- Settings -->
         <section id="tab-settings" class="tab" hidden>
+          <div class="card">
+            <div class="card-head"><div><h2>Password and time zone</h2><p class="muted" id="sec-sub">Who can open this page, and Skelly's local time</p></div></div>
+            <form id="sec-form" class="stack" autocomplete="off">
+              <label class="field-row" id="sec-current-row" hidden>Current password<input type="password" id="sec-current" autocomplete="current-password"></label>
+              <label class="field-row">New password<input type="password" id="sec-new" autocomplete="new-password" placeholder="At least 6 characters"></label>
+              <div class="row">
+                <button class="btn primary" type="submit" id="sec-save">Save password</button>
+                <button class="btn outline" type="button" id="sec-off" hidden>Turn password off</button>
+                <button class="btn outline" type="button" id="sec-logout" hidden>Sign out</button>
+              </div>
+            </form>
+            <label class="field-row">Time zone<select id="set-tz"></select></label>
+          </div>
+
           <div class="card">
             <div class="card-head"><div><h2>Startup</h2><p class="muted">What happens when the mini PC boots</p></div></div>
             <label class="switch-row"><span><strong>Connect automatically</strong>
@@ -449,7 +463,7 @@
 
           <div class="card">
             <div class="card-head">
-              <div><h2>Usage</h2><p class="muted">What Skelly spent on paid AI, per day (Indiana time)</p></div>
+              <div><h2>Usage</h2><p class="muted">What Skelly spent on paid AI, per day (local time)</p></div>
               <button id="usage-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>
             </div>
             <div id="usage-eleven" class="usage-eleven"></div>
@@ -458,7 +472,7 @@
           </div>
 
           <div class="card">
-            <div class="card-head"><div><h2>Quiet hours</h2><p class="muted">When Skelly stops chatting with people on his own (Indiana time)</p></div></div>
+            <div class="card-head"><div><h2>Quiet hours</h2><p class="muted">When Skelly stops chatting with people on his own (local time)</p></div></div>
             <label class="switch-row"><span><strong>Quiet at night</strong>
               <span class="muted">No conversations or call-outs when people walk by. Anything still going ends when quiet hours start. The Start button still works.</span></span>
               <input type="checkbox" data-cfg="quiet_hours" role="switch"></label>
@@ -522,7 +536,32 @@
     </div>
   </div>
 
+  <div id="gate" class="gate" hidden>
+    <form id="login" class="gate-card" hidden>
+      <svg class="logo gate-logo"><use href="#i-skull"/></svg>
+      <h2>Who goes there?</h2>
+      <p class="muted">Enter this Skelly's password.</p>
+      <input type="password" id="login-pw" autocomplete="current-password" required>
+      <button class="btn primary" type="submit">Sign in</button>
+      <p class="muted small">Forgot it? See "Forgot the password" in the README.</p>
+    </form>
+    <form id="setup" class="gate-card" hidden>
+      <svg class="logo gate-logo"><use href="#i-skull"/></svg>
+      <h2>Welcome to Supreme Skelly</h2>
+      <p class="muted">Two quick things and you're ready.</p>
+      <label class="gate-field"><strong>1. Pick a password for this page</strong>
+        <span class="muted">Anyone on your Wi-Fi could otherwise control Skelly and see the camera.</span>
+        <input type="password" id="setup-pw" autocomplete="new-password" placeholder="At least 6 characters"></label>
+      <label class="gate-field"><strong>2. Your time zone</strong>
+        <span class="muted">For quiet hours and the daily usage count.</span>
+        <select id="setup-tz"></select></label>
+      <button class="btn primary" type="submit">Let's go</button>
+      <button class="btn link" type="button" id="setup-skip">Skip the password (not recommended)</button>
+      <p class="muted small">Next: switch Skelly on and he connects by himself. To make him talk, add an AI key in Settings.</p>
+    </form>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="/static/app.js"></script>
+  <script type="module" src="/static/gate.js"></script>
 </body>
 </html>

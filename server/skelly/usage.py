@@ -1,4 +1,4 @@
-"""What Skelly spends on paid AI services, counted per day (Indiana time) and kept on the mini PC.
+"""What Skelly spends on paid AI services, counted per day (local time) and kept on the mini PC.
 
 Every call to Claude or OpenAI and every conversation minute is tallied here, so the Settings page
 can show what each night cost and anything running away is easy to spot. ElevenLabs credits are
@@ -12,15 +12,14 @@ import logging
 import threading
 from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import httpx
 
+from . import clock
 from .settings import data_dir
 
 log = logging.getLogger(__name__)
 
-TZ = ZoneInfo("America/Indiana/Indianapolis")
 KEEP_DAYS = 30
 
 # Rough list prices in US$ per million tokens (input, output), for an estimate only.
@@ -56,7 +55,7 @@ def _save(days: dict) -> None:
 
 
 def today(now: datetime | None = None) -> str:
-    return (now or datetime.now(TZ)).astimezone(TZ).strftime("%Y-%m-%d")
+    return (now or clock.now()).astimezone(clock.zone()).strftime("%Y-%m-%d")
 
 
 def _price(model: str) -> tuple[float, float]:

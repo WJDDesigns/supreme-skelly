@@ -684,3 +684,27 @@ a.btn { text-decoration: none; color: inherit; }
 .usage-table th { color: var(--muted, #999); font-weight: 500; }
 .usage-eleven .lvl-bar { margin: 0.3rem 0 0.6rem; }
 @media (max-width: 600px) { .usage-table { font-size: 0.8rem; } }
+
+/* ---------- sign-in and first-run welcome ---------- */
+.gate {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(circle at 50% 30%, rgba(255, 138, 0, .12), transparent 60%), var(--bg);
+}
+.gate[hidden], .gate-card[hidden] { display: none; }
+.gate-card {
+  width: min(420px, 100%); display: grid; gap: 14px; text-align: center;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 28px 24px;
+}
+.gate-logo { width: 48px; height: 48px; margin: 0 auto; fill: var(--bone); }
+.gate-card h2 { margin: 0; }
+.gate-card p { margin: 0; }
+.gate-field { display: grid; gap: 6px; text-align: left; }
+.gate-card input, .gate-card select {
+  width: 100%; font: inherit; color: var(--text); background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px;
+}
+.gate-card input:focus, .gate-card select:focus { outline: none; border-color: var(--accent); }
+.gate-card .small { font-size: .82rem; }
+.gate-error { color: var(--bad); font-size: .9rem; }
+.btn.link { background: none; border-color: transparent; color: var(--muted); padding: 4px; }
+.btn.link:hover { color: var(--text); background: none; }

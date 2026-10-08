@@ -35,6 +35,8 @@ class Settings:
     playlist: dict = field(default_factory=dict)
     # Per-sound Live Performance, by sound name: {"moves", "eye", "color", "mode", "speed", "brightness", "cycle"}
     performances: dict = field(default_factory=dict)
+    timezone: str = ""  # IANA name, e.g. "America/New_York"; empty = the mini PC's own clock zone
+    setup_done: bool = False  # the first-run welcome has been finished or skipped
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:

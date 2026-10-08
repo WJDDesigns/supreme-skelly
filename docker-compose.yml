@@ -19,7 +19,8 @@ services:
       - /run/dbus:/run/dbus:ro
       # Settings (last device, startup options) survive updates and reboots.
       - ./data:/data
-      # The mic and Skelly's Live speaker go through the host's PipeWire (user "skelly", uid 1000).
+      # The mic and Skelly's Live speaker go through the host's PipeWire (the login user; install.sh
+      # writes their uid to .env as SKELLY_AUDIO_UID, 1000 by default).
       # The whole of /run/user, following new mounts, so a restarted sound session is picked up
       # without restarting this container (mounting just .../pulse goes stale when PipeWire restarts).
       - type: bind
@@ -34,7 +35,8 @@ services:
     environment:
       - SKELLY_DATA_DIR=/data
       - SKELLY_LOG_LEVEL=INFO
-      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - PULSE_SERVER=unix:/run/user/${SKELLY_AUDIO_UID:-1000}/pulse/native
+      - SKELLY_AUDIO_UNIT=user@${SKELLY_AUDIO_UID:-1000}.service
       # Finds and connects to Skelly by itself at startup and after drops.
       - SKELLY_AUTOCONNECT=1
       # Set to 1 to try the UI without an animatronic.

@@ -10,13 +10,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import audio, audio_io, protect, recorder, scene, speaker, system, usage, voices
 from . import protocol as proto
+from .auth import COOKIE, SESSION_DAYS, Auth
 from .conversation import (
     Conversation,
     ConversationConfig,
@@ -128,9 +129,63 @@ class SecretBody(BaseModel):
     value: str
 
 
+class LoginBody(BaseModel):
+    password: str = Field(max_length=200)
+
+
+class PasswordBody(BaseModel):
+    current: str = Field("", max_length=200)
+    new: str = Field("", max_length=200)
+
+
 class SettingsBody(BaseModel):
     auto_connect: bool | None = None
     auto_live_mode: bool | None = None
+    timezone: str | None = Field(None, max_length=64)
+    setup_done: bool | None = None
+
+
+# Reachable without signing in: the health check and what the login form needs.
+OPEN_PATHS = {"/api/health", "/api/auth/status", "/api/auth/login", "/api/auth/logout"}
+
+
+def _cookie(headers: dict[str, str], name: str) -> str | None:
+    for part in headers.get("cookie", "").split(";"):
+        k, _, v = part.strip().partition("=")
+        if k == name:
+            return v
+    return None
+
+
+class Guard:
+    """Locks /api behind the UI password (when one is set) and refuses other websites' requests.
+
+    A page on some other site can't read our replies, but the browser would still send its
+    POSTs and open the live feed, so anything that changes something or opens a WebSocket must
+    come from this page's own origin.
+    """
+
+    def __init__(self, app, auth: Auth) -> None:
+        self.app, self.auth = app, auth
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] not in ("http", "websocket") or not scope["path"].startswith("/api/"):
+            return await self.app(scope, receive, send)
+        headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in scope["headers"]}
+        changing = scope["type"] == "websocket" or scope.get("method") not in ("GET", "HEAD", "OPTIONS")
+        origin = headers.get("origin")
+        if changing and origin and origin != "null" and origin.split("://", 1)[-1] != headers.get("host"):
+            return await self._deny(scope, receive, send, 403, "Requests from other websites aren't allowed")
+        if scope["path"] not in OPEN_PATHS and not self.auth.valid_session(_cookie(headers, COOKIE)):
+            return await self._deny(scope, receive, send, 401, "Sign in first")
+        return await self.app(scope, receive, send)
+
+    @staticmethod
+    async def _deny(scope, receive, send, status: int, msg: str):
+        if scope["type"] == "websocket":
+            await send({"type": "websocket.close", "code": 4000 + status})
+            return
+        await JSONResponse({"detail": msg}, status_code=status)(scope, receive, send)
 
 
 def make_link() -> Link:
@@ -139,8 +194,10 @@ def make_link() -> Link:
 
 def create_app(
     link: Link | None = None, settings: Settings | None = None, *, autoconnect: bool | None = None,
-    vault: Vault | None = None,
+    vault: Vault | None = None, auth: Auth | None = None,
 ) -> FastAPI:
+    auth = auth or Auth()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         svc = SkellyService(link or make_link(), settings=settings or Settings.load())
@@ -193,7 +250,9 @@ def create_app(
         await app.state.playlist.stop()
         await svc.stop()
 
-    app = FastAPI(title="Supreme Skelly", lifespan=lifespan)
+    app = FastAPI(title="Supreme Skelly", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(Guard, auth=auth)
+    app.state.auth = auth
 
     def svc() -> SkellyService:
         return app.state.svc
@@ -981,6 +1040,48 @@ def create_app(
     async def health():
         return {"ok": True}
 
+    # -- UI password ---------------------------------------------------------------
+
+    def signed_in(request: Request) -> bool:
+        return auth.valid_session(request.cookies.get(COOKIE))
+
+    def with_session(resp: Response) -> Response:
+        resp.set_cookie(COOKIE, auth.new_session(), max_age=SESSION_DAYS * 86400, httponly=True, samesite="strict")
+        return resp
+
+    @app.get("/api/auth/status")
+    async def auth_status(request: Request):
+        return {"password": auth.enabled, "signed_in": signed_in(request), "setup_done": svc().settings.setup_done}
+
+    @app.post("/api/auth/login")
+    async def login(body: LoginBody, request: Request):
+        who = request.client.host if request.client else "?"
+        if auth.locked_out(who):
+            raise HTTPException(429, "Too many wrong tries. Wait five minutes and try again.")
+        if not auth.check(body.password):
+            auth.failed(who)
+            await asyncio.sleep(1)
+            raise HTTPException(401, "That password isn't right")
+        return with_session(JSONResponse({"ok": True})) if auth.enabled else {"ok": True}
+
+    @app.post("/api/auth/logout")
+    async def logout():
+        resp = JSONResponse({"ok": True})
+        resp.delete_cookie(COOKIE)
+        return resp
+
+    @app.put("/api/auth/password")
+    async def set_password(body: PasswordBody, request: Request):
+        if auth.enabled and not auth.check(body.current):
+            await asyncio.sleep(1)
+            raise HTTPException(401, "The current password isn't right")
+        try:
+            auth.set_password(body.new)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        resp = JSONResponse({"password": auth.enabled})
+        return with_session(resp) if auth.enabled else resp
+
     @app.get("/api/profiles")
     async def profiles():
         return [p.to_dict() for p in PROFILES]
@@ -995,7 +1096,10 @@ def create_app(
 
     @app.patch("/api/settings")
     async def patch_settings(body: SettingsBody):
-        return svc().update_settings(**body.model_dump(exclude_none=True))
+        try:
+            return svc().update_settings(**body.model_dump(exclude_none=True))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.get("/api/adapters")
     async def adapters():

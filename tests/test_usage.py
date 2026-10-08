@@ -1,11 +1,11 @@
 from datetime import datetime
 
-from skelly import usage
+from skelly import clock, usage
 
 
 def test_usage_adds_up_per_day(tmp_path, monkeypatch):
     monkeypatch.setattr(usage, "_path", tmp_path / "usage.json")
-    night = datetime(2026, 10, 8, 2, 0, tzinfo=usage.TZ)
+    night = datetime(2026, 10, 8, 2, 0, tzinfo=clock.zone())
     usage.add("vision", model="claude-haiku-4-5-20251001", tokens_in=1000, tokens_out=100, now=night)
     usage.add("vision", model="claude-haiku-4-5-20251001", tokens_in=1000, tokens_out=100, now=night)
     usage.add("conversation:elevenlabs", seconds=90, now=night)

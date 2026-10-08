@@ -29,7 +29,7 @@ from dataclasses import asdict, dataclass, field
 
 import httpx
 
-from . import usage
+from . import clock, usage
 from .audio_io import ECHO_DELAY_S, FRAME_MS, Mic, Speaker, rms
 
 log = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 PROVIDERS = ("elevenlabs", "openai", "claude")
 
 DEFAULT_PROMPT = (
-    "You are Skelly, a friendly, funny six-foot Halloween skeleton standing in Wayne's yard. "
+    "You are Skelly, a friendly, funny six-foot Halloween skeleton standing in the front yard. "
     "Visitors talk to you out loud. Keep every reply short: one or two spoken sentences. "
     "Be spooky but family friendly, make bone puns sparingly, and ask visitors questions back."
 )
@@ -150,9 +150,6 @@ def resume_prompt(unsaid: str) -> str:
             f"What you hadn't said yet: \"{unsaid[:400]}\"")
 
 
-QUIET_TZ = "America/Indiana/Indianapolis"
-
-
 def _minutes(hhmm: str) -> int:
     h, _, m = (hhmm or "0:0").partition(":")
     return (int(h) % 24) * 60 + int(m or 0) % 60
@@ -162,10 +159,7 @@ def is_quiet(cfg: ConversationConfig, now=None) -> bool:
     """Whether it's inside quiet hours (local time at Skelly's house), a window that may cross midnight."""
     if not cfg.quiet_hours:
         return False
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    now = now or datetime.now(ZoneInfo(QUIET_TZ))
+    now = now or clock.now()
     t, start, end = now.hour * 60 + now.minute, _minutes(cfg.quiet_from), _minutes(cfg.quiet_to)
     if start == end:
         return False

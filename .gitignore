@@ -9,3 +9,4 @@ dist/
 data/
 *.iso
 SHA256SUMS
+.env

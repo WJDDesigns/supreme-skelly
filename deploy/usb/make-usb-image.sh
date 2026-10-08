@@ -9,10 +9,16 @@ cd "$(dirname "$0")"
 
 RELEASE_URL="https://releases.ubuntu.com/24.04"
 OUT="${OUT:-supreme-skelly-installer.iso}"
-# Default password "skelly" (SHA-512 crypt). Override with PASSWORD_HASH=$(openssl passwd -6).
-PASSWORD_HASH="${PASSWORD_HASH:-\$6\$skellysalt1\$qCrOhYutuDmjG0ehV67.HwUUhbAQk73ILySkjhLU6AUghWuYnHMphqp41tR4ckwbEZPRUJrFYOhrAFrg5hrp9/}"
-
 command -v xorriso >/dev/null || { echo "Please install xorriso first." >&2; exit 1; }
+command -v openssl >/dev/null || { echo "Please install openssl first." >&2; exit 1; }
+
+# The mini PC's login password (user "skelly", also used for SSH). Asked for here so no two
+# boxes share a default. Or pass one in: PASSWORD_HASH=$(openssl passwd -6) ./make-usb-image.sh
+if [ -z "${PASSWORD_HASH:-}" ]; then
+  echo "==> Pick a login password for the mini PC (user: skelly)"
+  PASSWORD_HASH="$(openssl passwd -6)" || {
+    echo "This openssl can't make the password hash; on a Mac: brew install openssl, then run again." >&2; exit 1; }
+fi
 
 echo "==> Finding the latest Ubuntu Server 24.04 image"
 curl -fsSL "$RELEASE_URL/SHA256SUMS" -o SHA256SUMS
@@ -67,4 +73,4 @@ echo
 echo "Done: $OUT"
 echo "Flash it to a USB stick, plug it into the mini PC with a keyboard, power on and press F7 to pick the USB."
 echo "It wipes the disk, installs everything and reboots. A few minutes after that, open http://skelly.local:8420"
-echo "Remote access: ssh skelly@skelly.local (password: skelly; change it with passwd)."
+echo "Remote access: ssh skelly@skelly.local with the password you picked."

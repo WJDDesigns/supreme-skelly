@@ -51,7 +51,7 @@ def test_greeting_skelly_is_not_a_name():
     from skelly.faces import heard_name
 
     assert heard_name("Hey, it's Skelly.") is None
-    assert heard_name("Hi Skelly, my name is Wayne.") == "Wayne"
+    assert heard_name("Hi Skelly, my name is Morticia.") == "Morticia"
 
 
 def test_call_out_lines_vary_and_use_costumes():

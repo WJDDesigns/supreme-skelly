@@ -1,5 +1,6 @@
 // Supreme Skelly web UI. No build step: plain ES modules talking to /api.
 
+import { timeZones } from "./zones.js";
 import { skeletonSVG, updateSkeleton } from "./skeleton.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -38,6 +39,7 @@ async function api(path, body, method = body === undefined ? "GET" : "POST") {
     headers: body ? { "Content-Type": "application/json" } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401 && !path.startsWith("/auth/")) location.reload();  // signed out: show the login
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try { const j = await res.json(); msg = typeof j.detail === "string" ? j.detail : msg; } catch {}
@@ -547,8 +549,38 @@ function renderSettings(st) {
   $("#set-auto-connect").checked = st.auto_connect;
   $("#set-auto-live").checked = st.auto_live_mode;
   $("#keep-look").checked = st.keep_look;
+  if (!$("#set-tz").options.length || ($("#set-tz").value !== st.timezone && st.timezone)) timeZones($("#set-tz"), st.timezone);
   renderFiles();
 }
+$("#set-tz").addEventListener("change", (e) =>
+  run(null, async () => renderSettings(await api("/settings", { timezone: e.target.value }, "PATCH")), "Time zone saved"));
+
+// ---------- password ----------
+async function loadSecurity() {
+  let s;
+  try { s = await api("/auth/status"); } catch { return; }
+  $("#sec-current-row").hidden = $("#sec-off").hidden = $("#sec-logout").hidden = !s.password;
+  $("#sec-save").textContent = s.password ? "Change password" : "Set password";
+  $("#sec-sub").textContent = s.password
+    ? "This page asks for a password. Skelly's local time is below."
+    : "No password: anyone on your Wi-Fi can open this page. Setting one is recommended.";
+}
+async function savePassword(newPw) {
+  await api("/auth/password", { current: $("#sec-current").value, new: newPw }, "PUT");
+  $("#sec-current").value = $("#sec-new").value = "";
+  await loadSecurity();
+}
+$("#sec-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  run($("#sec-save"), () => savePassword($("#sec-new").value), "Password saved");
+});
+$("#sec-off").addEventListener("click", (ev) => {
+  if (confirm("Turn the password off? Anyone on your network will be able to open this page.")) {
+    run(ev.currentTarget, () => savePassword(""), "Password turned off");
+  }
+});
+$("#sec-logout").addEventListener("click", async () => { await api("/auth/logout", {}); location.reload(); });
+loadSecurity();
 for (const [id, key] of [["set-auto-connect", "auto_connect"], ["set-auto-live", "auto_live_mode"]]) {
   $(`#${id}`).addEventListener("change", (e) =>
     run(null, async () => renderSettings(await api("/settings", { [key]: e.target.checked }, "PATCH")), "Saved"),

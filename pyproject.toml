@@ -1,7 +1,7 @@
 [project]
 name = "supreme-skelly"
 version = "0.1.0"
-description = "Lightweight, headless controller for Skelly-family animatronics with a web UI"
+description = "Headless controller for Skelly-family animatronics with a web UI"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
@@ -14,7 +14,7 @@ dependencies = [
     "websockets>=13",
     "opencv-python-headless>=4.9",
     "kokoro-onnx>=0.4",
-    "tzdata",  # quiet hours use Indiana time; slim images have no zoneinfo
+    "tzdata",  # quiet hours use the house's time zone; slim images have no zoneinfo
 ]
 
 [project.optional-dependencies]

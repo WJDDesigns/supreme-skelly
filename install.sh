@@ -50,10 +50,16 @@ $SUDO install -m 644 -o "$AUDIO_USER" deploy/audio/80-skelly-no-seat.lua \
   "$AUDIO_HOME/.config/wireplumber/bluetooth.lua.d/"
 AUDIO_UID="$(id -u "$AUDIO_USER")"
 $SUDO systemctl restart "user@${AUDIO_UID}.service" || true
-[ "$AUDIO_UID" != "1000" ] && echo "Note: set SKELLY_AUDIO_UNIT=user@${AUDIO_UID}.service and PULSE_SERVER for uid ${AUDIO_UID} in docker-compose.yml"
+# docker-compose.yml reads this, so the app finds this user's sound session.
+if [ -f .env ] && grep -q '^SKELLY_AUDIO_UID=' .env; then
+  sed -i "s/^SKELLY_AUDIO_UID=.*/SKELLY_AUDIO_UID=${AUDIO_UID}/" .env
+else
+  echo "SKELLY_AUDIO_UID=${AUDIO_UID}" >> .env
+fi
 
 say "Starting Supreme Skelly"
 mkdir -p data
+$SUDO chmod 700 data || true  # API keys, faces and recordings live here
 $SUDO docker compose up -d --build
 
 HOST="$(hostname).local"
@@ -62,4 +68,5 @@ say "Done. Open one of these on your phone or computer:"
 echo "    http://${HOST}"
 [ -n "$IP" ] && echo "    http://${IP}"
 echo
+echo "The first time, it asks you to pick a password for the page."
 echo "Switch Skelly on and it will connect by itself. It starts again automatically after a reboot."

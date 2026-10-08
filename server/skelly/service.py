@@ -13,6 +13,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from . import clock
 from . import protocol as proto
 from .link import Found, Link
 from .profiles import UNKNOWN, Profile, by_ble_name
@@ -85,6 +86,7 @@ class SkellyService:
         self.link = link
         self.bus = bus or EventBus()
         self.settings = settings or Settings()
+        clock.set_zone(self.settings.timezone)
         self._autoconnector: asyncio.Task | None = None
         self._user_disconnected = False
         self._reapply: asyncio.Task | None = None
@@ -160,6 +162,10 @@ class SkellyService:
         return await self.adapters()
 
     def update_settings(self, **changes: Any) -> dict:
+        if "timezone" in changes:
+            if changes["timezone"] and not clock.valid(changes["timezone"]):
+                raise ValueError(f"Unknown time zone '{changes['timezone']}'")
+            clock.set_zone(changes["timezone"])
         for k, v in changes.items():
             setattr(self.settings, k, v)
         self.settings.save()
