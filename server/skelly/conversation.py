@@ -96,6 +96,10 @@ class ConversationConfig:
     allow_interrupt: bool = True  # a visitor speaking clearly over Skelly cuts him off
     interrupt_sensitivity: int = 50  # 0..100: how easily speech counts as interrupting
     talk_amount: int = 2  # 1..5: how much he says per reply
+    # Quiet hours: no visitor-triggered conversations between these local times (the Start button still works)
+    quiet_hours: bool = True
+    quiet_from: str = "22:00"
+    quiet_to: str = "16:00"
     idle_timeout_s: int = 45  # end the conversation after this long with nobody talking
     record: bool = False  # save each conversation as a video with sound
     keep_days: int = 30  # delete recordings older than this
@@ -142,6 +146,28 @@ def resume_prompt(unsaid: str) -> str:
     return (f"{RESUME_MARK}; that was just a noise.) Carry on where you were cut off. Start with a quick "
             "\"As I was saying...\" or a playful variation, then finish your point in your own words. "
             f"What you hadn't said yet: \"{unsaid[:400]}\"")
+
+
+QUIET_TZ = "America/Indiana/Indianapolis"
+
+
+def _minutes(hhmm: str) -> int:
+    h, _, m = (hhmm or "0:0").partition(":")
+    return (int(h) % 24) * 60 + int(m or 0) % 60
+
+
+def is_quiet(cfg: ConversationConfig, now=None) -> bool:
+    """Whether it's inside quiet hours (local time at Skelly's house), a window that may cross midnight."""
+    if not cfg.quiet_hours:
+        return False
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    now = now or datetime.now(ZoneInfo(QUIET_TZ))
+    t, start, end = now.hour * 60 + now.minute, _minutes(cfg.quiet_from), _minutes(cfg.quiet_to)
+    if start == end:
+        return False
+    return start <= t < end if start < end else t >= start or t < end
 
 
 class MissingKey(ValueError):

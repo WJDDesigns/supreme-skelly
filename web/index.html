@@ -448,6 +448,15 @@
           </div>
 
           <div class="card">
+            <div class="card-head"><div><h2>Quiet hours</h2><p class="muted">When Skelly stops chatting with people on his own (Indiana time)</p></div></div>
+            <label class="switch-row"><span><strong>Quiet at night</strong>
+              <span class="muted">No conversations or call-outs when people walk by. Anything still going ends when quiet hours start. The Start button still works.</span></span>
+              <input type="checkbox" data-cfg="quiet_hours" role="switch"></label>
+            <label class="field-row">Quiet from<input type="time" data-cfg="quiet_from"></label>
+            <label class="field-row">Back on at<input type="time" data-cfg="quiet_to"></label>
+          </div>
+
+          <div class="card">
             <div class="card-head">
               <div><h2>Bluetooth radio</h2><p class="muted">Which radio on the mini PC talks to Skelly</p></div>
               <button id="adapters-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>

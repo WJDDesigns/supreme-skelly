@@ -26,6 +26,7 @@ from .conversation import (
     elevenlabs_create_agent,
     elevenlabs_update_agent,
     elevenlabs_voices,
+    is_quiet,
 )
 from .link import BleakLink, Link, SimulatedLink
 from .meters import Meters
@@ -163,6 +164,7 @@ def create_app(
         app.state.costumes_mentioned = set()
         app.state.last_live_callout = 0.0
         costume_task = asyncio.create_task(costume_watch())
+        quiet_task = asyncio.create_task(quiet_watch())
         app.state.pending_name = None
         name_task = asyncio.create_task(pending_name_watch())
         app.state.conv.on_started = start_recording
@@ -182,6 +184,7 @@ def create_app(
         yield
         costume_task.cancel()
         name_task.cancel()
+        quiet_task.cancel()
         await app.state.conv.stop()
         await app.state.recorder.stop()
         await app.state.vision.stop()
@@ -387,6 +390,24 @@ def create_app(
         await out.close()
         return {"sink": sink}
 
+    def quiet() -> bool:
+        """Quiet hours (Settings): visitors and passers-by don't start conversations."""
+        return is_quiet(ConversationConfig.from_dict(svc().settings.conversation))
+
+    async def quiet_watch() -> None:
+        """At the start of quiet hours, end any conversation still running."""
+        was = False
+        while True:
+            await asyncio.sleep(30)
+            try:
+                now = quiet()
+                if now and not was and app.state.conv.running:
+                    log.info("quiet hours started; ending the conversation")
+                    await app.state.conv.stop()
+                was = now
+            except Exception as exc:
+                log.info("quiet hours check failed: %r", exc)
+
     def costume_hint(costumes: list[str]) -> str:
         return (f" They're dressed as: {', '.join(costumes)}. Mention their costume in a fun, spooky way."
                 if costumes else "")
@@ -394,6 +415,9 @@ def create_app(
     async def on_passerby(verdict: dict, cfg: VisionConfig) -> None:
         """Someone walking past: Skelly calls them over, a different way each time."""
         from .callouts import call_out
+
+        if quiet():
+            return
 
         costumes = costume_names(verdict)
         line = call_out(costumes)
@@ -414,7 +438,7 @@ def create_app(
         svc().bus.publish("visitor", {"description": description, "costumes": costumes,
                                       "ts": __import__("time").time()})
         app.state.costumes_mentioned = set(c.lower() for c in costumes)
-        if cfg.auto_converse:
+        if cfg.auto_converse and not quiet():
             ctx = (f"Someone just walked up. What the camera sees: {description}{costume_hint(costumes)}"
                    if description else None)
             try:
@@ -428,7 +452,7 @@ def create_app(
         """A person shows up while Skelly is in a conversation nobody is having: call them over."""
         now = time.monotonic()
         conv = app.state.conv
-        if now - app.state.last_live_callout < 20 or conv.quiet_for < 8:
+        if now - app.state.last_live_callout < 20 or conv.quiet_for < 8 or quiet():
             return
         app.state.last_live_callout = now
         try:
@@ -529,7 +553,7 @@ def create_app(
         conv = app.state.conv
         if conv.running:
             conv.add_context(f"{name} just joined; you've met them before ({person.get('visits', 1)} visits).")
-        elif VisionConfig.from_dict(svc().settings.vision).auto_converse:
+        elif VisionConfig.from_dict(svc().settings.vision).auto_converse and not quiet():
             try:
                 await conv.start(context=f"Your friend {name} just walked up; you've met before. Greet them by name.")
             except (MissingKey, ValueError) as exc:
