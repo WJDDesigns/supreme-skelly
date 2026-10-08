@@ -494,9 +494,21 @@ SEE_PROMPT = (
     '<number of moving or arriving cars/trucks>, "bikes": <number of bikes or scooters>, '
     '"costumes": [<for each person in a Halloween costume, a short name for it, e.g. "vampire", "witch", '
     '"Spider-Man", "princess", "zombie", "inflatable dinosaur"; empty if nobody is dressed up>], '
+    '"notice": "<one friendly thing about a passer-by a skeleton could compliment to get their attention, '
+    'as a short noun phrase that fits after the words love the, e.g. blue shirt, cute dog, red stroller, '
+    'running shoes, cool hat; empty if nobody is there>", '
     '"description": "<one short sentence about the people (or animals) a skeleton could joke about: '
     'costumes, clothes colours, pets, what they hold>"}.'
 )
+
+
+def notice(verdict: dict | None) -> str:
+    """Something friendly to compliment on whoever is walking by, e.g. "blue shirt" or "cute dog"."""
+    text = str((verdict or {}).get("notice") or "").strip().strip(".!").strip()
+    for lead in ("love the ", "the ", "a ", "an ", "your ", "their ", "his ", "her "):
+        if text.lower().startswith(lead):
+            text = text[len(lead):]
+    return text[:40]
 
 
 def costume_names(verdict: dict | None) -> list[str]:

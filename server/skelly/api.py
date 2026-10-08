@@ -36,7 +36,7 @@ from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings, data_dir
 from .vault import Vault
-from .vision import IGNORABLE, Vision, VisionConfig, costume_names, describe, find_skelly, list_cameras
+from .vision import IGNORABLE, Vision, VisionConfig, costume_names, describe, find_skelly, list_cameras, notice
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 log = logging.getLogger(__name__)
@@ -506,15 +506,16 @@ def create_app(
         if quiet():
             return
 
-        costumes = costume_names(verdict)
-        line = call_out(costumes)
+        costumes, noticed = costume_names(verdict), notice(verdict)
+        line = call_out(costumes, noticed)
         svc().bus.publish("calling_over", {"line": line, "costumes": costumes})
         conv = app.state.conv
         if conv.running:
             conv.add_context(f"Someone else is walking past at a distance. Call them over to join: {line}")
             return
         ctx = ("You just called out to someone walking past to come over and chat. When they come over, "
-               "welcome them warmly." + costume_hint(costumes))
+               "welcome them warmly." + costume_hint(costumes)
+               + (f" You noticed their {noticed}; mention it in a friendly way." if noticed else ""))
         try:
             await conv.start(context=ctx, opening=line)
         except (MissingKey, ValueError) as exc:
@@ -551,7 +552,7 @@ def create_app(
             return
         from .callouts import call_out
 
-        line = call_out(costume_names(verdict))
+        line = call_out(costume_names(verdict), notice(verdict))
         if conv.call_over(line):
             svc().bus.publish("calling_over", {"line": line, "costumes": costume_names(verdict)})
 
