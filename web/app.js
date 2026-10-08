@@ -914,6 +914,24 @@ $("#agent-create").addEventListener("click", (ev) =>
   }, "Created a Skelly agent in your ElevenLabs account"));
 
 // ---------- vision ----------
+// The preview is fetched one picture at a time rather than as an MJPEG stream: iPhone Safari
+// shows a broken image for a slow multipart stream (Protect sends a frame every few seconds).
+let camTimer = 0;
+function camPoll() {
+  const img = $("#cam-img");
+  clearTimeout(camTimer);
+  if (img.hidden) return;
+  const again = (ms) => { camTimer = setTimeout(camPoll, ms); };
+  fetch(`/api/vision/snapshot.jpg?t=${Date.now()}`, { cache: "no-store" })
+    .then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
+    .then((blob) => {
+      const old = img.src;
+      img.src = URL.createObjectURL(blob);
+      if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+      again(document.hidden ? 3000 : 400);
+    })
+    .catch(() => again(1500));  // no picture yet: keep trying
+}
 let visionCfg = {};
 let cams = [];
 function renderVision(v) {
@@ -921,8 +939,8 @@ function renderVision(v) {
   $("#cam-toggle").firstElementChild.innerHTML = `<use href="#i-${v.running ? "stop" : "play"}"/>`;
   $("#cam-toggle").className = v.running ? "btn outline" : "btn primary";
   const img = $("#cam-img");
-  if (v.running && img.hidden) { img.src = `/api/vision/stream?t=${Date.now()}`; img.hidden = false; }
-  if (!v.running && !img.hidden) { img.removeAttribute("src"); img.hidden = true; }
+  if (v.running && img.hidden) { img.hidden = false; camPoll(); }
+  if (!v.running && !img.hidden) { clearTimeout(camTimer); img.removeAttribute("src"); img.hidden = true; }
   $("#cam-empty").hidden = v.running && !v.error;
   $("#cam-empty").lastElementChild.textContent = v.error ? `Camera problem: ${v.error}` : v.running ? "Connecting…" : "Camera is off";
   $("#cam-sub").textContent = v.running ? (v.error ? "Retrying…" : `Watching${v.fps ? ` · ${v.fps} fps` : ""}`) : "Off";
