@@ -20,6 +20,17 @@ if [ -d "$DIR/.git" ]; then
   git -C "$DIR" fetch --depth 1 origin main
   git -C "$DIR" checkout -q -B main FETCH_HEAD
   git -C "$DIR" reset -q --hard FETCH_HEAD
+elif [ -d "$DIR" ] && [ -n "$(ls -A "$DIR")" ]; then
+  # A copy installed some other way: download fresh, keep its settings, park the old one.
+  echo "==> Replacing the copy in $DIR (the old one is kept at $DIR.old)"
+  TMP="$(mktemp -d)"
+  git clone --depth 1 "$REPO" "$TMP/app"
+  [ -d "$DIR/data" ] && $SUDO cp -a "$DIR/data" "$TMP/app/"
+  [ -f "$DIR/.env" ] && $SUDO cp -a "$DIR/.env" "$TMP/app/"
+  $SUDO rm -rf "$DIR.old"
+  $SUDO mv "$DIR" "$DIR.old"
+  $SUDO mv "$TMP/app" "$DIR"
+  rmdir "$TMP"
 else
   echo "==> Downloading Supreme Skelly to $DIR"
   $SUDO mkdir -p "$DIR"
