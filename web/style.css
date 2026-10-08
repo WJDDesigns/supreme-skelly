@@ -784,3 +784,4 @@ body.has-wall .haunt { display: none; }
 .snap-view img { display: block; width: 100%; height: auto; border-radius: 10px; }
 .snap-view p { margin: 10px 2px; color: var(--muted); font-size: .9rem; }
 .snap-view .btn { float: right; }
+.transcript li.note { justify-self: center; background: none; color: var(--muted); font-size: .8rem; padding: 2px 8px; }

@@ -116,6 +116,7 @@ class Vision:
         self._on_visitor = on_visitor
         self._on_known = on_known
         self._on_passerby = None  # set by the app: async (verdict, cfg) for people walking past
+        self.source = "the live camera"  # which camera the visitor check is looking at, for the chat log
         self.engine = FaceEngine()
         self.memory = FaceMemory()
         self.seen: list = []  # Seen objects in the latest face frame
@@ -400,14 +401,15 @@ class Vision:
         if seen:
             self.svc.bus.publish("protect_faces", {"faces": [{"name": s.name, "thumb": s.thumb} for s in seen]})
 
-    async def maybe_visitor_from(self, jpeg: bytes, zones: list) -> None:
+    async def maybe_visitor_from(self, jpeg: bytes, zones: list, source: str = "a Protect camera") -> None:
         """A person spotted by another camera (Protect) counts as walking up, checked like motion."""
         cfg = VisionConfig.from_dict(self._config())
         keep = self.frame
-        self.frame = jpeg  # describe() and costume checks look at this picture
+        self.frame, self.source = jpeg, source  # describe() and costume checks look at this picture
         try:
             await self._maybe_visitor(VisionConfig.from_dict({**vars(cfg), "zones": {cfg.camera_key: zones}}))
         finally:
+            self.source = "the live camera"
             if keep is not None:
                 self.frame = keep
 
@@ -423,6 +425,9 @@ class Vision:
             except Exception as exc:
                 log.info("visitor check failed: %r", exc)
                 verdict = None
+            if verdict is None:  # couldn't look, so don't start talking to what may be nobody
+                self.state.last_visitor_at = None
+                return
             if verdict is not None:
                 passing = int(verdict.get("people") or 0) and verdict.get("approaching") is False
                 if passing and cfg.call_over and self._on_passerby:
