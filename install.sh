@@ -52,9 +52,9 @@ AUDIO_UID="$(id -u "$AUDIO_USER")"
 $SUDO systemctl restart "user@${AUDIO_UID}.service" || true
 # docker-compose.yml reads this, so the app finds this user's sound session.
 if [ -f .env ] && grep -q '^SKELLY_AUDIO_UID=' .env; then
-  sed -i "s/^SKELLY_AUDIO_UID=.*/SKELLY_AUDIO_UID=${AUDIO_UID}/" .env
+  $SUDO sed -i "s/^SKELLY_AUDIO_UID=.*/SKELLY_AUDIO_UID=${AUDIO_UID}/" .env
 else
-  echo "SKELLY_AUDIO_UID=${AUDIO_UID}" >> .env
+  echo "SKELLY_AUDIO_UID=${AUDIO_UID}" | $SUDO tee -a .env >/dev/null
 fi
 
 say "Starting Supreme Skelly"
