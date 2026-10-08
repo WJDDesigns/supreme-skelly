@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio, audio_io, protect, recorder, scene, speaker, system, updates, usage, voices
+from . import audio, audio_io, protect, recorder, scene, snaps, speaker, system, updates, usage, voices
 from . import protocol as proto
 from .auth import COOKIE, SESSION_DAYS, Auth
 from .conversation import (
@@ -235,6 +235,9 @@ def create_app(
             resolve_output)
         app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor, on_known)
         app.state.conv.on_user_text = on_user_text
+        app.state.snaps = snaps.Snaps()
+        app.state.conv.snap = lambda: app.state.snaps.save(
+            app.state.vision.frame if app.state.vision.state.running else None)
         app.state.scene = scene.Scene()
         app.state.conv.scene_context = app.state.scene.context
         app.state.recorder = recorder.Recorder()
@@ -767,6 +770,13 @@ def create_app(
             return __import__("json").loads(path.with_suffix(".json").read_text()).get("transcript", [])
         except (OSError, ValueError):
             return []
+
+    @app.get("/api/snaps/{name}")
+    async def snap_file(name: str):
+        path = app.state.snaps.path(name)
+        if not path:
+            raise HTTPException(404, "No such picture")
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=604800"})
 
     @app.delete("/api/recordings/{name}")
     async def recording_delete(name: str):
