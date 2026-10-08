@@ -33,6 +33,7 @@
     </defs>
   </svg>
 
+  <div class="wall" id="wall" aria-hidden="true"></div>
   <div class="haunt" aria-hidden="true">
     <div class="moon"></div>
     <svg class="web web-tr" viewBox="0 0 200 200"><g fill="none" stroke="currentColor" stroke-width=".8">
@@ -98,9 +99,9 @@
           <div class="stat"><span class="stat-ico"><svg><use href="#i-music"/></svg></span>
             <div><p class="stat-label">Sounds</p><p class="stat-value" id="st-sounds">–</p><p class="stat-sub" id="st-free">on Skelly</p></div>
             </div>
-          <div class="stat"><span class="stat-ico"><svg><use href="#i-chip"/></svg></span>
-            <div><p class="stat-label">Firmware</p><p class="stat-value" id="st-fw">–</p><p class="stat-sub" id="st-model">No device</p></div>
-            </div>
+          <button class="stat stat-link" id="st-ai-card" title="See AI usage in Settings"><span class="stat-ico"><svg><use href="#i-chip"/></svg></span>
+            <div><p class="stat-label">AI usage today</p><p class="stat-value" id="st-ai">–</p><p class="stat-sub" id="st-ai-sub">Talking time</p></div>
+            <span class="spark" id="st-ai-spark" aria-hidden="true"></span></button>
         </div>
 
         <!-- Device -->
@@ -452,6 +453,28 @@
           </div>
 
           <div class="card">
+            <div class="card-head"><div><h2>Wallpaper</h2><p class="muted">The picture behind this page, on every screen you open it on</p></div></div>
+            <div class="wall-grid" id="wall-grid">
+              <button type="button" class="wall-pick" data-wall="classic"><span class="wall-thumb wall-classic"></span>Classic</button>
+              <button type="button" class="wall-pick" data-wall="supreme"><span class="wall-thumb" style="background-image:url(/static/wallpapers/supreme.svg)"></span>Supreme Skelly</button>
+              <button type="button" class="wall-pick" data-wall="graveyard"><span class="wall-thumb" style="background-image:url(/static/wallpapers/graveyard.svg)"></span>Graveyard</button>
+              <button type="button" class="wall-pick" data-wall="pumpkins"><span class="wall-thumb" style="background-image:url(/static/wallpapers/pumpkins.svg)"></span>Pumpkin patch</button>
+              <button type="button" class="wall-pick" data-wall="web"><span class="wall-thumb" style="background-image:url(/static/wallpapers/web.svg)"></span>Spider web</button>
+              <button type="button" class="wall-pick" data-wall="bones"><span class="wall-thumb" style="background-image:url(/static/wallpapers/bones.svg)"></span>Bone yard</button>
+              <button type="button" class="wall-pick" data-wall="custom" id="wall-custom-pick"><span class="wall-thumb wall-add" id="wall-custom-thumb"><svg><use href="#i-upload"/></svg></span>Your picture</button>
+            </div>
+            <input type="file" id="wall-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+            <div class="row">
+              <button class="btn outline small" type="button" id="wall-upload"><svg><use href="#i-upload"/></svg>Upload a picture</button>
+              <button class="btn outline small" type="button" id="wall-remove" hidden><svg><use href="#i-trash"/></svg>Remove my picture</button>
+            </div>
+            <label class="slider">Darken it so the cards stay easy to read <output id="wall-dim-out">55%</output>
+              <input type="range" id="wall-dim" min="0" max="90" step="5" value="55"></label>
+            <label class="slider">See-through cards, so the wallpaper shows behind them <output id="ui-clear-out">0%</output>
+              <input type="range" id="ui-clear" min="0" max="80" step="5" value="0"></label>
+          </div>
+
+          <div class="card">
             <div class="card-head"><div><h2>Startup</h2><p class="muted">What happens when the mini PC boots</p></div></div>
             <label class="switch-row"><span><strong>Connect automatically</strong>
               <span class="muted">Finds Skelly on its own at startup and whenever the connection drops.</span></span>
@@ -462,6 +485,14 @@
           </div>
 
           <div class="card">
+            <div class="card-head"><div><h2>Skelly</h2><p class="muted">The animatronic this mini PC talks to</p></div></div>
+            <dl class="facts">
+              <div><dt>Firmware</dt><dd id="st-fw">–</dd></div>
+              <div><dt>Model</dt><dd id="st-model">No device</dd></div>
+            </dl>
+          </div>
+
+          <div class="card" id="usage-card">
             <div class="card-head">
               <div><h2>Usage</h2><p class="muted">What Skelly spent on paid AI, per day (local time)</p></div>
               <button id="usage-refresh" class="btn outline"><svg><use href="#i-refresh"/></svg>Refresh</button>

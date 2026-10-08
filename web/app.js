@@ -551,9 +551,79 @@ function renderSettings(st) {
   $("#keep-look").checked = st.keep_look;
   if (!$("#set-tz").options.length || ($("#set-tz").value !== st.timezone && st.timezone)) timeZones($("#set-tz"), st.timezone);
   renderFiles();
+  renderWallpaper(st);
 }
 $("#set-tz").addEventListener("change", (e) =>
   run(null, async () => renderSettings(await api("/settings", { timezone: e.target.value }, "PATCH")), "Time zone saved"));
+
+// ---------- wallpaper ----------
+// The choice lives on the mini PC so every phone and laptop shows the same one; this browser
+// remembers the last one only to avoid a flash of the old background while the page loads.
+let wallVer = Date.now();
+function wallUrl(name) {
+  if (name === "custom") return `/api/wallpaper/custom?v=${wallVer}`;
+  return /^[a-z0-9-]+$/.test(name) && name !== "classic" ? `/static/wallpapers/${name}.svg` : "";
+}
+function applyClear(pct) {
+  document.documentElement.style.setProperty("--ui", 1 - (pct ?? 0) / 100);
+}
+function applyWallpaper(name, dim, clear) {
+  const url = wallUrl(name);
+  if (clear !== undefined) applyClear(clear);
+  $("#wall").style.backgroundImage = url ? `url("${url}")` : "";
+  $("#wall").style.setProperty("--dim", (dim ?? 55) / 100);
+  document.body.classList.toggle("has-wall", !!url);
+  try { localStorage.setItem("wallpaper", JSON.stringify({ name, dim, clear: clear ?? state.settings?.ui_transparency })); } catch {}
+}
+try { const w = JSON.parse(localStorage.getItem("wallpaper") || "null"); if (w) applyWallpaper(w.name === "custom" ? "classic" : w.name, w.dim, w.clear); } catch {}
+function renderWallpaper(st) {
+  applyWallpaper(st.wallpaper, st.wallpaper_dim, st.ui_transparency);
+  document.querySelectorAll(".wall-pick").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.wall === st.wallpaper)));
+  const custom = st.wallpaper === "custom";
+  $("#wall-custom-thumb").style.backgroundImage = custom ? `url("${wallUrl("custom")}")` : "";
+  $("#wall-custom-thumb").classList.toggle("wall-add", !custom);
+  $("#wall-remove").hidden = !custom;
+  if (document.activeElement !== $("#wall-dim")) $("#wall-dim").value = st.wallpaper_dim;
+  $("#wall-dim-out").textContent = `${$("#wall-dim").value}%`;
+  if (document.activeElement !== $("#ui-clear")) $("#ui-clear").value = st.ui_transparency;
+  $("#ui-clear-out").textContent = `${$("#ui-clear").value}%`;
+}
+$("#wall-grid").addEventListener("click", (e) => {
+  const b = e.target.closest(".wall-pick");
+  if (!b) return;
+  if (b.dataset.wall === "custom" && $("#wall-custom-thumb").classList.contains("wall-add")) return $("#wall-file").click();
+  run(null, async () => renderSettings(await api("/settings", { wallpaper: b.dataset.wall }, "PATCH")), "Wallpaper saved");
+});
+$("#wall-upload").addEventListener("click", () => $("#wall-file").click());
+$("#wall-file").addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  run($("#wall-upload"), async () => {
+    const form = new FormData();
+    form.append("file", f);
+    const res = await fetch("/api/wallpaper", { method: "POST", body: form });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof j.detail === "string" ? j.detail : `Upload failed (${res.status})`);
+    wallVer = Date.now();
+    renderSettings(j);
+  }, "Wallpaper saved");
+});
+$("#wall-remove").addEventListener("click", (e) =>
+  run(e.currentTarget, async () => renderSettings(await api("/wallpaper/custom", undefined, "DELETE")), "Picture removed"));
+$("#wall-dim").addEventListener("input", (e) => {
+  $("#wall-dim-out").textContent = `${e.target.value}%`;
+  applyWallpaper(state.settings?.wallpaper ?? "classic", +e.target.value);
+});
+$("#wall-dim").addEventListener("change", (e) =>
+  run(null, async () => renderSettings(await api("/settings", { wallpaper_dim: +e.target.value }, "PATCH")), "Saved"));
+
+$("#ui-clear").addEventListener("input", (e) => {
+  $("#ui-clear-out").textContent = `${e.target.value}%`;
+  applyClear(+e.target.value);
+});
+$("#ui-clear").addEventListener("change", (e) =>
+  run(null, async () => renderSettings(await api("/settings", { ui_transparency: +e.target.value }, "PATCH")), "Saved"));
 
 // ---------- password ----------
 async function loadSecurity() {
@@ -924,6 +994,24 @@ $("#agent-create").addEventListener("click", (ev) =>
   }, "Created a Skelly agent in your ElevenLabs account"));
 
 // ---------- vision ----------
+// The preview is fetched one picture at a time rather than as an MJPEG stream: iPhone Safari
+// shows a broken image for a slow multipart stream (Protect sends a frame every few seconds).
+let camTimer = 0;
+function camPoll() {
+  const img = $("#cam-img");
+  clearTimeout(camTimer);
+  if (img.hidden) return;
+  const again = (ms) => { camTimer = setTimeout(camPoll, ms); };
+  fetch(`/api/vision/snapshot.jpg?t=${Date.now()}`, { cache: "no-store" })
+    .then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
+    .then((blob) => {
+      const old = img.src;
+      img.src = URL.createObjectURL(blob);
+      if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+      again(document.hidden ? 3000 : 400);
+    })
+    .catch(() => again(1500));  // no picture yet: keep trying
+}
 let visionCfg = {};
 let cams = [];
 function renderVision(v) {
@@ -931,8 +1019,8 @@ function renderVision(v) {
   $("#cam-toggle").firstElementChild.innerHTML = `<use href="#i-${v.running ? "stop" : "play"}"/>`;
   $("#cam-toggle").className = v.running ? "btn outline" : "btn primary";
   const img = $("#cam-img");
-  if (v.running && img.hidden) { img.src = `/api/vision/stream?t=${Date.now()}`; img.hidden = false; }
-  if (!v.running && !img.hidden) { img.removeAttribute("src"); img.hidden = true; }
+  if (v.running && img.hidden) { img.hidden = false; camPoll(); }
+  if (!v.running && !img.hidden) { clearTimeout(camTimer); img.removeAttribute("src"); img.hidden = true; }
   $("#cam-empty").hidden = v.running && !v.error;
   $("#cam-empty").lastElementChild.textContent = v.error ? `Camera problem: ${v.error}` : v.running ? "Connecting…" : "Camera is off";
   $("#cam-sub").textContent = v.running ? (v.error ? "Retrying…" : `Watching${v.fps ? ` · ${v.fps} fps` : ""}`) : "Off";
@@ -1499,6 +1587,36 @@ async function loadUsage() {
     return `<tr><td>${d.day}</td><td>${chats} chats, ${fmtMins(secs)}</td><td>${vis}</td><td>${tok.toLocaleString()}</td><td>$${d.usd.toFixed(2)}</td></tr>`;
   });
   $("#usage-rows").innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">Nothing used yet.</td></tr>`;
+  renderUsageStat(r);
+}
+
+// Top card: today's talking time (what ElevenLabs bills) and a 7-day bar graph of it.
+function renderUsageStat(r) {
+  const talk = (d) => Object.entries(d?.items || {}).filter(([k]) => k.startsWith("conversation:"));
+  const secs = (d) => talk(d).reduce((a, [, v]) => a + v.seconds, 0);
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const t = new Date(Date.now() - i * 864e5);
+    const key = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    days.push({ key, day: r.days.find((d) => d.day === key) });
+  }
+  const today = days[6].day;
+  const chats = talk(today).reduce((a, [, v]) => a + v.calls, 0);
+  $("#st-ai").textContent = fmtMins(secs(today));
+  const el = r.elevenlabs;
+  const credits = el && el.limit ? ` · ${Math.round((100 * el.used) / el.limit)}% credits used` : "";
+  $("#st-ai-sub").textContent = `${chats} chat${chats === 1 ? "" : "s"}${credits}`;
+  const max = Math.max(60, ...days.map((d) => secs(d.day)));
+  $("#st-ai-spark").innerHTML = days.map((d, i) => {
+    const s = secs(d.day), h = Math.max(6, Math.round((100 * s) / max));
+    const wd = "SMTWTFS"[new Date(`${d.key}T12:00`).getDay()];
+    return `<b class="${i === 6 ? "today" : ""}" title="${d.key}: ${fmtMins(s)}, $${(d.day?.usd || 0).toFixed(2)}"><i style="height:${h}%"></i><small>${wd}</small></b>`;
+  }).join("");
 }
 $("#usage-refresh").addEventListener("click", loadUsage);
+$("#st-ai-card").addEventListener("click", () => {
+  document.querySelector('[data-tab="settings"]')?.click();
+  setTimeout(() => $("#usage-card").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+});
 loadUsage();
+setInterval(() => { if (!document.hidden) loadUsage(); }, 60000);
