@@ -122,6 +122,7 @@ class AudioBody(BaseModel):
     out_gain: int | None = Field(None, ge=0, le=150)
     skelly: bool | None = None
     extra: list[str] | None = None
+    keep_awake: bool | None = None
 
 
 class AddressBody(BaseModel):
@@ -261,6 +262,8 @@ def create_app(
         app.state.costumes_mentioned = set()
         app.state.last_live_callout = 0.0
         costume_task = asyncio.create_task(costume_watch())
+        app.state.keep_awake = audio_io.KeepAwake()
+        awake_task = asyncio.create_task(keep_awake_watch())
         quiet_task = asyncio.create_task(quiet_watch())
         app.state.pending_name = None
         name_task = asyncio.create_task(pending_name_watch())
@@ -280,6 +283,8 @@ def create_app(
                 log.info("camera not started: %s", exc)
         yield
         costume_task.cancel()
+        awake_task.cancel()
+        await app.state.keep_awake.stop()
         fog_cam_task.cancel()
         name_task.cancel()
         quiet_task.cancel()
@@ -494,6 +499,21 @@ def create_app(
         await out.wait_done()
         await out.close()
         return {"sink": sink}
+
+    async def keep_awake_watch() -> None:
+        """Silence to the Bluetooth speakers so they don't chime each time Skelly starts talking."""
+        while True:
+            try:
+                sinks: set[str] = set()
+                if svc().settings.audio.get("keep_awake", True) and os.environ.get("SKELLY_SIMULATE") != "1":
+                    have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
+                    sinks = {s for s in have if s.startswith("bluez_output.")}
+                await app.state.keep_awake.sync(sinks)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.info("keep-awake check failed: %r", exc)
+            await asyncio.sleep(15)
 
     def quiet() -> bool:
         """Quiet hours (Settings), or Skelly switched off: visitors and passers-by don't start conversations.

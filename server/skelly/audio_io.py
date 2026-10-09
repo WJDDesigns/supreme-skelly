@@ -292,3 +292,36 @@ def chime(rate: int = 16000) -> bytes:
             env = min(1.0, i / 400, (n - i) / 1600)
             out.append(int(9000 * env * math.sin(2 * math.pi * freq * i / rate)))
     return out.tobytes()
+
+
+class KeepAwake:
+    """Plays silence to Bluetooth speakers so they never go idle.
+
+    PipeWire suspends a speaker a few seconds after the last sound, which drops the Bluetooth
+    audio stream; many speakers (Skelly's included) then play their own wake-up chime the next
+    time sound starts. A silent stream keeps the link open, so he starts talking straight away.
+    """
+
+    def __init__(self) -> None:
+        self._procs: dict[str, asyncio.subprocess.Process] = {}
+
+    @property
+    def sinks(self) -> set[str]:
+        return {s for s, p in self._procs.items() if p.returncode is None}
+
+    async def sync(self, sinks: set[str]) -> None:
+        for sink in list(self._procs):
+            if sink not in sinks or self._procs[sink].returncode is not None:
+                await _stop(self._procs.pop(sink))
+        for sink in sinks - set(self._procs):
+            try:
+                with open("/dev/zero", "rb") as zero:
+                    self._procs[sink] = await asyncio.create_subprocess_exec(
+                        "pacat", "--raw", "--format=s16le", "--rate=16000", "--channels=1", "--volume=0",
+                        "--latency-msec=500", "--client-name=Supreme Skelly keep-awake", f"--device={sink}",
+                        stdin=zero, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            except (FileNotFoundError, OSError) as exc:
+                log.info("keep-awake for %s not started: %r", sink, exc)
+
+    async def stop(self) -> None:
+        await self.sync(set())
