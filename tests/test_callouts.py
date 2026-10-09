@@ -60,3 +60,16 @@ def test_greeting_varies_and_skips_recent():
     seen = [greeting() for _ in range(6)]
     assert all(g in GREETINGS for g in seen)
     assert len(set(seen)) == 6  # never repeats one of the last five
+
+
+def test_night_vision_from_pixels():
+    import cv2
+    import numpy as np
+
+    from skelly.vision import night_vision
+
+    grey = np.full((240, 320, 3), 90, np.uint8)
+    colour = grey.copy()
+    colour[..., 1] = 160  # green lawn
+    assert night_vision(cv2.imencode(".jpg", grey)[1].tobytes())
+    assert not night_vision(cv2.imencode(".jpg", colour)[1].tobytes())
