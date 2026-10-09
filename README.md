@@ -80,8 +80,9 @@ remote**, not across the machine's power: the heater has to stay on to stay warm
 remote's button is low voltage. Some wired remotes carry mains voltage; leave those alone.
 
 Then pick the relay type and its IP address, tap **Check connection** and **Fog!**. Automatic
-fog can fire when a visitor walks up, and can keep the fog topped up: draw a fog area on
-the camera picture, tap **Calibrate** while there's no fog, and the fog meter shows how
+fog can fire when a visitor walks up, and can keep the fog topped up: pick which camera
+watches the fog (the Vision camera or any UniFi Protect camera), draw a fog area on
+the picture, tap **Calibrate** while there's no fog, and the fog meter shows how
 thick it is. Every automatic burst respects a rest time, an hourly limit and quiet hours.
 
 ## Security

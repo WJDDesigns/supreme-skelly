@@ -241,6 +241,7 @@ def create_app(
         app.state.vision.snaps = app.state.snaps
         app.state.fog = Fog(svc, lambda: svc.settings.fog, lambda: not quiet())
         app.state.vision.on_thumb = app.state.fog.thumb
+        fog_cam_task = asyncio.create_task(fog_camera_watch())
         app.state.conv.snap = lambda: app.state.snaps.save(
             app.state.vision.frame if app.state.vision.state.running else None)
         app.state.scene = scene.Scene()
@@ -268,6 +269,7 @@ def create_app(
                 log.info("camera not started: %s", exc)
         yield
         costume_task.cancel()
+        fog_cam_task.cancel()
         name_task.cancel()
         quiet_task.cancel()
         await app.state.conv.stop()
@@ -1116,6 +1118,38 @@ def create_app(
 
     # -- fog machine -----------------------------------------------------------------
 
+    async def fog_camera_watch() -> None:
+        """When the fog meter watches a Protect camera of its own, fetch a picture every few seconds.
+
+        Only while the fog meter is needed: topping up is on, or the Fog page is open.
+        """
+        import cv2
+        import numpy as np
+
+        from .vision import THUMB_H, THUMB_W
+
+        fog = app.state.fog
+        while True:
+            await asyncio.sleep(3)
+            cfg = fog.cfg
+            if not cfg.camera or not (cfg.top_up and cfg.enabled or time.monotonic() - fog.viewed_at < 30):
+                continue
+            if not (app.state.vault.get("protect_api_key") and app.state.protect.host):
+                continue
+            try:
+                jpeg = await app.state.protect.snapshot(cfg.camera, high=False)
+                img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_GRAYSCALE)
+                if img is None:
+                    continue
+                fog.frame = jpeg
+                grey = cv2.resize(img, (THUMB_W, THUMB_H), interpolation=cv2.INTER_AREA)
+                fog.thumb(grey.tobytes(), THUMB_W, THUMB_H, cfg.camera)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.info("fog camera picture failed: %r", exc)
+                await asyncio.sleep(10)
+
     def fog_view() -> dict:
         return {"state": app.state.fog.snapshot(), "config": vars(app.state.fog.cfg), "kinds": FOG_KINDS}
 
@@ -1128,11 +1162,31 @@ def create_app(
         body.pop("clear_detail", None)  # only Calibrate sets this
         old = app.state.fog.cfg
         cfg = FogConfig.from_dict({**svc().settings.fog, **body})
-        if cfg.zone != old.zone:
+        if cfg.camera != old.camera:
+            fog = app.state.fog
+            fog.frame, fog._detail, fog.state.level = None, None, None
+            if "zone" not in body:
+                cfg.zone = []  # a different camera sees a different picture
+        if cfg.zone != old.zone or cfg.camera != old.camera:
             cfg.clear_detail = 0.0  # a new spot needs a new "no fog" reference
         svc().settings.fog = vars(cfg)
         svc().settings.save()
         return fog_view()
+
+    @app.get("/api/fog/snapshot.jpg")
+    async def fog_snapshot():
+        """The fog camera's latest picture, for drawing the fog area."""
+        fog = app.state.fog
+        fog.viewed_at = time.monotonic()
+        jpeg = fog.frame if fog.cfg.camera else app.state.vision.frame
+        if fog.cfg.camera and not jpeg:
+            try:
+                jpeg = fog.frame = await app.state.protect.snapshot(fog.cfg.camera, high=False)
+            except Exception:
+                jpeg = None
+        if not jpeg:
+            raise HTTPException(404, "No picture yet")
+        return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
     @app.post("/api/fog/puff")
     async def fog_puff(body: dict | None = None):
