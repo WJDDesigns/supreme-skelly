@@ -535,7 +535,9 @@ def create_app(
             return
         ctx = ("You just called out to someone walking past to come over and chat. When they come over, "
                "welcome them warmly." + costume_hint(costumes)
-               + (f" You noticed their {noticed}; mention it in a friendly way." if noticed else ""))
+               + (f" You noticed their {noticed}; mention it in a friendly way." if noticed else "")
+               + (" It's getting dark, so don't guess the colour of anything they're wearing."
+                  if verdict.get("dark") else ""))
         try:
             await conv.start(context=ctx, opening=line,
                              trigger=f"called over someone walking past ({app.state.vision.source})",
@@ -698,15 +700,16 @@ def create_app(
 
     def on_user_text(text: str) -> None:
         """Visitor said something: if they gave their name, remember their face."""
-        from .faces import heard_name
+        from .faces import asked_name, heard_names
 
         if not VisionConfig.from_dict(svc().settings.vision).faces or not app.state.vision.state.running:
             return
-        name = heard_name(text)
-        if not name:
-            return
-        log.info("heard a name: %s", name)
-        if not try_learn(name):
+        said = [t for t in app.state.conv.state.transcript if t.get("role") == "skelly"]
+        names = heard_names(text, asked=bool(said) and asked_name(said[-1]["text"]))
+        if names:
+            log.info("heard names: %s", ", ".join(names))
+        missed = [n for n in names if not try_learn(n)]
+        for name in missed[:1]:
             # No face close enough yet: keep the name for a bit and save it once one shows up.
             app.state.pending_name = (name, time.monotonic())
             svc().bus.publish("face_pending", {"name": name})
