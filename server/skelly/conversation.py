@@ -272,6 +272,10 @@ class Conversation:
             except Exception as exc:
                 log.info("no scene context: %r", exc)
         self._context = [c for c in (season_note(), scene, context) if c]
+        if not opening:
+            from .callouts import greeting
+
+            opening = greeting()  # a different hello each time instead of the same first message
         self._opening = opening
         if opening:
             cfg.first_message = opening
