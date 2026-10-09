@@ -159,3 +159,23 @@ def test_sightings_log_what_skelly_did(tmp_path, monkeypatch):
         assert rows[1]["outcome"].startswith("Called them over") and called
         assert rows[0]["outcome"] == "Ignored: nobody in the picture"
         assert rows[1]["snap"] and c.get(f"/api/snaps/{rows[1]['snap']}").status_code == 200
+
+
+def test_cyclists_riding_past_are_not_called_over(tmp_path, monkeypatch):
+    import skelly.vision as vision_mod
+
+    async def fake_describe(vault, jpeg, zones=None):
+        return {"people": 1, "bikes": 1, "approaching": False, "notice": "blue bike"}
+
+    monkeypatch.setattr(vision_mod, "describe", fake_describe)
+    c, _ = make(tmp_path)
+    with c:
+        called = []
+
+        async def passerby(verdict, cfg):
+            called.append(verdict)
+
+        c.app.state.vision._on_passerby = passerby
+        c.portal.call(c.app.state.vision.maybe_visitor_from, b"\xff\xd8\xff bike", [], "Garage Mailbox camera")
+        assert not called
+        assert c.get("/api/sightings").json()[0]["outcome"].startswith("Ignored: riding past on a bike")

@@ -904,7 +904,11 @@ function setTalkLevel(level) {
 }
 // One chat bubble: who, when, what was said, and what the camera saw at that moment.
 function lineEl(t) {
-  if (t.role === "note") return el("li", { className: "note", textContent: t.text });
+  if (t.role === "note") {
+    const li = el("li", { className: "note" }, el("span", { textContent: t.text }));
+    if (t.snap) li.append(snapLink(t.snap, `${t.text} (the picture that set it off)`));
+    return li;
+  }
   const when = t.ts ? new Date(t.ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }) : "";
   const li = el("li", { className: t.role === "user" ? "you" : "skelly" },
     el("span", { className: "who-tag" }, t.role === "user" ? "Visitor" : "Skelly", el("time", { textContent: when })),

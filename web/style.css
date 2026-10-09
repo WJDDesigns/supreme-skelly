@@ -823,3 +823,4 @@ body.has-wall .haunt { display: none; }
   .tabs .nav-extra { display: flex; }
   .nav-more, .more-sheet { display: none !important; }
 }
+.transcript li.note .snap { margin: 6px auto 0; }
