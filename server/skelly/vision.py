@@ -419,13 +419,18 @@ class Vision:
         if seen:
             self.svc.bus.publish("protect_faces", {"faces": [{"name": s.name, "thumb": s.thumb} for s in seen]})
 
-    async def maybe_visitor_from(self, jpeg: bytes, zones: list, source: str = "a Protect camera") -> None:
-        """A person spotted by another camera (Protect) counts as walking up, checked like motion."""
+    async def maybe_visitor_from(self, jpeg: bytes, zones: list, source: str = "a Protect camera",
+                                 verdict: dict | None = None) -> None:
+        """A person spotted by another camera (Protect) counts as walking up, checked like motion.
+
+        `verdict` is what UniFi itself said (see protect_verdict); with it, no paid AI look is made.
+        """
         cfg = VisionConfig.from_dict(self._config())
         keep = self.frame
         self.frame, self.source = jpeg, source  # describe() and costume checks look at this picture
         try:
-            await self._maybe_visitor(VisionConfig.from_dict({**vars(cfg), "zones": {cfg.camera_key: zones}}))
+            await self._maybe_visitor(VisionConfig.from_dict({**vars(cfg), "zones": {cfg.camera_key: zones}}),
+                                      verdict)
         finally:
             self.source = "the live camera"
             if keep is not None:
@@ -447,7 +452,7 @@ class Vision:
         log.info("sighting on %s: %s", row["camera"], outcome)
         self.svc.bus.publish("sighting", row)
 
-    async def _maybe_visitor(self, cfg: VisionConfig) -> None:
+    async def _maybe_visitor(self, cfg: VisionConfig, local: dict | None = None) -> None:
         now = time.time()
         if self.state.last_visitor_at and now - self.state.last_visitor_at < cfg.cooldown_s:
             left = cfg.cooldown_s - (now - self.state.last_visitor_at)
@@ -455,9 +460,9 @@ class Vision:
             return
         self.state.last_visitor_at = now  # claim the slot before the (slow) AI check
         description = None
-        if cfg.ai_check and self.frame:
+        if local is not None or (cfg.ai_check and self.frame):
             try:
-                verdict = await describe(self.vault, self.frame, cfg.active_zones)
+                verdict = local if local is not None else await describe(self.vault, self.frame, cfg.active_zones)
             except Exception as exc:
                 log.info("visitor check failed: %r", exc)
                 verdict = None
@@ -583,6 +588,19 @@ def costume_names(verdict: dict | None) -> list[str]:
         if name and name.lower() not in {x.lower() for x in out}:
             out.append(name)
     return out[:8]
+
+
+def protect_verdict(event: dict, faces: int = 0) -> dict:
+    """What UniFi Protect itself says about a person event, in the AI check's shape. Free and local.
+
+    Someone lingering in a zone, or close enough that their face shows, is coming up; anyone
+    else Protect flags is walking past.
+    """
+    kind = event.get("type") or ""
+    types = set(event.get("smartDetectTypes") or [])
+    approaching = kind in ("smartDetectLoiterZone", "faceGroupDetected") or "face" in types or faces > 0
+    return {"people": max(1, faces), "approaching": approaching, "animals": 0, "vehicles": 0, "bikes": 0,
+            "costumes": [], "notice": "", "description": "", "source": "unifi"}
 
 
 def worth_a_visit(verdict: dict, ignore: list[str]) -> bool:

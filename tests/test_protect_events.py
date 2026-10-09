@@ -49,3 +49,13 @@ def test_welcome_back_by_name():
     from skelly.callouts import greeting
 
     assert "Willow" in greeting("Willow")
+
+
+def test_protect_verdict_is_free_and_sensible():
+    from skelly.vision import protect_verdict, worth_a_visit
+
+    walk = protect_verdict({"type": "smartDetectZone", "smartDetectTypes": ["person"]})
+    assert walk["people"] == 1 and walk["approaching"] is False and walk["notice"] == ""
+    assert protect_verdict({"type": "smartDetectLoiterZone", "smartDetectTypes": ["person"]})["approaching"]
+    assert protect_verdict({"type": "smartDetectZone", "smartDetectTypes": ["person"]}, faces=2)["approaching"]
+    assert worth_a_visit(walk, [])
