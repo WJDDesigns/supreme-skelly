@@ -17,6 +17,8 @@ Works with the Skelly-family Bluetooth animatronics: Ultra Skelly v2, Animated S
 - Optional, for conversations: a **USB microphone** near Skelly and an account with one of
   the AI services below.
 - Optional, for Vision: a **USB webcam**, any camera with an RTSP stream, or **UniFi Protect**.
+- Optional, for fog: a **Wi-Fi relay** (Shelly, Sonoff in LAN mode, Tasmota or ESPHome) wired
+  across the fog button on your fog machine's remote.
 
 ## Quick start (about 10 minutes)
 
@@ -69,6 +71,18 @@ over, and greet people by name once they've told him.
 sent anywhere. You can rename or forget anyone, or everyone, on the Vision page. Recording
 faces may be regulated where you live; check your local rules and consider a sign telling
 visitors they're on camera.
+
+## Fog on cue
+
+The **Fog** page drives a fog machine through a Wi-Fi relay on your network (no cloud).
+Wire the relay's dry-contact output across the fog button on the machine's **battery
+remote**, not across the machine's power: the heater has to stay on to stay warm, and the
+remote's button is low voltage. Some wired remotes carry mains voltage; leave those alone.
+
+Then pick the relay type and its IP address, tap **Check connection** and **Fog!**. Automatic
+fog can fire when a visitor walks up, and can keep the fog topped up: draw a fog area on
+the camera picture, tap **Calibrate** while there's no fog, and the fog meter shows how
+thick it is. Every automatic burst respects a rest time, an hourly limit and quiet hours.
 
 ## Security
 
