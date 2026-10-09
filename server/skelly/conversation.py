@@ -200,6 +200,21 @@ class MissingKey(ValueError):
     pass
 
 
+class OutOfCredits(RuntimeError):
+    """ElevenLabs refused because this month's credits are used up."""
+
+
+OUT_OF_CREDITS = ("ElevenLabs is out of credits, so Skelly can't talk or hear through it until they renew "
+                  "or you top up. Add an OpenAI key in Settings > API keys and he switches to OpenAI's "
+                  "cheaper voice and hearing by himself meanwhile.")
+QUOTA_WORDS = ("quota", "credits", "insufficient")
+CREDITS_RETRY_S = 3600  # after running out, try ElevenLabs again this often
+
+
+def _is_quota(text: str) -> bool:
+    return any(w in (text or "").lower() for w in QUOTA_WORDS)
+
+
 class Conversation:
     """Runs one provider at a time and reports what's happening on the event bus."""
 
@@ -224,6 +239,7 @@ class Conversation:
         self.save_picture: Callable[[bytes], str | None] | None = None  # stores a JPEG, returns its name
         self._echo_gain = 1.0  # mic level per unit of played level; follows his real echo while he talks
         self._echo_delay = ECHO_DELAY_S  # measured live from how the mic tracks what was played
+        self._eleven_out_at: float | None = None  # when ElevenLabs last said it's out of credits
 
     # -- public ---------------------------------------------------------------
 
@@ -246,6 +262,8 @@ class Conversation:
                 self._context.append(context)
             return self.snapshot()
         cfg = ConversationConfig.from_dict(self._config())
+        if self._eleven_out_at and time.monotonic() - self._eleven_out_at < CREDITS_RETRY_S:
+            cfg = self._without_elevenlabs(cfg) or cfg
         self._check_keys(cfg)
         scene = ""
         if self.scene_context:
@@ -308,6 +326,19 @@ class Conversation:
         self._context.append(text)
 
     # -- plumbing ---------------------------------------------------------------
+
+    def _without_elevenlabs(self, cfg: ConversationConfig) -> ConversationConfig | None:
+        """The same chat on OpenAI's voice and hearing (Claude still thinks), if the keys are there."""
+        uses_eleven = cfg.provider == "elevenlabs" or (
+            cfg.provider == "claude" and "elevenlabs" in (cfg.tts, cfg.stt))
+        if not uses_eleven or not self.vault.get("openai_api_key"):
+            return None
+        if cfg.provider == "elevenlabs" and not self.vault.get("anthropic_api_key"):
+            return None
+        alt = ConversationConfig.from_dict(asdict(cfg))
+        alt.provider, alt.tts, alt.stt = "claude", "openai", "openai"
+        alt.elevenlabs_agent_id = ""  # no agent voice lookups against the empty account
+        return alt
 
     def _check_keys(self, cfg: ConversationConfig) -> None:
         if cfg.provider not in PROVIDERS:
@@ -376,9 +407,26 @@ class Conversation:
             speaker = Speaker(sink, cfg.out_gain / 100)
             mover = asyncio.create_task(self._body(cfg, speaker))
             runner = {"elevenlabs": self._elevenlabs, "openai": self._openai, "claude": self._claude}[cfg.provider]
-            await runner(cfg, speaker)
+            try:
+                await runner(cfg, speaker)
+            except OutOfCredits:
+                self._eleven_out_at = time.monotonic()
+                alt = self._without_elevenlabs(cfg)
+                if not alt:
+                    raise
+                log.warning("ElevenLabs is out of credits; carrying on with OpenAI's voice and hearing")
+                self.state.provider = alt.provider
+                self._last_heard = time.monotonic()
+                await self._claude(alt, speaker)
+            else:
+                if "elevenlabs" in (cfg.provider, cfg.tts, cfg.stt):
+                    self._eleven_out_at = None
         except asyncio.CancelledError:
             raise
+        except OutOfCredits:
+            log.warning("ElevenLabs is out of credits and there's no OpenAI key to fall back on")
+            self.state.error = OUT_OF_CREDITS
+            self._set("error")
         except MissingKey as exc:
             self.state.error = str(exc)
             self._set("error")
@@ -541,6 +589,7 @@ class Conversation:
 
     async def _elevenlabs(self, cfg: ConversationConfig, speaker: Speaker) -> None:
         from websockets.asyncio.client import connect
+        from websockets.exceptions import ConnectionClosed
 
         key = self.vault.get("elevenlabs_api_key")
         url = f"wss://api.elevenlabs.io/v1/convai/conversation?agent_id={cfg.elevenlabs_agent_id}"
@@ -642,8 +691,18 @@ class Conversation:
                     if kind != "audio" and not speaker.speaking and self.state.state == "speaking":
                         self._set("listening")
 
-            await _first_done(send_mic(), receive(), resume_watch(), send_nudges(), self._idle_watch(cfg, speaker),
-                              self._speaking_watch(speaker))
+            try:
+                await _first_done(send_mic(), receive(), resume_watch(), send_nudges(),
+                                  self._idle_watch(cfg, speaker), self._speaking_watch(speaker))
+            except ConnectionClosed as exc:
+                reason = exc.rcvd.reason if exc.rcvd else ""
+                if _is_quota(reason):
+                    raise OutOfCredits(f"ElevenLabs: {reason}") from exc
+                raise RuntimeError(f"ElevenLabs ended the chat: {reason or exc}") from exc
+            if _is_quota(ws.close_reason or ""):  # a clean close can still be "you're out of credits"
+                raise OutOfCredits(f"ElevenLabs: {ws.close_reason}")
+            if ws.close_code not in (None, 1000):
+                log.warning("ElevenLabs closed the chat (%s): %s", ws.close_code, ws.close_reason)
 
     # -- OpenAI Realtime --------------------------------------------------------
 
@@ -1063,6 +1122,8 @@ def _raise_for(r: httpx.Response, who: str) -> None:
             detail = detail.get("message") or detail.get("status") or json.dumps(detail)
     except ValueError:
         detail = r.text[:200]
+    if "ElevenLabs" in who and (r.status_code in (401, 402, 429) and _is_quota(str(detail))):
+        raise OutOfCredits(f"{who}: {detail}")
     if r.status_code in (401, 403):
         raise RuntimeError(f"{who} rejected the API key ({r.status_code}). Check it in Settings > API keys.")
     raise RuntimeError(f"{who} error {r.status_code}: {detail}")
@@ -1070,6 +1131,8 @@ def _raise_for(r: httpx.Response, who: str) -> None:
 
 def _friendly(exc: Exception) -> str:
     text = str(exc) or exc.__class__.__name__
+    if isinstance(exc, OutOfCredits):
+        return OUT_OF_CREDITS
     if "401" in text or "403" in text:
         return "The AI service rejected the API key. Check it in Settings > API keys."
     if isinstance(exc, (OSError, httpx.ConnectError)) and "pa" not in text:
