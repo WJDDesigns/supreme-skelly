@@ -657,9 +657,26 @@ async def find_skelly(vault, jpeg: bytes) -> list[float] | None:
     return [round(x0, 4), round(y0, 4), round(x1 - x0, 4), round(y1 - y0, 4)]
 
 
+def night_vision(jpeg: bytes) -> bool:
+    """True when the camera is in black-and-white night mode: the picture carries no colour at all.
+    Protect's API key can't read the camera's day/night state, but the pixels show it (a night frame
+    measures 0 saturation, daylight and dusk 50 to 130)."""
+    try:
+        import cv2
+        import numpy as np
+
+        img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_REDUCED_COLOR_8)
+        return img is not None and float(cv2.cvtColor(img, cv2.COLOR_BGR2HSV)[..., 1].mean()) < 8
+    except Exception:
+        return False
+
+
 async def describe(vault, jpeg: bytes, zones: list[list[float]] | None = None) -> dict | None:
     """Ask Claude (or OpenAI) whether people are in the frame and what they look like."""
-    return await _ask_vision(vault, await blackout(jpeg, zones or []), SEE_PROMPT)
+    verdict = await _ask_vision(vault, await blackout(jpeg, zones or []), SEE_PROMPT)
+    if verdict is not None and not verdict.get("dark") and await asyncio.to_thread(night_vision, jpeg):
+        verdict["dark"] = True  # the model sometimes reads colours into a night-vision frame
+    return verdict
 
 
 async def _ask_vision(vault, jpeg: bytes, prompt: str, *, precise: bool = False) -> dict | None:
