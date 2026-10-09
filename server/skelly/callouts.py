@@ -77,8 +77,20 @@ GREETINGS = [
 _recent: list[str] = []
 
 
-def greeting() -> str:
-    """A random opening line, never one of the last few used."""
+WELCOME_BACK = [
+    "{n}! You came back! I knew you couldn't stay away!",
+    "Well, well, if it isn't {n}! My favourite visitor!",
+    "{n}! Hey! I was hoping I'd see you again!",
+    "Look who's back! Hi {n}! Did you miss me? I missed you!",
+    "{n}, my friend! Welcome back to the spookiest yard on the street!",
+    "Hey {n}! Good to see your face again. I don't have one, so I appreciate yours!",
+]
+
+
+def greeting(name: str | None = None) -> str:
+    """A random opening line, never one of the last few used; by name for someone he knows."""
+    if name:
+        return random.choice(WELCOME_BACK).format(n=name)
     line = random.choice([g for g in GREETINGS if g not in _recent] or GREETINGS)
     _recent.append(line)
     del _recent[:-5]
