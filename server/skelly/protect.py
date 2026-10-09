@@ -24,6 +24,9 @@ log = logging.getLogger(__name__)
 
 PERSON_TYPES = {"person", "face"}
 PERSON_EVENTS = {"smartDetectZone", "smartDetectLine", "smartDetectLoiterZone", "faceGroupDetected"}
+# Each look at a snapshot is a paid AI call, so one camera gets at most one every this many seconds
+# (Protect sends an add plus updates per event, and splits one walk past into several events).
+CAMERA_GAP_S = 12.0
 
 
 def _ctx() -> ssl.SSLContext:
@@ -44,6 +47,7 @@ class Protect:
         self.error: str | None = None
         self.recent: deque = deque(maxlen=20)  # last events, for the page and for debugging
         self._last_shot: dict[str, float] = {}
+        self._seen_events: deque = deque(maxlen=200)  # event ids already looked at
         self._names: dict[str, str] = {}
 
     @property
@@ -136,10 +140,17 @@ class Protect:
             return
         if kind not in PERSON_EVENTS and not (types & PERSON_TYPES):
             return
+        if types and not (types & PERSON_TYPES):
+            return  # a car, animal or parcel zone event: nobody to talk to, so no paid AI look
+        event_id = ev.get("id")
+        if event_id and event_id in self._seen_events:
+            return  # an update to an event already looked at
         now = time.monotonic()
-        if now - self._last_shot.get(camera, 0) < 2.5:  # Protect sends add + several updates per event
+        if now - self._last_shot.get(camera, 0) < CAMERA_GAP_S:
             return
         self._last_shot[camera] = now
+        if event_id:
+            self._seen_events.append(event_id)
         jpeg = await self.snapshot(camera)
         name = self._names.get(camera, camera)
         self.recent.append({"camera": name, "type": kind, "objects": sorted(types), "ts": time.time()})

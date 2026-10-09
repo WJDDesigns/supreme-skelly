@@ -693,8 +693,10 @@ def create_app(
             conv.add_context(f"{name} just joined; you've met them before ({person.get('visits', 1)} visits).")
         elif VisionConfig.from_dict(svc().settings.vision).auto_converse and not quiet():
             try:
-                await conv.start(context=f"Your friend {name} just walked up; you've met before. Greet them by name.",
-                                 trigger=f"recognised {name}'s face")
+                from .callouts import greeting
+
+                await conv.start(context=f"Your friend {name} just walked up; you've met before.",
+                                 opening=greeting(name), trigger=f"recognised {name}'s face")
             except (MissingKey, ValueError) as exc:
                 log.info("greeting %s not started: %s", name, exc)
 
