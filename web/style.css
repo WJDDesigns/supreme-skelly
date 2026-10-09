@@ -800,3 +800,26 @@ body.has-wall .haunt { display: none; }
 .fog-go .btn.primary { font-size: 1.05rem; padding: 12px 26px; }
 .small-note { font-size: .82rem; margin: 8px 0 12px; }
 .zone.fog { border-color: rgba(150, 200, 255, .95); background: rgba(150, 200, 255, .14); }
+
+/* Phones: "More" holds the less-used pages */
+.nav-more { display: flex; }
+.nav-more.active { color: var(--accent-2); background: var(--accent-soft); border-color: rgba(255, 138, 0, .25); }
+.tabs .nav-extra { display: none; }
+.more-sheet {
+  position: absolute; right: 10px; bottom: calc(100% + 8px); display: grid; gap: 4px; min-width: 200px; padding: 8px;
+  border-radius: 18px; border: 1px solid var(--line); background: rgba(14, 14, 14, .97); backdrop-filter: blur(12px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .6);
+}
+.more-sheet[hidden] { display: none; }
+.tabs .more-item {
+  flex: none; flex-direction: row; font-size: .98rem;
+}
+.more-item {
+  display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid transparent; border-radius: 14px;
+  background: none; color: var(--text); font-size: .98rem; cursor: pointer; text-align: left;
+}
+.tabs .more-item.active { color: var(--accent-2); background: var(--accent-soft); border-color: rgba(255, 138, 0, .25); }
+@media (min-width: 1000px) {
+  .tabs .nav-extra { display: flex; }
+  .nav-more, .more-sheet { display: none !important; }
+}

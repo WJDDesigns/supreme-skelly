@@ -146,3 +146,21 @@ def test_fog_api(tmp_path):
         # Calibration can't be set by hand, and moving the spot clears it.
         assert c.put("/api/fog/config", json={"clear_detail": 1}).json()["config"]["clear_detail"] == 12.5
         assert c.put("/api/fog/config", json={"zone": [0, 0, 0.5, 0.5]}).json()["config"]["clear_detail"] == 0
+
+
+def test_meter_only_listens_to_the_fog_camera():
+    w, h = 8, 6
+    sharp = bytes((0 if (x + y) % 2 else 200) for y in range(h) for x in range(w))
+    f = make_fog(camera="cam-sidewalk", zone=[0, 0, 1, 1], clear_detail=200)
+    f.thumb(sharp, w, h)  # the Vision camera: not the one watching the fog
+    assert f.state.level is None
+    f.thumb(sharp, w, h, "cam-sidewalk")
+    assert f.state.level is not None
+
+
+def test_switching_fog_camera_starts_the_area_over(tmp_path):
+    with make_app(tmp_path) as c:
+        c.put("/api/fog/config", json={"zone": [0.1, 0.1, 0.3, 0.3]})
+        cfg = c.put("/api/fog/config", json={"camera": "cam-sidewalk"}).json()["config"]
+        assert cfg["camera"] == "cam-sidewalk" and cfg["zone"] == [] and cfg["clear_detail"] == 0
+        assert c.get("/api/fog/snapshot.jpg").status_code == 404  # no Protect set up here
