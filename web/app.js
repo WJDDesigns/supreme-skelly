@@ -1275,12 +1275,14 @@ function speakerRow({ label, meta, sink, on, onToggle, connected, extraBtn, idle
       el("div", {}, el("div", { className: "name", textContent: label }), el("div", { className: "meta", textContent: meta }))),
     sink && connected ? volSlider(sink) : "", end);
 }
+$("#keep-awake").addEventListener("change", (e) => saveAudio({ keep_awake: e.target.checked }));
 function renderAudio() {
   const { devices, config } = audio;
   const mics = devices.mics;
   $("#mic-pick").replaceChildren(el("option", { value: "", textContent: "Default microphone" }),
     ...mics.map((m) => el("option", { value: m.name, textContent: m.label })));
   $("#mic-pick").value = config.mic || "";
+  $("#keep-awake").checked = config.keep_awake ?? true;
   renderGains();
   const have = new Set(devices.speakers.map((d) => d.name));
   const skellySink = audio.skelly_sink;
