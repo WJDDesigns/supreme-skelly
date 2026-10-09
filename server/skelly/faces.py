@@ -250,6 +250,47 @@ skelly skeleton mister mr
 """.split())
 
 
+# Answers to "what's your name?" that aren't names.
+_NOT_ANSWERS = _NOT_NAMES | set("""
+yes yeah yep yup no nope nah hi hello hey hiya what why who how where when um uh hmm oh and or
+me my mine i we us our nobody nothing none thanks thank bye cool nice wow ha haha lol trick treat
+mom mommy dad daddy brother sister friend he she they his her their is was it that
+""".split())
+_ASKED = re.compile(r"\bnames?\b|\bwho (?:are|is) (?:you|this|that)\b|\bwhat do (?:they|people) call you\b", re.I)
+
+
+def asked_name(said: str) -> bool:
+    """Whether Skelly's line asked who someone is ("What's your name?")."""
+    return bool(_ASKED.search(said or ""))
+
+
+def heard_names(text: str, asked: bool = False) -> list[str]:
+    """Every name given in one go: "I'm Willow and this is Gabe" gives both.
+
+    With `asked` (Skelly just asked their name), a bare answer counts too: kids just say
+    "Willow", or "Willow and Gabe".
+    """
+    names: list[str] = []
+    rest = text or ""
+    while (name := heard_name(rest)) and name not in names:
+        names.append(name)
+        m = re.search(re.escape(name.split()[0]), rest, re.I)
+        rest = rest[m.end():] if m else ""
+    if names or not asked:
+        return names
+    words = re.sub(r"[^A-Za-z' \-]+", " ", text or "").split()
+    if not 1 <= len(words) <= 5:
+        return []  # a whole sentence, not an answer
+    for w in words:
+        if w.lower() in _NOT_ANSWERS or len(w) < 2:
+            continue
+        if not w[0].isupper() and len(words) > 1:
+            continue  # speech-to-text capitalises names mid-sentence
+        if (name := w.capitalize()) not in names:
+            names.append(name)
+    return names[:3]
+
+
 def heard_name(text: str) -> str | None:
     """A name someone gave for themselves ("I'm Sarah", "my name is Jo Smith"), or None."""
     for m in _INTRO.finditer(text or ""):
@@ -260,7 +301,8 @@ def heard_name(text: str) -> str | None:
         if intro.startswith(("i'm", "i am", "im", "it's", "this is")) and not first[0].isupper():
             continue  # "i'm going" etc. Speech-to-text capitalises real names
         name = first.capitalize()
-        if m.group(2) and m.group(2).lower() not in _NOT_NAMES:
-            name += f" {m.group(2)}"
+        last = m.group(2)
+        if last and last[0].isupper() and last.lower() not in _NOT_NAMES | {"and", "or", "but"}:
+            name += f" {last}"
         return name
     return None
