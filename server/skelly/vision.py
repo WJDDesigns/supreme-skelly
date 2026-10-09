@@ -13,6 +13,7 @@ import base64
 import json
 import logging
 import os
+import re
 import time
 from collections import deque
 from dataclasses import asdict, dataclass, field
@@ -548,9 +549,18 @@ SEE_PROMPT = (
     '"notice": "<one friendly thing about a passer-by a skeleton could compliment to get their attention, '
     'as a short noun phrase that fits after the words love the, e.g. blue shirt, cute dog, red stroller, '
     'running shoes, cool hat; empty if nobody is there>", '
+    '"dark": <true if the picture is dim, grainy, dusk or black-and-white night vision, so colours '
+    'can\'t be trusted>, '
     '"description": "<one short sentence about the people (or animals) a skeleton could joke about: '
-    'costumes, clothes colours, pets, what they hold>"}.'
+    'costumes, clothes colours, pets, what they hold>"}. '
+    "Only name a colour when the picture is clearly lit and in colour; at dusk or night say "
+    '"running shorts", not "black running shorts".'
 )
+
+COLOURS = re.compile(
+    r"\b(?:(?:light|dark|bright|neon|pale|hot)[ -])?(?:red|orange|yellow|green|blue|purple|pink|black|white|"
+    r"grey|gray|brown|tan|beige|navy|teal|maroon|gold|golden|silver|cream|violet|turquoise|lime)(?:ish)?\b\s*",
+    re.I)
 
 
 def notice(verdict: dict | None) -> str:
@@ -559,6 +569,8 @@ def notice(verdict: dict | None) -> str:
     for lead in ("love the ", "the ", "a ", "an ", "your ", "their ", "his ", "her "):
         if text.lower().startswith(lead):
             text = text[len(lead):]
+    if (verdict or {}).get("dark"):  # dusk and night vision get colours wrong
+        text = COLOURS.sub("", text).strip()
     return text[:40]
 
 

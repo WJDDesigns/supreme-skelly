@@ -60,3 +60,28 @@ def test_call_out_lines_vary_and_use_costumes():
     lines = {call_out([]) for _ in range(60)}
     assert len(lines) > 5
     assert any("vampire" in call_out(["Vampire"]) for _ in range(20))
+
+
+def test_heard_names_bare_answers_and_pairs():
+    from skelly.faces import asked_name, heard_names
+
+    assert asked_name("Nice to meet you! What's your name?")
+    assert asked_name("And who are you, little one?")
+    assert not asked_name("Love the running shorts!")
+    # Kids answer "what's your name?" with just the name
+    assert heard_names("Willow.", asked=True) == ["Willow"]
+    assert heard_names("Willow and Gabe!", asked=True) == ["Willow", "Gabe"]
+    assert heard_names("Yeah.", asked=True) == []
+    assert heard_names("Willow.") == []  # without being asked, a lone word isn't a name
+    assert heard_names("Do you like golf? How tall are you anyway?", asked=True) == []
+    # Two introductions in one breath
+    assert heard_names("I'm Willow and this is Gabe") == ["Willow", "Gabe"]
+    assert heard_names("My name is Gabe") == ["Gabe"]
+
+
+def test_notice_drops_colours_in_the_dark():
+    from skelly.vision import notice
+
+    assert notice({"notice": "orange running shorts", "dark": True}) == "running shorts"
+    assert notice({"notice": "blue shirt"}) == "blue shirt"
+    assert notice({"notice": "cute dog", "dark": True}) == "cute dog"
