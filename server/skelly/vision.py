@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import time
+from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from . import usage
 log = logging.getLogger(__name__)
 
 THUMB_W, THUMB_H = 80, 45
+PASSERBY_GAP_S = 25  # after calling someone over, the next passer-by can be called this soon
 
 
 @dataclass
@@ -117,6 +119,8 @@ class Vision:
         self._on_known = on_known
         self._on_passerby = None  # set by the app: async (verdict, cfg) for people walking past
         self.source = "the live camera"  # which camera the visitor check is looking at, for the chat log
+        self.sightings: deque = deque(maxlen=40)  # what the cameras saw lately and what Skelly did
+        self.snaps = None  # set by the app: where sighting pictures are kept
         self.engine = FaceEngine()
         self.memory = FaceMemory()
         self.seen: list = []  # Seen objects in the latest face frame
@@ -413,9 +417,27 @@ class Vision:
             if keep is not None:
                 self.frame = keep
 
+    def sighting(self, outcome: str, verdict: dict | None = None, *, jpeg: bytes | None = None,
+                 source: str | None = None) -> None:
+        """Note what a camera saw and what Skelly did about it, for the Vision page's sightings list."""
+        jpeg = jpeg or self.frame
+        try:
+            snap = self.snaps.save(jpeg) if self.snaps and jpeg else None
+        except Exception:
+            snap = None
+        v = verdict or {}
+        row = {"ts": time.time(), "camera": source or self.source, "outcome": outcome, "snap": snap,
+               "people": int(v.get("people") or 0), "approaching": v.get("approaching"),
+               "seen": str(v.get("description") or "")[:200]}
+        self.sightings.append(row)
+        log.info("sighting on %s: %s", row["camera"], outcome)
+        self.svc.bus.publish("sighting", row)
+
     async def _maybe_visitor(self, cfg: VisionConfig) -> None:
         now = time.time()
         if self.state.last_visitor_at and now - self.state.last_visitor_at < cfg.cooldown_s:
+            left = cfg.cooldown_s - (now - self.state.last_visitor_at)
+            self.sighting(f"Skipped: still resting after the last one ({left:.0f} s left)")
             return
         self.state.last_visitor_at = now  # claim the slot before the (slow) AI check
         description = None
@@ -427,26 +449,32 @@ class Vision:
                 verdict = None
             if verdict is None:  # couldn't look, so don't start talking to what may be nobody
                 self.state.last_visitor_at = None
+                self.sighting("Skipped: the AI look at the picture failed")
                 return
-            if verdict is not None:
-                passing = int(verdict.get("people") or 0) and verdict.get("approaching") is False
-                if passing and cfg.call_over and self._on_passerby:
+            people = int(verdict.get("people") or 0)
+            if people and verdict.get("approaching") is False or (people and not worth_a_visit(verdict, cfg.ignore)):
+                if cfg.call_over and self._on_passerby:
+                    # Walking past rather than coming up: Skelly calls them over. Passers-by come in
+                    # streams, so the next one may be called a short while later.
                     self.state.costumes = costume_names(verdict)
+                    self.state.last_visitor_at = now - max(0, cfg.cooldown_s - PASSERBY_GAP_S)
+                    self.sighting("Called them over (walking past)", verdict)
                     await self._on_passerby(verdict, cfg)
                     return
-                if not worth_a_visit(verdict, cfg.ignore):
-                    if int(verdict.get("people") or 0) and cfg.call_over and self._on_passerby:
-                        # Walking past rather than coming up: Skelly calls them over.
-                        self.state.costumes = costume_names(verdict)
-                        await self._on_passerby(verdict, cfg)
-                        return
-                    self.state.last_visitor_at = None  # a car, leaves blowing about...: stay ready
-                    return
-                description = verdict.get("description")
-                self.state.costumes = costume_names(verdict)
-                costumes = self.state.costumes
-                if costumes and description and not any(c.lower() in description.lower() for c in costumes):
-                    description = f"{description} Costumes: {', '.join(costumes)}."
+            if not worth_a_visit(verdict, cfg.ignore):
+                self.state.last_visitor_at = None  # a car, leaves blowing about...: stay ready
+                why = "walking past (calling over is off)" if people else "nobody in the picture"
+                self.sighting(f"Ignored: {why}", verdict)
+                return
+            description = verdict.get("description")
+            self.state.costumes = costume_names(verdict)
+            costumes = self.state.costumes
+            if costumes and description and not any(c.lower() in description.lower() for c in costumes):
+                description = f"{description} Costumes: {', '.join(costumes)}."
+            off = "" if cfg.auto_converse else " (talking on its own is off)"
+            self.sighting(f"Visitor walking up{off}", verdict)
+        else:
+            self.sighting("Visitor (no AI check)")
         self.state.visitor = True
         self.state.description = description
         self._publish()
