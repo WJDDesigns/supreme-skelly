@@ -80,6 +80,7 @@ class ConversationConfig:
     provider: str = "elevenlabs"
     prompt: str = DEFAULT_PROMPT
     first_message: str = "Well hello there! Come closer, I don't bite... much."
+    vary_greeting: bool = True  # open each chat with a different line instead of first_message
     # ElevenLabs Conversational AI
     elevenlabs_agent_id: str = ""
     # OpenAI Realtime
@@ -272,6 +273,9 @@ class Conversation:
             except Exception as exc:
                 log.info("no scene context: %r", exc)
         self._context = [c for c in (season_note(), scene, context) if c]
+        if not opening and cfg.vary_greeting:
+            from .callouts import greeting
+            opening = greeting()
         self._opening = opening
         if opening:
             cfg.first_message = opening

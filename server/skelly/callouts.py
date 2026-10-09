@@ -55,3 +55,44 @@ def call_out(costumes: list[str] | None = None, noticed: str = "") -> str:
             return random.choice(DOG)
         return random.choice(NOTICE).format(n=n)
     return random.choice(PLAIN)
+
+
+# How he opens a chat when someone walks up or presses Start, so it isn't "Hi, I'm Skelly" every time.
+GREETINGS = [
+    "Well hello there! Come closer, I don't bite… much.",
+    "Oh! A visitor! I was just about to doze off. Well, I would if I had eyelids.",
+    "Welcome, welcome! Pull up a gravestone and stay a while!",
+    "Hey there! You're the best thing I've seen all day, and I've seen a lot of squirrels.",
+    "Boo! Ha, just kidding. Hi! I'm Skelly. Who are you?",
+    "Ahh, fresh company! Do you know how boring it is standing in a yard all day?",
+    "Well look who it is! Come on over, I've been saving my best jokes for you.",
+    "Greetings, mortal! What brings you to my spooky little corner?",
+    "Hey, hey! Don't mind the bones, I'm friendlier than I look!",
+    "Oh good, someone to talk to! My dog Bonez is a terrible listener.",
+    "Hi there! Fair warning, I'm a little bit rattled today. Get it? Rattled?",
+    "Hello, friend! Lovely day for a chat with a skeleton, isn't it?",
+]
+
+WELCOME_BACK = [
+    "{n}! You came back! I knew you couldn't stay away!",
+    "Well, well, if it isn't {n}! My favourite visitor!",
+    "{n}! Hey! I was hoping I'd see you again!",
+    "Look who's back! Hi {n}! Did you miss me? I missed you!",
+    "{n}, my friend! Welcome back to the spookiest yard on the street!",
+    "Hey {n}! Good to see your face again. I don't have one, so I appreciate yours!",
+]
+
+_bags: dict[int, list[str]] = {}
+
+
+def _draw(lines: list[str]) -> str:
+    """Random, but every line comes up once before any repeats."""
+    bag = _bags.get(id(lines))
+    if not bag:
+        bag = _bags[id(lines)] = random.sample(lines, len(lines))
+    return bag.pop()
+
+
+def greeting(name: str | None = None) -> str:
+    """A fresh opening line for a chat: by name for someone he knows."""
+    return _draw(WELCOME_BACK).format(n=name) if name else _draw(GREETINGS)

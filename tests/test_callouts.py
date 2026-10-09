@@ -52,3 +52,12 @@ def test_self_started_chat_ends_when_nobody_answers(monkeypatch):
         raise AssertionError("ended too early")
     except TimeoutError:
         pass
+
+
+def test_greetings_rotate_without_repeats():
+    from skelly.callouts import GREETINGS, greeting
+
+    lines = [greeting() for _ in GREETINGS]
+    assert sorted(lines) == sorted(GREETINGS)  # every one once before any repeats
+    assert len(GREETINGS) >= 10
+    assert greeting("Willow").count("Willow") == 1
