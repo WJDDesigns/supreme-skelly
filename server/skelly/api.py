@@ -236,6 +236,7 @@ def create_app(
         app.state.vision = Vision(svc, app.state.vault, lambda: svc.settings.vision, on_visitor, on_known)
         app.state.conv.on_user_text = on_user_text
         app.state.snaps = snaps.Snaps()
+        app.state.vision.snaps = app.state.snaps
         app.state.conv.snap = lambda: app.state.snaps.save(
             app.state.vision.frame if app.state.vision.state.running else None)
         app.state.scene = scene.Scene()
@@ -537,11 +538,12 @@ def create_app(
 
     # -- UniFi Protect -------------------------------------------------------------
 
-    async def call_over_live(jpeg: bytes, zones: list) -> None:
+    async def call_over_live(jpeg: bytes, zones: list, source: str = "a camera") -> None:
         """A person shows up while Skelly is in a conversation nobody is having: call them over."""
         now = time.monotonic()
         conv = app.state.conv
         if now - app.state.last_live_callout < 20 or conv.quiet_for < 8 or quiet():
+            app.state.vision.sighting("Skipped: Skelly is mid-conversation", jpeg=jpeg, source=source)
             return
         app.state.last_live_callout = now
         try:
@@ -550,12 +552,16 @@ def create_app(
             log.info("call-over check failed: %r", exc)
             return
         if not verdict or not int(verdict.get("people") or 0):
+            app.state.vision.sighting("Mid-chat: nobody new in the picture", verdict, jpeg=jpeg, source=source)
             return
         from .callouts import call_out
 
         line = call_out(costume_names(verdict), notice(verdict))
         if conv.call_over(line):
             svc().bus.publish("calling_over", {"line": line, "costumes": costume_names(verdict)})
+            app.state.vision.sighting("Mid-chat: called them over too", verdict, jpeg=jpeg, source=source)
+        else:
+            app.state.vision.sighting("Mid-chat: couldn't call them over right now", verdict, jpeg=jpeg, source=source)
 
     async def on_protect_person(camera: str, jpeg: bytes, event: dict) -> None:
         cfg = VisionConfig.from_dict(svc().settings.vision)
@@ -567,9 +573,18 @@ def create_app(
             vision.recognise_external(seen)
         if cfg.ai_check and (app.state.conv.running or not quiet()):  # no paid AI look while he's off
             if app.state.conv.running and cfg.call_over:
-                await call_over_live(jpeg, zones)  # he's mid-chat: invite them in rather than restart
+                await call_over_live(jpeg, zones, f"{camera} camera")  # mid-chat: invite them in
             else:
                 await vision.maybe_visitor_from(jpeg, zones, f"{camera} camera")
+        else:
+            why = ("Skelly is switched off" if not svc().link.connected else "quiet hours"
+                   ) if cfg.ai_check else "the AI check is off"
+            vision.sighting(f"Skipped: {why}", jpeg=jpeg, source=f"{camera} camera")
+
+    @app.get("/api/sightings")
+    async def sightings():
+        """What the cameras saw lately and what Skelly did about each, newest first."""
+        return list(reversed(app.state.vision.sightings))
 
     @app.get("/api/usage")
     async def usage_state():
