@@ -130,3 +130,32 @@ def test_wallpaper_pick_upload_and_remove(tmp_path):
         assert got.status_code == 200 and got.headers["content-type"] == "image/png" and got.content == png
         assert c.delete("/api/wallpaper/custom").json()["wallpaper"] == "classic"
         assert c.get("/api/wallpaper/custom").status_code == 404
+
+
+def test_sightings_log_what_skelly_did(tmp_path, monkeypatch):
+    import skelly.vision as vision_mod
+
+    verdicts = iter([{"people": 1, "approaching": False, "description": "a man in a blue shirt walking a dog"},
+                     {"people": 0, "approaching": False}])
+
+    async def fake_describe(vault, jpeg, zones=None):
+        return next(verdicts)
+
+    monkeypatch.setattr(vision_mod, "describe", fake_describe)
+    c, _ = make(tmp_path)
+    with c:
+        app = c.app
+        called = []
+
+        async def passerby(verdict, cfg):
+            called.append(verdict)
+
+        app.state.vision._on_passerby = passerby
+        c.portal.call(app.state.vision.maybe_visitor_from, b"\xff\xd8\xff fake", [], "Front Door camera")
+        app.state.vision.state.last_visitor_at -= 100  # past the short gap after a passer-by
+        c.portal.call(app.state.vision.maybe_visitor_from, b"\xff\xd8\xff other", [], "Garage Hoop camera")
+        rows = c.get("/api/sightings").json()
+        assert [r["camera"] for r in rows] == ["Garage Hoop camera", "Front Door camera"]
+        assert rows[1]["outcome"].startswith("Called them over") and called
+        assert rows[0]["outcome"] == "Ignored: nobody in the picture"
+        assert rows[1]["snap"] and c.get(f"/api/snaps/{rows[1]['snap']}").status_code == 200

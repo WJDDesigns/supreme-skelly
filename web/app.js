@@ -763,6 +763,7 @@ function connectEvents() {
   ws.onmessage = (m) => {
     const msg = JSON.parse(m.data);
     if (msg.type === "snapshot") applySnapshot(msg.data);
+    else if (msg.type === "sighting") addSighting(msg.data);
     else if (msg.type === "state") { state.device = msg.data; renderDevice(); }
     else if (msg.type === "settings") renderSettings(msg.data);
     else if (msg.type === "upload") renderUpload(msg.data);
@@ -894,12 +895,17 @@ function lineEl(t) {
   return li;
 }
 // Tapping a bubble's picture shows it big over the page instead of opening a new tab.
-$("#transcript").addEventListener("click", (e) => {
+document.addEventListener("click", (e) => {
   const a = e.target.closest("a.snap");
   if (!a) return;
   e.preventDefault();
   const li = a.closest("li");
   $("#snap-view-img").src = a.href;
+  if (a.dataset.caption) {
+    $("#snap-view-img").src = a.href;
+    $("#snap-view-cap").textContent = a.dataset.caption;
+    return $("#snap-view").showModal();
+  }
   const tag = li?.querySelector(".who-tag");
   const who = [tag?.firstChild?.textContent, tag?.querySelector("time")?.textContent].filter(Boolean).join(" at ");
   $("#snap-view-cap").textContent = [who, li?.querySelector(".who-tag + span")?.textContent].filter(Boolean).join(": ");
@@ -907,6 +913,37 @@ $("#transcript").addEventListener("click", (e) => {
 });
 $("#snap-view-close").addEventListener("click", () => $("#snap-view").close());
 $("#snap-view").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
+// ---------- sightings: what the cameras saw and what Skelly did ----------
+function snapLink(name, caption) {
+  const a = el("a", { className: "snap", href: `/api/snaps/${name}` },
+    el("img", { src: `/api/snaps/${name}`, alt: "What the camera saw", loading: "lazy" }));
+  a.dataset.caption = caption;
+  return a;
+}
+function sightingEl(s) {
+  const when = new Date(s.ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const caption = `${when}, ${s.camera}: ${s.outcome}${s.seen ? `. AI saw: ${s.seen}` : ""}`;
+  const good = /^(Called|Visitor|Mid-chat: called)/.test(s.outcome);
+  return el("li", { className: good ? "acted" : "" },
+    s.snap ? snapLink(s.snap, caption) : el("span", { className: "snap-none" }),
+    el("div", {},
+      el("strong", { textContent: s.outcome }),
+      el("span", { className: "muted", textContent: `${when} · ${s.camera}${s.seen ? ` · ${s.seen}` : ""}` })));
+}
+function addSighting(s) {
+  const ul = $("#sightings");
+  if (ul.firstElementChild?.classList.contains("muted")) ul.replaceChildren();
+  ul.prepend(sightingEl(s));
+  while (ul.children.length > 40) ul.lastElementChild.remove();
+}
+async function loadSightings() {
+  const rows = await api("/sightings").catch(() => null);
+  if (!rows) return;
+  if (rows.length) $("#sightings").replaceChildren(...rows.map(sightingEl));
+}
+$("#sight-refresh").addEventListener("click", loadSightings);
+loadSightings();
 
 function addLine(t) {
   const ul = $("#transcript");
