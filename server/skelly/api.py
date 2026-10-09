@@ -29,6 +29,8 @@ from .conversation import (
     elevenlabs_voices,
     is_quiet,
 )
+from .fog import KINDS as FOG_KINDS
+from .fog import Fog, FogConfig
 from .link import BleakLink, Link, SimulatedLink
 from .meters import Meters
 from .playlist import Playlist
@@ -237,6 +239,8 @@ def create_app(
         app.state.conv.on_user_text = on_user_text
         app.state.snaps = snaps.Snaps()
         app.state.vision.snaps = app.state.snaps
+        app.state.fog = Fog(svc, lambda: svc.settings.fog, lambda: not quiet())
+        app.state.vision.on_thumb = app.state.fog.thumb
         app.state.conv.snap = lambda: app.state.snaps.save(
             app.state.vision.frame if app.state.vision.state.running else None)
         app.state.scene = scene.Scene()
@@ -269,6 +273,11 @@ def create_app(
         await app.state.conv.stop()
         await app.state.recorder.stop()
         await app.state.vision.stop()
+        if app.state.fog.state.fogging:
+            try:
+                await app.state.fog.stop()
+            except ValueError:
+                pass
         await app.state.protect.stop()
         await app.state.meters.stop()
         await app.state.playlist.stop()
@@ -293,7 +302,7 @@ def create_app(
 
     def full_snapshot() -> dict:
         return {**svc().snapshot(), "conversation": app.state.conv.snapshot(), "vision": app.state.vision.snapshot(),
-                "playlist": app.state.playlist.snapshot()}
+                "playlist": app.state.playlist.snapshot(), "fog": app.state.fog.snapshot()}
 
     # -- Skelly's Live speaker ---------------------------------------------------
 
@@ -500,12 +509,19 @@ def create_app(
         return (f" They're dressed as: {', '.join(costumes)}. Mention their costume in a fun, spooky way."
                 if costumes else "")
 
+    def later(coro) -> None:
+        """Run alongside, without holding up the caller (fog takes a few seconds)."""
+        task = asyncio.create_task(coro)
+        app.state.tasks.add(task)
+        task.add_done_callback(app.state.tasks.discard)
+
     async def on_passerby(verdict: dict, cfg: VisionConfig) -> None:
         """Someone walking past: Skelly calls them over, a different way each time."""
         from .callouts import call_out
 
         if quiet():
             return
+        later(app.state.fog.visitor("Calling someone over"))
 
         costumes, noticed = costume_names(verdict), notice(verdict)
         line = call_out(costumes, noticed)
@@ -528,6 +544,7 @@ def create_app(
         svc().bus.publish("visitor", {"description": description, "costumes": costumes,
                                       "ts": __import__("time").time()})
         app.state.costumes_mentioned = set(c.lower() for c in costumes)
+        later(app.state.fog.visitor())
         if cfg.auto_converse and not quiet():
             ctx = (f"Someone just walked up. What the camera sees: {description}{costume_hint(costumes)}"
                    if description else None)
@@ -1096,6 +1113,49 @@ def create_app(
         if verdict is None:
             raise HTTPException(400, "Add an Anthropic or OpenAI API key in Settings > API keys first.")
         return verdict
+
+    # -- fog machine -----------------------------------------------------------------
+
+    def fog_view() -> dict:
+        return {"state": app.state.fog.snapshot(), "config": vars(app.state.fog.cfg), "kinds": FOG_KINDS}
+
+    @app.get("/api/fog")
+    async def fog_state():
+        return fog_view()
+
+    @app.put("/api/fog/config")
+    async def fog_config(body: dict):
+        body.pop("clear_detail", None)  # only Calibrate sets this
+        old = app.state.fog.cfg
+        cfg = FogConfig.from_dict({**svc().settings.fog, **body})
+        if cfg.zone != old.zone:
+            cfg.clear_detail = 0.0  # a new spot needs a new "no fog" reference
+        svc().settings.fog = vars(cfg)
+        svc().settings.save()
+        return fog_view()
+
+    @app.post("/api/fog/puff")
+    async def fog_puff(body: dict | None = None):
+        seconds = (body or {}).get("seconds")
+        return await guarded(app.state.fog.puff(float(seconds) if seconds else None))
+
+    @app.post("/api/fog/stop")
+    async def fog_stop():
+        return await guarded(app.state.fog.stop())
+
+    @app.post("/api/fog/check")
+    async def fog_check():
+        return {"reply": await guarded(app.state.fog.check())}
+
+    @app.post("/api/fog/calibrate")
+    async def fog_calibrate():
+        try:
+            clear = app.state.fog.calibrate()
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        svc().settings.fog = {**vars(app.state.fog.cfg), "clear_detail": clear}
+        svc().settings.save()
+        return fog_view()
 
     @app.get("/api/health")
     async def health():
