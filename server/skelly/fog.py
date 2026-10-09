@@ -56,6 +56,7 @@ class FogConfig:
     on_visitor: bool = True  # puff when someone walks up or Skelly calls them over
     top_up: bool = False  # puff when the camera says the fog has thinned out
     thin_below: int = 30  # "thin" means the fog meter reads below this (0..100)
+    camera: str = ""  # camera the fog meter watches: "" = the Vision page's camera, else a Protect camera id
     zone: list = field(default_factory=list)  # [x, y, w, h] fractions of the picture to watch
     clear_detail: float = 0.0  # detail in the zone with no fog at all (set by "Calibrate")
 
@@ -201,6 +202,8 @@ class Fog:
         self._thin_since: float | None = None
         self._last_thumb = 0.0
         self._zone: list = []
+        self.frame: bytes | None = None  # latest picture from the fog camera, when it isn't the Vision camera
+        self.viewed_at = 0.0  # when the Fog page last showed the fog camera
 
     @property
     def cfg(self) -> FogConfig:
@@ -319,13 +322,16 @@ class Fog:
         if self.cfg.on_visitor:
             await self.auto(why)
 
-    def thumb(self, thumb: bytes, width: int, height: int) -> None:
-        """A new grey camera thumbnail: update the fog meter and top up when it's thin."""
+    def thumb(self, thumb: bytes, width: int, height: int, camera: str = "") -> None:
+        """A new grey thumbnail from `camera` ("" = the Vision camera): update the fog meter and
+        top up when it's thin. Thumbnails from other cameras than the fog camera are ignored."""
+        cfg = self.cfg
+        if camera != cfg.camera:
+            return
         now = time.monotonic()
         if now - self._last_thumb < 1:  # once a second is plenty
             return
         self._last_thumb = now
-        cfg = self.cfg
         if cfg.zone != self._zone:  # a new spot: start the average afresh
             self._zone, self._detail = cfg.zone, None
         d = detail(thumb, width, height, cfg.zone)

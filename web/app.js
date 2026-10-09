@@ -72,11 +72,30 @@ function toast(msg, error = false) {
 }
 
 // ---------- tabs ----------
-document.querySelectorAll(".tabs button").forEach((b) =>
+document.querySelectorAll(".tabs button[data-tab]").forEach((b) =>
   b.addEventListener("click", () => showTab(b.dataset.tab)),
 );
+// Phones: the less-used pages sit behind a "More" button so the bottom bar stays readable.
+const moreSheet = $("#more-sheet");
+moreSheet.append(...[...document.querySelectorAll(".tabs .nav-extra")].map((b) => {
+  const c = el("button", { type: "button", className: "more-item" });
+  c.innerHTML = b.innerHTML;
+  c.dataset.go = b.dataset.tab;
+  c.addEventListener("click", () => { showTab(b.dataset.tab); setMore(false); });
+  return c;
+}));
+function setMore(open) {
+  moreSheet.hidden = !open;
+  $("#nav-more").setAttribute("aria-expanded", open);
+}
+$("#nav-more").addEventListener("click", (e) => { e.stopPropagation(); setMore(moreSheet.hidden); });
+document.addEventListener("click", (e) => { if (!moreSheet.hidden && !moreSheet.contains(e.target)) setMore(false); });
 function showTab(name) {
-  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
+  document.querySelectorAll(".tabs button[data-tab]").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === name));
+  const extra = document.querySelector(`.tabs .nav-extra[data-tab="${name}"]`);
+  $("#nav-more").classList.toggle("active", !!extra);
+  $("#nav-more-label").textContent = extra ? extra.textContent.trim() : "More";
+  moreSheet.querySelectorAll(".more-item").forEach((c) => c.classList.toggle("active", c.dataset.go === name));
   document.querySelectorAll(".tab").forEach((s) => (s.hidden = s.id !== `tab-${name}`));
   try { localStorage.setItem("tab", name); } catch {}
 }
@@ -1702,7 +1721,9 @@ function setFogLevel(level) {
   const z = fogCfg.zone?.length === 4;
   $("#fog-meter-note").textContent = !z ? "Draw the fog area on the picture below, then tap Calibrate while there's no fog."
     : !fogCfg.clear_detail ? "Tap Calibrate while there's no fog, so the meter knows what clear looks like."
-    : !fogCamOn ? "The meter works while the camera is on (Vision page)." : "0 is clear air, 100 is thick fog.";
+    : !fogCfg.camera && !fogCamOn ? "The meter works while the camera is on (Vision page)."
+    : fogCfg.camera && !fogCfg.top_up ? "0 is clear air, 100 is thick fog. Updates while this page is open or topping up is on."
+    : "0 is clear air, 100 is thick fog.";
 }
 function renderFogCfg() {
   const kind = fogCfg.kind || "shelly";
@@ -1719,8 +1740,20 @@ function renderFogCfg() {
   $("#fog-thin-out").textContent = fogCfg.thin_below ?? 30;
   $("#fog-cool-out").textContent = secs(fogCfg.cooldown_s ?? 60);
   $("#fog-max-out").textContent = fogCfg.max_per_hour ?? 20;
+  renderFogCams();
   renderFogZone();
   renderFog(fogState);
+}
+let fogCams = [];
+function renderFogCams() {
+  const sel = $("#fog-camera");
+  const want = fogCfg.camera || "";
+  const opts = [["", "Same as the Vision camera"], ...fogCams.map((c) => [c.id, `${c.name} (UniFi Protect)`])];
+  if (want && !fogCams.some((c) => c.id === want)) opts.push([want, "Saved Protect camera"]);
+  sel.replaceChildren(...opts.map(([v, t]) => new Option(t, v, false, v === want)));
+}
+function loadFogCams() {
+  api("/protect").then((p) => { fogCams = p.cameras ?? []; renderFogCams(); }).catch(() => {});
 }
 function renderFogZone() {
   const z = fogCfg.zone ?? [];
@@ -1744,7 +1777,10 @@ document.querySelectorAll("[data-fcfg]").forEach((i) => {
   const ev = i.type === "range" ? "input" : i.type === "text" ? "input" : "change";
   i.addEventListener(ev, () => {
     const k = i.dataset.fcfg;
-    saveFogCfg({ [k]: i.type === "checkbox" ? i.checked : FOG_NUM.includes(k) ? Number(i.value) : i.type === "text" ? i.value.trim() : i.value });
+    const v = i.type === "checkbox" ? i.checked : FOG_NUM.includes(k) ? Number(i.value) : i.type === "text" ? i.value.trim() : i.value;
+    // Another camera sees another picture: the fog area and its calibration start over.
+    saveFogCfg(k === "camera" ? { camera: v, zone: [], clear_detail: 0 } : { [k]: v });
+    if (k === "camera") { $("#fog-img").hidden = true; fogPoll(); }
   });
 });
 document.querySelectorAll("#fog-mode button").forEach((b) => b.addEventListener("click", () => saveFogCfg({ mode: b.dataset.val })));
@@ -1763,19 +1799,27 @@ $("#fog-calibrate").addEventListener("click", (ev) => run(ev.currentTarget, asyn
 function fogPoll() {
   const img = $("#fog-img");
   clearTimeout(fogTimer);
-  const visible = !$("#tab-fog").hidden;
-  img.hidden = !fogCamOn;
-  $("#fog-empty").hidden = fogCamOn;
-  if (!fogCamOn || !visible) { fogTimer = setTimeout(fogPoll, 2000); return; }
-  fetch(`/api/vision/snapshot.jpg?t=${Date.now()}`, { cache: "no-store" })
+  const own = !!fogCfg.camera;  // a Protect camera of its own, rather than the Vision camera
+  if ($("#tab-fog").hidden || (!own && !fogCamOn)) {
+    if (!own && !fogCamOn) { img.hidden = true; fogEmpty("Start the camera on the Vision page to see the fog area"); }
+    fogTimer = setTimeout(fogPoll, 2000);
+    return;
+  }
+  fetch(`/api/fog/snapshot.jpg?t=${Date.now()}`, { cache: "no-store" })
     .then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
     .then((blob) => {
       const old = img.src;
       img.src = URL.createObjectURL(blob);
       if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+      img.hidden = false;
+      $("#fog-empty").hidden = true;
     })
-    .catch(() => {})
-    .finally(() => { fogTimer = setTimeout(fogPoll, 1000); });
+    .catch(() => { img.hidden = true; fogEmpty(own ? "Waiting for a picture from that camera…" : "Waiting for the camera…"); })
+    .finally(() => { fogTimer = setTimeout(fogPoll, own ? 3000 : 1000); });
+}
+function fogEmpty(text) {
+  $("#fog-empty").hidden = false;
+  $("#fog-empty").lastElementChild.textContent = text;
 }
 // Drawing the fog area: one box, drag on the picture.
 let fogDrawing = null;
@@ -1820,5 +1864,5 @@ window.addEventListener("mousemove", fogMove);
 window.addEventListener("touchmove", fogMove, { passive: false });
 window.addEventListener("mouseup", fogEnd);
 window.addEventListener("touchend", fogEnd);
-api("/fog").then((r) => { fogCfg = r.config; fogKinds = r.kinds; fogState = r.state; renderFogCfg(); }).catch(() => {});
+api("/fog").then((r) => { fogCfg = r.config; fogKinds = r.kinds; fogState = r.state; renderFogCfg(); loadFogCams(); }).catch(() => {});
 fogPoll();

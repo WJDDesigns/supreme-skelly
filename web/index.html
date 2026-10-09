@@ -30,6 +30,7 @@
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8Z"/></symbol>
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
       <symbol id="i-fog" viewBox="0 0 24 24"><path d="M4 9a4 4 0 0 1 7.5-2A3.5 3.5 0 0 1 18 9.5M3 13h13M7 17h14M3 21h10"/></symbol>
+      <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
       <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></symbol>
     </defs>
   </svg>
@@ -56,13 +57,15 @@
         <button role="tab" data-tab="device" aria-selected="true"><span class="nav-ico"><svg><use href="#i-radar"/></svg></span>Device</button>
         <p class="nav-label">Control</p>
         <button role="tab" data-tab="controls"><span class="nav-ico"><svg><use href="#i-sliders"/></svg></span>Controls</button>
-        <button role="tab" data-tab="sounds"><span class="nav-ico"><svg><use href="#i-music"/></svg></span>Sounds</button>
-        <button role="tab" data-tab="fog"><span class="nav-ico"><svg><use href="#i-fog"/></svg></span>Fog</button>
+        <button role="tab" data-tab="sounds" class="nav-extra"><span class="nav-ico"><svg><use href="#i-music"/></svg></span>Sounds</button>
+        <button role="tab" data-tab="fog" class="nav-extra"><span class="nav-ico"><svg><use href="#i-fog"/></svg></span>Fog</button>
         <p class="nav-label">AI</p>
         <button role="tab" data-tab="talk"><span class="nav-ico"><svg><use href="#i-chat"/></svg></span>Conversation</button>
         <button role="tab" data-tab="vision"><span class="nav-ico"><svg><use href="#i-camera"/></svg></span>Vision</button>
         <p class="nav-label">System</p>
-        <button role="tab" data-tab="settings"><span class="nav-ico"><svg><use href="#i-gear"/></svg></span>Settings</button>
+        <button role="tab" data-tab="settings" class="nav-extra"><span class="nav-ico"><svg><use href="#i-gear"/></svg></span>Settings</button>
+        <button type="button" class="nav-more" id="nav-more" aria-expanded="false" aria-haspopup="true"><span class="nav-ico"><svg><use href="#i-dots"/></svg></span><span id="nav-more-label">More</span></button>
+        <div class="more-sheet" id="more-sheet" hidden></div>
       </nav>
 
       <div class="side-card">
@@ -364,6 +367,7 @@
                 <input type="range" min="1" max="25" step="1" data-fcfg="burst_s"></label>
               <div class="meter-row"><span class="muted">Fog meter</span><div class="meter"><i id="fog-bar"></i></div><output id="fog-out">–</output></div>
               <p class="muted small-note" id="fog-meter-note">Draw the fog area on the picture below, then tap Calibrate while there's no fog.</p>
+              <label class="field-row">Fog camera<select id="fog-camera" data-fcfg="camera"><option value="">Same as the Vision camera</option></select></label>
               <div class="cam-view" id="fog-view">
                 <img id="fog-img" alt="Camera picture" hidden>
                 <div class="cam-empty" id="fog-empty"><svg><use href="#i-camera"/></svg><span>Start the camera on the Vision page to see the fog area</span></div>

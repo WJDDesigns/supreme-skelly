@@ -65,9 +65,9 @@ class Protect:
         self._names = {c["id"]: c["name"] for c in cams}
         return sorted(cams, key=lambda c: c["name"].lower())
 
-    async def snapshot(self, camera_id: str) -> bytes:
+    async def snapshot(self, camera_id: str, high: bool = True) -> bytes:
         async with self._client() as c:
-            r = await c.get(f"/cameras/{camera_id}/snapshot", params={"highQuality": "true"})
+            r = await c.get(f"/cameras/{camera_id}/snapshot", params={"highQuality": "true" if high else "false"})
             r.raise_for_status()
             return r.content
 
