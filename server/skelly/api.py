@@ -38,7 +38,17 @@ from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings, data_dir
 from .vault import Vault
-from .vision import IGNORABLE, Vision, VisionConfig, costume_names, describe, find_skelly, list_cameras, notice
+from .vision import (
+    IGNORABLE,
+    Vision,
+    VisionConfig,
+    costume_names,
+    describe,
+    find_skelly,
+    list_cameras,
+    notice,
+    protect_verdict,
+)
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 log = logging.getLogger(__name__)
@@ -592,18 +602,22 @@ def create_app(
         cam_id = event.get("device") or event.get("deviceId") or ""
         zones = [z for z in cfg.zones.get(f"protect:{cam_id}", []) if len(z) == 4]
         vision = app.state.vision
+        seen = []
         if cfg.faces and vision.engine.available():
             seen = await asyncio.to_thread(vision.engine.process, jpeg, zones)
             vision.recognise_external(seen)
-        if cfg.ai_check and (app.state.conv.running or not quiet()):  # no paid AI look while he's off
+        if quiet() and not app.state.conv.running:
+            why = "Skelly is switched off" if not svc().link.connected else "quiet hours"
+            vision.sighting(f"Skipped: {why}", jpeg=jpeg, source=f"{camera} camera")
+        elif cfg.ai_check:  # a paid AI look at the picture
             if app.state.conv.running and cfg.call_over:
                 await call_over_live(jpeg, zones, f"{camera} camera")  # mid-chat: invite them in
             else:
                 await vision.maybe_visitor_from(jpeg, zones, f"{camera} camera")
+        elif not app.state.conv.running:  # free: go by what UniFi itself detected
+            await vision.maybe_visitor_from(jpeg, zones, f"{camera} camera", protect_verdict(event, len(seen)))
         else:
-            why = ("Skelly is switched off" if not svc().link.connected else "quiet hours"
-                   ) if cfg.ai_check else "the AI check is off"
-            vision.sighting(f"Skipped: {why}", jpeg=jpeg, source=f"{camera} camera")
+            vision.sighting("Skipped: mid-conversation", jpeg=jpeg, source=f"{camera} camera")
 
     @app.get("/api/sightings")
     async def sightings():
@@ -693,8 +707,10 @@ def create_app(
             conv.add_context(f"{name} just joined; you've met them before ({person.get('visits', 1)} visits).")
         elif VisionConfig.from_dict(svc().settings.vision).auto_converse and not quiet():
             try:
-                await conv.start(context=f"Your friend {name} just walked up; you've met before. Greet them by name.",
-                                 trigger=f"recognised {name}'s face")
+                from .callouts import greeting
+
+                await conv.start(context=f"Your friend {name} just walked up; you've met before.",
+                                 opening=greeting(name), trigger=f"recognised {name}'s face")
             except (MissingKey, ValueError) as exc:
                 log.info("greeting %s not started: %s", name, exc)
 
