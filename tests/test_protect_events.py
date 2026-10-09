@@ -59,3 +59,36 @@ def test_protect_verdict_is_free_and_sensible():
     assert protect_verdict({"type": "smartDetectLoiterZone", "smartDetectTypes": ["person"]})["approaching"]
     assert protect_verdict({"type": "smartDetectZone", "smartDetectTypes": ["person"]}, faces=2)["approaching"]
     assert worth_a_visit(walk, [])
+
+
+def test_keep_awake_starts_and_stops_silence(monkeypatch):
+    from skelly import audio_io
+
+    started = []
+
+    class Proc:
+        returncode = None
+        stdin = None
+
+        def terminate(self):
+            self.returncode = 0
+
+        async def wait(self):
+            return 0
+
+    async def fake_exec(*args, **kw):
+        started.append(next(a for a in args if a.startswith("--device")))
+        return Proc()
+
+    monkeypatch.setattr(audio_io.asyncio, "create_subprocess_exec", fake_exec)
+    k = audio_io.KeepAwake()
+
+    async def go():
+        await k.sync({"bluez_output.AA"})
+        await k.sync({"bluez_output.AA"})  # already running: nothing new
+        assert k.sinks == {"bluez_output.AA"}
+        await k.sync(set())
+        assert k.sinks == set()
+
+    asyncio.run(go())
+    assert started == ["--device=bluez_output.AA"]
