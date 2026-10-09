@@ -221,6 +221,7 @@ class Conversation:
         self._override_ok = False
         self._opening: str | None = None
         self._nudges: asyncio.Queue | None = None
+        self.save_picture: Callable[[bytes], str | None] | None = None  # stores a JPEG, returns its name
         self._echo_gain = 1.0  # mic level per unit of played level; follows his real echo while he talks
         self._echo_delay = ECHO_DELAY_S  # measured live from how the mic tracks what was played
 
@@ -233,7 +234,8 @@ class Conversation:
     def snapshot(self) -> dict:
         return asdict(self.state)
 
-    async def start(self, context: str | None = None, opening: str | None = None, trigger: str | None = None) -> dict:
+    async def start(self, context: str | None = None, opening: str | None = None, trigger: str | None = None,
+                    picture: bytes | None = None) -> dict:
         """Begin a conversation. `opening` replaces the first thing he says (e.g. calling someone over).
 
         `trigger` says what set it off when Skelly starts on his own; such a chat ends quickly if
@@ -259,7 +261,13 @@ class Conversation:
                                        trigger=trigger)
         if trigger:
             log.info("conversation started on its own: %s", trigger)
-            self.state.transcript.append({"role": "note", "text": f"Started because: {trigger}", "ts": time.time()})
+            note = {"role": "note", "text": f"Started because: {trigger}", "ts": time.time()}
+            try:  # the picture that set it off, which may be from a different camera than the preview
+                if picture and self.save_picture and (name := self.save_picture(picture)):
+                    note["snap"] = name
+            except Exception:
+                log.exception("Trigger picture failed")
+            self.state.transcript.append(note)
         self._publish()
         self._task = asyncio.create_task(self._run(cfg), name="skelly-conversation")
         return self.snapshot()
