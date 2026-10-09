@@ -242,6 +242,7 @@ def create_app(
         app.state.fog = Fog(svc, lambda: svc.settings.fog, lambda: not quiet())
         app.state.vision.on_thumb = app.state.fog.thumb
         fog_cam_task = asyncio.create_task(fog_camera_watch())
+        app.state.conv.save_picture = app.state.snaps.save
         app.state.conv.snap = lambda: app.state.snaps.save(
             app.state.vision.frame if app.state.vision.state.running else None)
         app.state.scene = scene.Scene()
@@ -537,7 +538,8 @@ def create_app(
                + (f" You noticed their {noticed}; mention it in a friendly way." if noticed else ""))
         try:
             await conv.start(context=ctx, opening=line,
-                             trigger=f"called over someone walking past ({app.state.vision.source})")
+                             trigger=f"called over someone walking past ({app.state.vision.source})",
+                             picture=app.state.vision.frame)
         except (MissingKey, ValueError) as exc:
             log.info("call-over not started: %s", exc)
 
@@ -551,7 +553,8 @@ def create_app(
             ctx = (f"Someone just walked up. What the camera sees: {description}{costume_hint(costumes)}"
                    if description else None)
             try:
-                await app.state.conv.start(context=ctx, trigger=f"someone walked up ({app.state.vision.source})")
+                await app.state.conv.start(context=ctx, trigger=f"someone walked up ({app.state.vision.source})",
+                                           picture=app.state.vision.frame)
             except (MissingKey, ValueError) as exc:
                 log.info("visitor conversation not started: %s", exc)
 

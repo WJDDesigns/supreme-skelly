@@ -465,6 +465,11 @@ class Vision:
                 self.sighting("Skipped: the AI look at the picture failed")
                 return
             people = int(verdict.get("people") or 0)
+            if people and verdict.get("approaching") is False and int(verdict.get("bikes") or 0) >= people:
+                # Riding past: gone before Skelly finishes his first sentence, so don't call after them.
+                self.state.last_visitor_at = None
+                self.sighting("Ignored: riding past on a bike (too quick to call over)", verdict)
+                return
             if people and verdict.get("approaching") is False or (people and not worth_a_visit(verdict, cfg.ignore)):
                 if cfg.call_over and self._on_passerby:
                     # Walking past rather than coming up: Skelly calls them over. Passers-by come in
