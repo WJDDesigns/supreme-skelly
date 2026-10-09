@@ -55,3 +55,31 @@ def call_out(costumes: list[str] | None = None, noticed: str = "") -> str:
             return random.choice(DOG)
         return random.choice(NOTICE).format(n=n)
     return random.choice(PLAIN)
+
+
+# How Skelly opens a chat with someone who walked up, so it isn't the same "Hi, I'm Skelly" every time.
+GREETINGS = [
+    "Well hello there! Come closer, I don't bite… much.",
+    "Oh! A visitor! Sorry, I was just resting my bones.",
+    "Whoa! Is that a real live human? In MY yard? Welcome!",
+    "Hey there, neighbour! Bonez and I were hoping someone would stop by.",
+    "Ah, perfect timing! I've been practising my jokes all day and need an audience.",
+    "Well, well, well, look who came to visit the most handsome skeleton on the street!",
+    "Oh hello! Don't mind me, just standing here looking spooky and fabulous.",
+    "Boo! Ha, gotcha. Just kidding, I'm the friendliest skeleton you'll ever meet.",
+    "Hello, hello! You look like someone who appreciates a good bone pun.",
+    "A visitor! Quick, Bonez, look alive! Well… you know what I mean.",
+    "Welcome, welcome! Pull up a pumpkin, let's chat.",
+    "Oh, hi there! I'd shake your hand, but mine might fall off.",
+    "Ahoy! Three hundred years in this yard and you're my favourite visitor so far.",
+    "Hey you! Yes, you! Come say hi, I've been dying for some company.",
+]
+_recent: list[str] = []
+
+
+def greeting() -> str:
+    """A random opening line, never one of the last few used."""
+    line = random.choice([g for g in GREETINGS if g not in _recent] or GREETINGS)
+    _recent.append(line)
+    del _recent[:-5]
+    return line
