@@ -29,6 +29,7 @@
       <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M17 6l3 3M15 8l2 2"/></symbol>
       <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8Z"/></symbol>
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+      <symbol id="i-fog" viewBox="0 0 24 24"><path d="M4 9a4 4 0 0 1 7.5-2A3.5 3.5 0 0 1 18 9.5M3 13h13M7 17h14M3 21h10"/></symbol>
       <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></symbol>
     </defs>
   </svg>
@@ -56,6 +57,7 @@
         <p class="nav-label">Control</p>
         <button role="tab" data-tab="controls"><span class="nav-ico"><svg><use href="#i-sliders"/></svg></span>Controls</button>
         <button role="tab" data-tab="sounds"><span class="nav-ico"><svg><use href="#i-music"/></svg></span>Sounds</button>
+        <button role="tab" data-tab="fog"><span class="nav-ico"><svg><use href="#i-fog"/></svg></span>Fog</button>
         <p class="nav-label">AI</p>
         <button role="tab" data-tab="talk"><span class="nav-ico"><svg><use href="#i-chat"/></svg></span>Conversation</button>
         <button role="tab" data-tab="vision"><span class="nav-ico"><svg><use href="#i-camera"/></svg></span>Vision</button>
@@ -347,6 +349,70 @@
         </section>
 
         <!-- Vision -->
+        <section id="tab-fog" class="tab" hidden>
+          <div class="talk-grid">
+            <div class="card">
+              <div class="card-head">
+                <div><h2>Fog machine</h2><p class="muted" id="fog-sub">Off</p></div>
+                <span class="badge" id="fog-badge">Off</span>
+              </div>
+              <div class="row fog-go">
+                <button id="fog-puff" class="btn primary"><svg><use href="#i-fog"/></svg><span>Fog!</span></button>
+                <button id="fog-stop" class="btn outline"><svg><use href="#i-stop"/></svg>Stop</button>
+              </div>
+              <label class="slider">Fog burst <output id="fog-burst-out">5 s</output>
+                <input type="range" min="1" max="25" step="1" data-fcfg="burst_s"></label>
+              <div class="meter-row"><span class="muted">Fog meter</span><div class="meter"><i id="fog-bar"></i></div><output id="fog-out">–</output></div>
+              <p class="muted small-note" id="fog-meter-note">Draw the fog area on the picture below, then tap Calibrate while there's no fog.</p>
+              <div class="cam-view" id="fog-view">
+                <img id="fog-img" alt="Camera picture" hidden>
+                <div class="cam-empty" id="fog-empty"><svg><use href="#i-camera"/></svg><span>Start the camera on the Vision page to see the fog area</span></div>
+                <div class="zones" id="fog-zones"></div>
+              </div>
+              <div class="zone-bar">
+                <span class="muted" id="fog-zone-sub">Fog area: none</span>
+                <div class="zone-btns">
+                  <button id="fog-draw" class="btn outline small">Draw fog area</button>
+                  <button id="fog-calibrate" class="btn primary small">Calibrate (no fog now)</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div><h2>Relay</h2><p class="muted">The Wi-Fi switch wired across the fog button on the remote</p></div></div>
+              <label class="switch-row"><span><strong>Use the fog machine</strong>
+                <span class="muted">Lets the app press the fog button.</span></span>
+                <input type="checkbox" data-fcfg="enabled" role="switch"></label>
+              <label class="field-row">Relay type<select id="fog-kind" data-fcfg="kind"></select></label>
+              <label class="field-row" data-fkind="shelly shelly1 sonoff tasmota esphome">IP address<input type="text" data-fcfg="host" placeholder="e.g. 192.168.4.60" autocomplete="off"></label>
+              <label class="field-row" data-fkind="shelly shelly1 tasmota">Output<select data-fcfg="channel"><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option></select></label>
+              <label class="field-row" data-fkind="esphome">Switch id<input type="text" data-fcfg="entity" placeholder="relay" autocomplete="off"></label>
+              <label class="field-row" data-fkind="url">Link that presses<input type="text" data-fcfg="on_url" placeholder="http://…" autocomplete="off"></label>
+              <label class="field-row" data-fkind="url">Link that lets go<input type="text" data-fcfg="off_url" placeholder="http://… (optional)" autocomplete="off"></label>
+              <div class="field"><span class="muted">How the button works</span>
+                <div class="seg wide" id="fog-mode"><button data-val="hold">Hold for the burst</button><button data-val="tap">Tap to start, tap to stop</button></div></div>
+              <label class="field-row" data-fmode="tap">Stop button<select data-fcfg="stop_channel"><option value="-1">None (machine stops itself)</option><option value="0">Output 1</option><option value="1">Output 2</option><option value="2">Output 3</option><option value="3">Output 4</option></select></label>
+              <div class="row"><button id="fog-check" class="btn outline small"><svg><use href="#i-refresh"/></svg>Check connection</button></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div><h2>Automatic fog</h2><p class="muted" id="fog-auto-sub">Fog on its own, from the camera</p></div></div>
+            <label class="switch-row"><span><strong>Fog for visitors</strong>
+              <span class="muted">A burst when someone walks up or Skelly calls them over.</span></span>
+              <input type="checkbox" data-fcfg="on_visitor" role="switch"></label>
+            <label class="switch-row"><span><strong>Keep the fog topped up</strong>
+              <span class="muted">A burst when the fog meter shows the fog has thinned out. Needs the camera on and the fog area calibrated.</span></span>
+              <input type="checkbox" data-fcfg="top_up" role="switch"></label>
+            <label class="slider">Top up when the meter is below <output id="fog-thin-out">30</output>
+              <input type="range" min="5" max="90" step="5" data-fcfg="thin_below"></label>
+            <label class="slider">Rest between automatic bursts <output id="fog-cool-out">60 s</output>
+              <input type="range" min="10" max="600" step="10" data-fcfg="cooldown_s"></label>
+            <label class="slider">Most automatic bursts per hour <output id="fog-max-out">20</output>
+              <input type="range" min="1" max="60" step="1" data-fcfg="max_per_hour"></label>
+            <p class="muted small-note">Automatic fog pauses in quiet hours and while Skelly is switched off.</p>
+          </div>
+        </section>
+
         <section id="tab-vision" class="tab" hidden>
           <div class="talk-grid">
             <div class="card">

@@ -125,6 +125,7 @@ class Vision:
         self.memory = FaceMemory()
         self.seen: list = []  # Seen objects in the latest face frame
         self.protect = None  # set by the app: the UniFi Protect bridge, for the "protect" source
+        self.on_thumb = None  # set by the app: (grey thumbnail, width, height) for the fog meter
         self.full_frame: bytes | None = None  # full-resolution snapshot (Protect source)
         self._recent: list = []  # unknown faces from the last few seconds, for naming
         self.state = VisionState()
@@ -213,6 +214,10 @@ class Vision:
             self.frame = small.tobytes() if ok else jpeg
             self.full_frame = jpeg
             self._frame_event.set()
+            if self.on_thumb and img is not None:
+                grey = cv2.resize(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), (THUMB_W, THUMB_H),
+                                  interpolation=cv2.INTER_AREA)
+                self._thumb(grey.tobytes())
             count += 1
             if self.state.error:
                 self.state.error = None
@@ -369,6 +374,7 @@ class Vision:
         threshold = 0.12 - (cfg.sensitivity / 100) * 0.105
         while True:
             thumb = await stream.readexactly(size)
+            self._thumb(thumb)
             if prev is not None:
                 changed = sum(1 for i in keep if abs(thumb[i] - prev[i]) > 24) / counted
                 self.state.motion = round(changed, 3)
@@ -385,6 +391,13 @@ class Vision:
                     last_pub = now
                     self.svc.bus.publish("vision_motion", {"motion": self.state.motion, "fps": self.state.fps})
             prev = thumb
+
+    def _thumb(self, thumb: bytes) -> None:
+        if self.on_thumb:
+            try:
+                self.on_thumb(thumb, THUMB_W, THUMB_H)
+            except Exception as exc:
+                log.warning("fog meter failed: %r", exc)
 
     def recognise_external(self, seen: list) -> None:
         """Faces from another camera (a Protect snapshot): match them and offer unknowns for naming.

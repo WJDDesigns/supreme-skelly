@@ -755,6 +755,7 @@ function applySnapshot(s) {
   renderDevice();
   if (s.conversation) renderTalk(s.conversation);
   if (s.vision) renderVision(s.vision);
+  if (s.fog) renderFog(s.fog);
   if (s.playlist) { state.playlist = s.playlist; renderFiles(); }
 }
 
@@ -775,6 +776,8 @@ function connectEvents() {
     else if (msg.type === "transcript") addLine(msg.data);
     else if (msg.type === "vision") renderVision(msg.data);
     else if (msg.type === "vision_motion") setMotion(msg.data.motion);
+    else if (msg.type === "fog") renderFog(msg.data);
+    else if (msg.type === "fog_level") setFogLevel(msg.data.level);
     else if (msg.type === "visitor") onVisitor(msg.data);
     else if (msg.type === "meters") setMeters(msg.data);
     else if (msg.type === "calling_over") toast(`📣 ${msg.data.line}`);
@@ -1068,6 +1071,8 @@ function camPoll() {
 let visionCfg = {};
 let cams = [];
 function renderVision(v) {
+  fogCamOn = v.running && !v.error;
+  fogPoll();
   $("#cam-toggle").lastElementChild.textContent = v.running ? "Stop camera" : "Start camera";
   $("#cam-toggle").firstElementChild.innerHTML = `<use href="#i-${v.running ? "stop" : "play"}"/>`;
   $("#cam-toggle").className = v.running ? "btn outline" : "btn primary";
@@ -1673,3 +1678,147 @@ $("#st-ai-card").addEventListener("click", () => {
 });
 loadUsage();
 setInterval(() => { if (!document.hidden) loadUsage(); }, 60000);
+
+// ---------- fog machine ----------
+let fogCfg = {}, fogKinds = {}, fogState = {}, fogCamOn = false, fogTimer = 0;
+const secs = (n) => (n >= 60 ? `${Math.floor(n / 60)} min${n % 60 ? ` ${n % 60} s` : ""}` : `${n} s`);
+function renderFog(st) {
+  fogState = st;
+  const on = !!fogCfg.enabled;
+  const b = $("#fog-badge");
+  b.textContent = st.fogging ? "Fogging" : st.error ? "Problem" : on ? "Ready" : "Off";
+  b.className = `badge${st.fogging ? " orange" : ""}`;
+  const last = st.last_at ? `Last burst ${new Date(st.last_at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${st.last_why}` : "No bursts yet";
+  $("#fog-sub").textContent = st.error ? st.error : on ? last : "Turn it on in the Relay card";
+  $("#fog-puff").disabled = !on || st.fogging;
+  $("#fog-puff").lastElementChild.textContent = st.fogging ? "Fogging…" : "Fog!";
+  $("#fog-auto-sub").textContent = `${st.puffs_last_hour ?? 0} automatic ${st.puffs_last_hour === 1 ? "burst" : "bursts"} in the last hour`;
+  setFogLevel(st.level);
+}
+function setFogLevel(level) {
+  const known = level !== null && level !== undefined;
+  $("#fog-bar").style.width = `${known ? level : 0}%`;
+  $("#fog-out").textContent = known ? `${level}` : "–";
+  const z = fogCfg.zone?.length === 4;
+  $("#fog-meter-note").textContent = !z ? "Draw the fog area on the picture below, then tap Calibrate while there's no fog."
+    : !fogCfg.clear_detail ? "Tap Calibrate while there's no fog, so the meter knows what clear looks like."
+    : !fogCamOn ? "The meter works while the camera is on (Vision page)." : "0 is clear air, 100 is thick fog.";
+}
+function renderFogCfg() {
+  const kind = fogCfg.kind || "shelly";
+  if (!$("#fog-kind").options.length)
+    $("#fog-kind").replaceChildren(...Object.entries(fogKinds).map(([k, label]) => new Option(label, k)));
+  document.querySelectorAll("[data-fcfg]").forEach((i) => {
+    const v = fogCfg[i.dataset.fcfg];
+    if (i.type === "checkbox") i.checked = !!v; else if (v != null && document.activeElement !== i) i.value = v;
+  });
+  document.querySelectorAll("[data-fkind]").forEach((d) => (d.hidden = !d.dataset.fkind.split(" ").includes(kind)));
+  document.querySelectorAll("#fog-mode button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.val === (fogCfg.mode || "hold")));
+  document.querySelectorAll("[data-fmode]").forEach((d) => (d.hidden = d.dataset.fmode !== (fogCfg.mode || "hold")));
+  $("#fog-burst-out").textContent = `${fogCfg.burst_s ?? 5} s`;
+  $("#fog-thin-out").textContent = fogCfg.thin_below ?? 30;
+  $("#fog-cool-out").textContent = secs(fogCfg.cooldown_s ?? 60);
+  $("#fog-max-out").textContent = fogCfg.max_per_hour ?? 20;
+  renderFogZone();
+  renderFog(fogState);
+}
+function renderFogZone() {
+  const z = fogCfg.zone ?? [];
+  $("#fog-zones").replaceChildren(...(z.length === 4 ? [z] : []).map((b) => {
+    const d = el("div", { className: "zone fog" }, el("span", { textContent: "Fog area" }));
+    Object.assign(d.style, { left: `${b[0] * 100}%`, top: `${b[1] * 100}%`, width: `${b[2] * 100}%`, height: `${b[3] * 100}%` });
+    return d;
+  }));
+  $("#fog-zone-sub").textContent = z.length === 4 ? (fogCfg.clear_detail ? "Fog area set and calibrated" : "Fog area set, not calibrated yet") : "Fog area: none";
+  $("#fog-calibrate").disabled = z.length !== 4;
+}
+let fTimer;
+function saveFogCfg(patch) {
+  Object.assign(fogCfg, patch);
+  renderFogCfg();
+  clearTimeout(fTimer);
+  fTimer = setTimeout(() => run(null, async () => { const r = await api("/fog/config", fogCfg, "PUT"); fogCfg = r.config; renderFogCfg(); }), 400);
+}
+const FOG_NUM = ["burst_s", "channel", "stop_channel", "thin_below", "cooldown_s", "max_per_hour"];
+document.querySelectorAll("[data-fcfg]").forEach((i) => {
+  const ev = i.type === "range" ? "input" : i.type === "text" ? "input" : "change";
+  i.addEventListener(ev, () => {
+    const k = i.dataset.fcfg;
+    saveFogCfg({ [k]: i.type === "checkbox" ? i.checked : FOG_NUM.includes(k) ? Number(i.value) : i.type === "text" ? i.value.trim() : i.value });
+  });
+});
+document.querySelectorAll("#fog-mode button").forEach((b) => b.addEventListener("click", () => saveFogCfg({ mode: b.dataset.val })));
+$("#fog-puff").addEventListener("click", () => run(null, async () => { clearTimeout(fTimer); await api("/fog/config", fogCfg, "PUT"); await api("/fog/puff", {}); }));
+$("#fog-stop").addEventListener("click", (ev) => run(ev.currentTarget, () => api("/fog/stop", {}), "Fog button let go"));
+$("#fog-check").addEventListener("click", (ev) => run(ev.currentTarget, async () => {
+  clearTimeout(fTimer);
+  await api("/fog/config", fogCfg, "PUT");
+  await api("/fog/check", {});
+}, "The relay answered 👍"));
+$("#fog-calibrate").addEventListener("click", (ev) => run(ev.currentTarget, async () => {
+  const r = await api("/fog/calibrate", {});
+  fogCfg = r.config;
+  renderFogCfg();
+}, "Calibrated: this is what no fog looks like"));
+function fogPoll() {
+  const img = $("#fog-img");
+  clearTimeout(fogTimer);
+  const visible = !$("#tab-fog").hidden;
+  img.hidden = !fogCamOn;
+  $("#fog-empty").hidden = fogCamOn;
+  if (!fogCamOn || !visible) { fogTimer = setTimeout(fogPoll, 2000); return; }
+  fetch(`/api/vision/snapshot.jpg?t=${Date.now()}`, { cache: "no-store" })
+    .then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))
+    .then((blob) => {
+      const old = img.src;
+      img.src = URL.createObjectURL(blob);
+      if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+    })
+    .catch(() => {})
+    .finally(() => { fogTimer = setTimeout(fogPoll, 1000); });
+}
+// Drawing the fog area: one box, drag on the picture.
+let fogDrawing = null;
+$("#fog-draw").addEventListener("click", () => {
+  const on = $("#fog-view").classList.toggle("drawing");
+  $("#fog-draw").textContent = on ? "Drag on the picture…" : "Draw fog area";
+});
+const fogFrac = (e) => {
+  const r = $("#fog-view").getBoundingClientRect();
+  const p = e.touches?.[0] ?? e;
+  return [Math.min(1, Math.max(0, (p.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (p.clientY - r.top) / r.height))];
+};
+function fogStart(e) {
+  if (!$("#fog-view").classList.contains("drawing")) return;
+  e.preventDefault();
+  const [x, y] = fogFrac(e);
+  fogDrawing = { x, y, box: el("div", { className: "zone fog live" }) };
+  $("#fog-zones").replaceChildren(fogDrawing.box);
+}
+function fogMove(e) {
+  if (!fogDrawing) return;
+  e.preventDefault();
+  const [x, y] = fogFrac(e);
+  fogDrawing.rect = [Math.min(x, fogDrawing.x), Math.min(y, fogDrawing.y), Math.abs(x - fogDrawing.x), Math.abs(y - fogDrawing.y)];
+  Object.assign(fogDrawing.box.style, { left: `${fogDrawing.rect[0] * 100}%`, top: `${fogDrawing.rect[1] * 100}%`,
+    width: `${fogDrawing.rect[2] * 100}%`, height: `${fogDrawing.rect[3] * 100}%` });
+}
+function fogEnd() {
+  if (!fogDrawing) return;
+  const r = fogDrawing.rect;
+  fogDrawing = null;
+  $("#fog-view").classList.remove("drawing");
+  $("#fog-draw").textContent = "Draw fog area";
+  if (r && r[2] > 0.04 && r[3] > 0.04) {
+    saveFogCfg({ zone: r.map((v) => Math.round(v * 10000) / 10000), clear_detail: 0 });
+    toast("Fog area set. Tap Calibrate while there's no fog.");
+  } else renderFogZone();
+}
+$("#fog-view").addEventListener("mousedown", fogStart);
+$("#fog-view").addEventListener("touchstart", fogStart, { passive: false });
+window.addEventListener("mousemove", fogMove);
+window.addEventListener("touchmove", fogMove, { passive: false });
+window.addEventListener("mouseup", fogEnd);
+window.addEventListener("touchend", fogEnd);
+api("/fog").then((r) => { fogCfg = r.config; fogKinds = r.kinds; fogState = r.state; renderFogCfg(); }).catch(() => {});
+fogPoll();
