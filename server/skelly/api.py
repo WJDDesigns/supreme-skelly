@@ -251,7 +251,8 @@ def create_app(
         app.state.conv.on_user_text = on_user_text
         app.state.snaps = snaps.Snaps()
         app.state.vision.snaps = app.state.snaps
-        app.state.fog = Fog(svc, lambda: svc.settings.fog, lambda: not quiet())
+        app.state.fog = Fog(svc, lambda: svc.settings.fog, lambda: not quiet(),
+                            lambda: is_quiet(ConversationConfig.from_dict(svc.settings.conversation)))
         app.state.vision.on_thumb = app.state.fog.thumb
         fog_cam_task = asyncio.create_task(fog_camera_watch())
         app.state.conv.save_picture = app.state.snaps.save

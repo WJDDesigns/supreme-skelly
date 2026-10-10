@@ -72,9 +72,12 @@ time runs out, even if the mini PC drops off the network in the middle of a burs
   3. While there's **no fog**, tap **Calibrate**.
   4. The fog meter now shows how thick the fog is. Set **Top up when the meter is below** to taste.
 
+Topping up works on its own, even while Skelly is switched off, so the graveyard stays foggy
+all evening. Turn on **Only top up while Skelly is on** if you'd rather it followed Skelly.
+Fog for visitors is part of Skelly's show, so it only fires while Skelly is on.
+
 Every automatic burst respects the **rest time** between bursts, the **hourly limit** and
-**quiet hours**, and nothing fires while Skelly is switched off. The **Fog!** and **Stop**
-buttons always work.
+**quiet hours**. The **Fog!** and **Stop** buttons always work.
 
 ## Troubleshooting
 
