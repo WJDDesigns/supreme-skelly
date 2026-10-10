@@ -1,6 +1,6 @@
 [project]
 name = "supreme-skelly"
-version = "0.6.1"
+version = "0.6.2"
 description = "Headless controller for Skelly-family animatronics with a web UI"
 requires-python = ">=3.11"
 dependencies = [

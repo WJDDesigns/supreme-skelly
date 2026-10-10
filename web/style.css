@@ -160,7 +160,7 @@ main { width: 100%; max-width: 1400px; margin: 0 auto; padding: 22px 16px 110px;
 .row.split { justify-content: space-between; }
 
 /* ---------- lists (scan results, sounds) ---------- */
-.list { list-style: none; margin: 0; padding: 0; display: grid; }
+.list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .list li {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 14px 2px; border-top: 1px solid var(--line);
@@ -169,9 +169,10 @@ main { width: 100%; max-width: 1400px; margin: 0 auto; padding: 22px 16px 110px;
 .list .who { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .list .who > div { min-width: 0; }
 .list .name { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.list .meta { color: var(--muted); font-size: .84rem; }
+.list .meta { color: var(--muted); font-size: .84rem; overflow-wrap: anywhere; }
 .list .num { color: var(--accent); font-weight: 650; font-size: 1.05rem; width: 30px; flex: none; font-variant-numeric: tabular-nums; }
 .list .end { display: flex; align-items: center; gap: 12px; flex: none; }
+@media (max-width: 639px) { #adapters li { flex-wrap: wrap; } #adapters .end { margin-left: auto; } }
 .badge { padding: 4px 10px; border-radius: 8px; font-size: .78rem; font-weight: 550; white-space: nowrap; }
 .badge.orange { color: var(--accent); background: var(--accent-soft); }
 .badge.green { color: var(--ok); background: var(--ok-soft); }
