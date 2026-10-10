@@ -799,6 +799,7 @@ body.has-wall .haunt { display: none; }
 .fog-go { margin: 4px 0 8px; }
 .fog-go .btn.primary { font-size: 1.05rem; padding: 12px 26px; }
 .small-note { font-size: .82rem; margin: 8px 0 12px; }
+.fog-why { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; font-size: .88rem; background: rgba(255, 140, 26, .1); border: 1px solid rgba(255, 140, 26, .35); }
 .zone.fog { border-color: rgba(150, 200, 255, .95); background: rgba(150, 200, 255, .14); }
 
 /* Phones: "More" holds the less-used pages */

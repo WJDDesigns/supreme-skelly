@@ -87,6 +87,9 @@ class FogState:
     error: str | None = None
     level: int | None = None  # fog meter 0..100 from the camera, None when it can't tell
     puffs_last_hour: int = 0
+    waiting: str = ""  # what's keeping automatic fog from working right now, "" when nothing
+    skipped: str = ""  # the last time automatic fog was asked for but didn't fire, and why
+    skipped_at: float | None = None
 
 
 class Relay:
@@ -212,7 +215,25 @@ class Fog:
     def snapshot(self) -> dict:
         now = time.time()
         self.state.puffs_last_hour = sum(1 for t in self._auto if now - t < 3600)
+        self.state.waiting = self._waiting(self.cfg)
         return asdict(self.state)
+
+    def _waiting(self, cfg: FogConfig) -> str:
+        """What stops automatic fog from working at all right now, in words for the Fog page."""
+        if not cfg.enabled or not (cfg.on_visitor or cfg.top_up):
+            return ""
+        if not self._allowed():
+            return "Paused: Skelly is switched off or it's quiet hours."
+        if not cfg.top_up:
+            return ""
+        if len(cfg.zone) != 4:
+            return "Topping up needs a fog area: draw it on the picture."
+        if cfg.clear_detail <= 0:
+            return "Topping up needs calibrating: tap Calibrate while there's no fog."
+        if not self._last_thumb or time.monotonic() - self._last_thumb > 30:
+            return ("Topping up needs the fog camera's picture: start the camera on the Vision page."
+                    if not cfg.camera else "Topping up is waiting for a picture from the fog camera.")
+        return ""
 
     def _publish(self) -> None:
         self.svc.bus.publish("fog", self.snapshot())
@@ -295,13 +316,13 @@ class Fog:
         """Why an automatic puff can't happen right now, or None if it can."""
         now = time.time()
         if not cfg.enabled:
-            return "off"
+            return "the fog machine is off"
         if not self._allowed():
             return "Skelly is off or it's quiet hours"
         if self._lock.locked():
             return "already fogging"
         if self.state.last_at and now - self.state.last_at < cfg.cooldown_s:
-            return "resting"
+            return "resting between bursts"
         if sum(1 for t in self._auto if now - t < 3600) >= cfg.max_per_hour:
             return "hourly limit reached"
         return None
@@ -309,7 +330,11 @@ class Fog:
     async def auto(self, why: str) -> bool:
         cfg = self.cfg
         if (reason := self._can_auto(cfg)) is not None:
-            log.debug("no automatic fog (%s): %s", why, reason)
+            note = f"{why}: {reason}"
+            if note != self.state.skipped:
+                log.info("no automatic fog (%s)", note)
+            self.state.skipped, self.state.skipped_at = note, time.time()
+            self._publish()
             return False
         self._auto.append(time.time())
         try:
