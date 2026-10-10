@@ -27,6 +27,7 @@ from .conversation import (
     elevenlabs_create_agent,
     elevenlabs_update_agent,
     elevenlabs_voices,
+    for_character,
     is_quiet,
 )
 from .fog import KINDS as FOG_KINDS
@@ -557,7 +558,7 @@ def create_app(
         later(app.state.fog.visitor("Calling someone over"))
 
         costumes, noticed = costume_names(verdict), notice(verdict)
-        line = call_out(costumes, noticed)
+        line = call_out(costumes, noticed, svc().profile.character)
         svc().bus.publish("calling_over", {"line": line, "costumes": costumes})
         conv = app.state.conv
         if conv.running:
@@ -610,7 +611,7 @@ def create_app(
             return
         from .callouts import call_out
 
-        line = call_out(costume_names(verdict), notice(verdict))
+        line = call_out(costume_names(verdict), notice(verdict), svc().profile.character)
         if conv.call_over(line):
             svc().bus.publish("calling_over", {"line": line, "costumes": costume_names(verdict)})
             app.state.vision.sighting("Mid-chat: called them over too", verdict, jpeg=jpeg, source=source)
@@ -730,7 +731,7 @@ def create_app(
                 from .callouts import greeting
 
                 await conv.start(context=f"Your friend {name} just walked up; you've met before.",
-                                 opening=greeting(name), trigger=f"recognised {name}'s face")
+                                 opening=greeting(name, svc().profile.character), trigger=f"recognised {name}'s face")
             except (MissingKey, ValueError) as exc:
                 log.info("greeting %s not started: %s", name, exc)
 
@@ -984,8 +985,8 @@ def create_app(
 
     @app.get("/api/conversation")
     async def conversation_state():
-        return {"state": app.state.conv.snapshot(),
-                "config": {**vars(ConversationConfig()), **svc().settings.conversation}}
+        cfg = for_character(ConversationConfig.from_dict(svc().settings.conversation), svc().profile)
+        return {"state": app.state.conv.snapshot(), "config": vars(cfg)}
 
     @app.put("/api/conversation/config")
     async def conversation_config(body: dict):
@@ -1052,7 +1053,7 @@ def create_app(
 
     @app.post("/api/elevenlabs/agents")
     async def eleven_create_agent():
-        cfg = ConversationConfig.from_dict(svc().settings.conversation)
+        cfg = for_character(ConversationConfig.from_dict(svc().settings.conversation), svc().profile)
         agent = await eleven(elevenlabs_create_agent(eleven_key(), cfg))
         svc().settings.conversation = {**vars(cfg), "elevenlabs_agent_id": agent["id"]}
         svc().settings.save()

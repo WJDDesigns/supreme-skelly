@@ -36,11 +36,57 @@ log = logging.getLogger(__name__)
 
 PROVIDERS = ("elevenlabs", "openai", "claude")
 
-DEFAULT_PROMPT = (
-    "You are Skelly, a friendly, funny six-foot Halloween skeleton standing in the front yard. "
-    "Visitors talk to you out loud. Keep every reply short: one or two spoken sentences. "
-    "Be spooky but family friendly, make bone puns sparingly, and ask visitors questions back."
-)
+# Starting personality, first line and speaking style for each character (profiles.Profile.character).
+# Owners can rewrite the personality; until they do, it follows whichever model is connected.
+CHARACTERS = {
+    "skelly": {
+        "prompt": ("You are Skelly, a friendly, funny {height} Halloween skeleton standing in the front yard. "
+                   "Visitors talk to you out loud. Keep every reply short: one or two spoken sentences. "
+                   "Be spooky but family friendly, make bone puns sparingly, and ask visitors questions back."),
+        "first_message": "Well hello there! Come closer, I don't bite... much.",
+        "style": "Speak like a playful, spooky skeleton.",
+    },
+    "lily": {
+        "prompt": ("You are Lethal Lily, a friendly, funny {height} Halloween witch holding a glowing lantern "
+                   "in the front yard. Visitors talk to you out loud. Keep every reply short: one or two spoken "
+                   "sentences. Be spooky but family friendly, call visitors \"dearie\" now and then, and ask "
+                   "visitors questions back."),
+        "first_message": "Well hello, dearie! Come closer, the lantern's nice and warm.",
+        "style": "Speak like a playful, cackling old witch.",
+    },
+    "santa": {
+        "prompt": ("You are Santa Claus, a jolly, warm {height} Santa standing in the front yard. Visitors "
+                   "talk to you out loud. Keep every reply short: one or two spoken sentences. Be merry and "
+                   "family friendly, say \"ho ho ho\" sparingly, ask visitors questions back, and never "
+                   "promise anyone a particular present."),
+        "first_message": "Ho ho ho! Merry Christmas! Come closer!",
+        "style": "Speak like a jolly, warm Santa Claus.",
+    },
+}
+DEFAULT_PROMPT = CHARACTERS["skelly"]["prompt"].format(height="six-foot")
+DEFAULT_FIRST_MESSAGE = CHARACTERS["skelly"]["first_message"]
+
+
+def character(profile) -> dict:
+    return CHARACTERS.get(getattr(profile, "character", "skelly"), CHARACTERS["skelly"])
+
+
+def _stock() -> tuple[set[str], set[str]]:
+    from .profiles import PROFILES, UNKNOWN
+
+    prompts = {c["prompt"].format(height=p.height) for c in CHARACTERS.values() for p in (*PROFILES, UNKNOWN)}
+    return prompts, {c["first_message"] for c in CHARACTERS.values()}
+
+
+def for_character(cfg: ConversationConfig, profile) -> ConversationConfig:
+    """Swap a personality or first line the owner never changed for the connected model's own."""
+    prompts, firsts = _stock()
+    c = character(profile)
+    if not cfg.prompt.strip() or cfg.prompt.strip() in prompts:
+        cfg.prompt = c["prompt"].format(height=getattr(profile, "height", "six-foot"))
+    if not cfg.first_message.strip() or cfg.first_message.strip() in firsts:
+        cfg.first_message = c["first_message"]
+    return cfg
 
 
 # How much Skelly says per reply, from the "Talk amount" slider (1..5).
@@ -61,7 +107,7 @@ def talk_rule(amount: int) -> str:
 
 # Added to every Claude prompt: whatever the personality says, the reply is read aloud.
 SPOKEN_RULES = (
-    "Your words are spoken aloud by a speaker inside a skeleton, to someone standing in front of you. "
+    "Your words are spoken aloud by a speaker inside an animatronic figure, to someone standing in front of you. "
     "Never write stage directions, actions in asterisks, emoji, lists or formatting: only the words you say."
 )
 
@@ -79,7 +125,7 @@ def speakable(text: str) -> str:
 class ConversationConfig:
     provider: str = "elevenlabs"
     prompt: str = DEFAULT_PROMPT
-    first_message: str = "Well hello there! Come closer, I don't bite... much."
+    first_message: str = DEFAULT_FIRST_MESSAGE
     # ElevenLabs Conversational AI
     elevenlabs_agent_id: str = ""
     # OpenAI Realtime
@@ -171,10 +217,17 @@ def is_quiet(cfg: ConversationConfig, now=None) -> bool:
     return start <= t < end if start < end else t >= start or t < end
 
 
-def season_note(now=None) -> str:
+def season_note(now=None, character: str = "skelly") -> str:
     """What time of year it is, so Skelly doesn't treat every neighbour out walking as a trick-or-treater."""
     now = now or clock.now()
     day = f"Today is {now:%A, %B} {now.day}."
+    if character == "santa":
+        if now.month == 12 and now.day in (24, 25):
+            return f"{day} It's {'Christmas Eve' if now.day == 24 else 'Christmas Day'}!"
+        christmas = now.replace(year=now.year + (now.month == 12 and now.day > 25), month=12, day=25).date()
+        return (f"{day} Christmas is {(christmas - now.date()).days} days away. People passing by are "
+                "neighbours out for a walk; compliment something you can see, like their coat, their dog or "
+                "what they're doing.")
     if now.month == 10 and now.day == 31:
         return f"{day} It's Halloween night: expect trick-or-treaters in costumes."
     halloween = now.replace(year=now.year + (now.month > 10), month=10, day=31).date()
@@ -234,6 +287,7 @@ class Conversation:
         self.on_ended = None  # async (transcript) when the conversation finishes
         self.snap: Callable[[], str | None] | None = None  # saves the camera picture for a line
         self._override_ok = False
+        self._style = CHARACTERS["skelly"]["style"]  # how the OpenAI voice should sound
         self._opening: str | None = None
         self._nudges: asyncio.Queue | None = None
         self.save_picture: Callable[[bytes], str | None] | None = None  # stores a JPEG, returns its name
@@ -261,7 +315,9 @@ class Conversation:
             if context:
                 self._context.append(context)
             return self.snapshot()
-        cfg = ConversationConfig.from_dict(self._config())
+        profile = getattr(self.svc, "profile", None)
+        cfg = for_character(ConversationConfig.from_dict(self._config()), profile)
+        self._style = character(profile)["style"]
         if self._eleven_out_at and time.monotonic() - self._eleven_out_at < CREDITS_RETRY_S:
             cfg = self._without_elevenlabs(cfg) or cfg
         self._check_keys(cfg)
@@ -271,11 +327,12 @@ class Conversation:
                 scene = self.scene_context()
             except Exception as exc:
                 log.info("no scene context: %r", exc)
-        self._context = [c for c in (season_note(), scene, context) if c]
+        who = getattr(profile, "character", "skelly")
+        self._context = [c for c in (season_note(character=who), scene, context) if c]
         if not opening:
             from .callouts import greeting
 
-            opening = greeting()  # a different hello each time instead of the same first message
+            opening = greeting(character=who)  # a different hello each time instead of the same first message
         self._opening = opening
         if opening:
             cfg.first_message = opening
@@ -923,7 +980,7 @@ class Conversation:
             req = http.stream("POST", "https://api.openai.com/v1/audio/speech",
                               headers={"Authorization": f"Bearer {self.vault.get('openai_api_key')}"},
                               json={"model": "gpt-4o-mini-tts", "voice": cfg.openai_tts_voice, "input": text,
-                                    "response_format": "pcm", "instructions": "Speak like a playful, spooky skeleton."})
+                                    "response_format": "pcm", "instructions": self._style})
             name = "OpenAI voice"
         else:
             rate = 16000
@@ -1020,15 +1077,16 @@ async def elevenlabs_voices(key: str) -> list[dict]:
 
 
 async def elevenlabs_create_agent(key: str, cfg: ConversationConfig) -> dict:
-    """Makes a "Skelly" agent with this page's personality, first line and voice."""
-    body = {"name": "Skelly", "conversation_config": {
+    """Makes an agent named after the character, with this page's personality, first line and voice."""
+    name = next((n for n in ("Lethal Lily", "Santa") if n in cfg.prompt[:40]), "Skelly")
+    body = {"name": name, "conversation_config": {
         "agent": {"prompt": {"prompt": cfg.prompt}, "first_message": cfg.first_message, "language": "en"},
         "tts": {"voice_id": cfg.elevenlabs_voice_id}}}
     async with httpx.AsyncClient(timeout=30) as http:
         r = await http.post("https://api.elevenlabs.io/v1/convai/agents/create", headers={"xi-api-key": key},
                             json=body)
         _raise_for(r, "ElevenLabs")
-    return {"id": r.json()["agent_id"], "name": "Skelly"}
+    return {"id": r.json()["agent_id"], "name": name}
 
 
 async def elevenlabs_agent(key: str, agent_id: str) -> dict:

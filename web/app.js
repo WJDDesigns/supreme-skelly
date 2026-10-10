@@ -1,7 +1,7 @@
 // Supreme Skelly web UI. No build step: plain ES modules talking to /api.
 
 import { timeZones } from "./zones.js";
-import { skeletonSVG, updateSkeleton } from "./skeleton.js";
+import { figureSVG, updateSkeleton } from "./skeleton.js";
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, props = {}, ...kids) => {
@@ -105,9 +105,17 @@ $("#tab-sounds").classList.add("disabled-when-offline");
 $("#conn-pill").addEventListener("click", () => showTab("device"));
 
 // ---------- live skeleton ----------
-$("#skelly-preview").innerHTML = skeletonSVG();
 function renderPreview() {
   const root = $("#skelly-preview");
+  const who = state.profile?.character ?? "skelly";
+  if (root.dataset.character !== who) {  // Skelly, Lethal Lily or Santa
+    root.innerHTML = figureSVG(who);
+    root.dataset.character = who;
+  }
+  const lights = state.profile?.lights ?? [];
+  $("#lg-chest-name").textContent = lights[0]?.label ?? "Chest";
+  $("#lg-mouth-row").style.display = lights.some((l) => l.key === "head") ? "" : "none";
+  $("#lg-eye").parentElement.style.display = state.profile?.eyes?.length ? "" : "none";
   updateSkeleton(root, { look: state.look, moves: state.moves, profile: state.profile });
   const cs = getComputedStyle(root);
   $("#lg-chest").style.background = cs.getPropertyValue("--chest");
@@ -119,7 +127,7 @@ function renderPreview() {
   const fx = root.querySelector(".chest-fx").dataset.effect;
   $("#preview-fx").textContent = fx === "cycle" ? "Party" : fx ? fx[0].toUpperCase() + fx.slice(1) : "Static";
   const parts = [...state.moves].map((k) => state.profile?.movements?.find((m) => m.key === k)?.label).filter(Boolean);
-  $("#preview-sub").textContent = parts.length ? `Moving: ${parts.join(", ")}` : "What Skelly looks like right now";
+  $("#preview-sub").textContent = parts.length ? `Moving: ${parts.join(", ")}` : `What ${state.profile?.casual_name ?? "Skelly"} looks like right now`;
 }
 
 // ---------- header ----------
@@ -789,7 +797,11 @@ function connectEvents() {
     else if (msg.type === "upload") renderUpload(msg.data);
     else if (msg.type === "playlist") { state.playlist = msg.data; renderFiles(); }
     else if (msg.type === "look") { state.look = msg.data; renderPreview(); }
-    else if (msg.type === "profile") { state.profile = msg.data; state.moves.clear(); state.mode = null; renderProfile(); }
+    else if (msg.type === "profile") {
+      state.profile = msg.data; state.moves.clear(); state.mode = null; renderProfile();
+      // The starting personality follows the model (Skelly, Lily, Santa) until the owner edits it.
+      api("/conversation").then((r) => { talkCfg = r.config; renderTalkCfg(); }).catch(() => {});
+    }
     else if (msg.type === "conversation") renderTalk(msg.data);
     else if (msg.type === "conversation_level") setTalkLevel(msg.data.level);
     else if (msg.type === "transcript") addLine(msg.data);

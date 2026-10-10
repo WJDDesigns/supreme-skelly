@@ -14,7 +14,24 @@ Works with the Skelly-family Bluetooth animatronics: Ultra Skelly v2, Animated S
   <img src="docs/images/phone.png" alt="Supreme Skelly on a phone" width="22%">
 </p>
 
-## What you need
+## Every model is its own character
+
+Supreme Skelly notices which animatronic it's talking to and becomes that character: the live
+preview draws it, and until you write your own personality it introduces itself, greets
+visitors and calls people over as that character.
+
+<p align="center">
+  <img src="docs/images/character-skelly.png" alt="Skelly in the live preview" width="30%">
+  <img src="docs/images/character-lily.png" alt="Lethal Lily, a witch with a glowing lantern" width="30%">
+  <img src="docs/images/character-santa.png" alt="Ultra Santa" width="30%">
+</p>
+
+- **Skelly** (Ultra Skelly v2, Animated Skelly, 12 ft Skelly): a spooky, punny skeleton.
+- **Lethal Lily**: a cackling witch who calls visitors "dearie". Her lantern glows in the drawing.
+- **Ultra Santa**: a jolly Santa who counts down to Christmas instead of Halloween.
+
+The moves, lights and eye choices on the Controls page always match the connected model.
+
 
 - **Your Skelly** (switched on, within Bluetooth range).
 - **A small Linux computer** that stays on: any mini PC (an Intel N100 box is plenty) or a

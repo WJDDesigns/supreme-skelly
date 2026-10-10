@@ -21,9 +21,9 @@ MAX_PHOTOS = 8
 MAX_SIDE = 1280
 
 DESCRIBE_PROMPT = (
-    "This photo shows the yard and Halloween display around Skelly, a 6 ft talking skeleton. "
-    "Describe what's in it so Skelly can mention it to visitors: decorations, props, lights, "
-    "the house and yard, anything fun or spooky. Be concrete (colours, where things are). "
+    "This photo shows the yard and holiday display around a talking animatronic figure. "
+    "Describe what's in it so the figure can mention it to visitors: decorations, props, lights, "
+    "the house and yard, anything fun or festive. Be concrete (colours, where things are). "
     'Reply with JSON only: {"description": "two to four sentences"}'
 )
 

@@ -46,6 +46,8 @@ class Profile:
     lights: tuple[Light, ...] = ()
     light_modes: tuple[LightMode, ...] = ()
     eyes: tuple[Eye, ...] = ()
+    character: str = "skelly"  # which personality, drawing and lines: skelly | lily | santa
+    height: str = "six-foot"  # how he describes himself
     wake_tone_ms: int | None = None
     notes: tuple[str, ...] = field(default=())
 
@@ -114,6 +116,7 @@ SKELLY_12FT = Profile(
     key="skelly_12ft",
     name="12ft Skelly",
     casual_name="Skelly",
+    height="twelve-foot",
     ble_names=("12ft Skelly",),
     live_audio_names=("12ft Skelly (Live)",),
     movements=(Movement("head", "Head", 0x02),),
@@ -128,6 +131,8 @@ LETHAL_LILY = Profile(
     key="lethal_lily",
     name="Lethal Lily",
     casual_name="Lily",
+    character="lily",
+    height="seven-foot",
     ble_names=("Lethal Lily",),
     movements=(
         Movement("wrist", "Wrist", 0x01),
@@ -144,6 +149,8 @@ ULTRA_SANTA = Profile(
     key="ultra_santa",
     name="Ultra Santa",
     casual_name="Santa",
+    character="santa",
+    height="six-and-a-half-foot",
     ble_names=("Ultra Santa",),
     movements=(
         Movement("eyes", "Eyes", 0x01),
