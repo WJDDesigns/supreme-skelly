@@ -209,7 +209,7 @@ async def test_topping_up_pauses_in_quiet_hours(requests):
     f = fog.Fog(Svc(), lambda: conf, allowed=lambda: False, quiet_hours=lambda: True)
     assert await f.auto("Fog thinned out", top_up=True) is False
     assert f.snapshot()["skipped"] == "Fog thinned out: it's quiet hours"
-    assert f.snapshot()["waiting"] == "Paused for quiet hours."
+    assert f.snapshot()["waiting"].startswith("Paused for quiet hours.")
 
 
 def test_waiting_note_when_only_skelly_is_off():
@@ -217,3 +217,41 @@ def test_waiting_note_when_only_skelly_is_off():
     f = fog.Fog(Svc(), lambda: conf, allowed=lambda: False)
     f.thumb(bytes([120] * 80 * 45), 80, 45)
     assert f.snapshot()["waiting"] == "Visitor fog waits for Skelly to switch on; topping up keeps going."
+
+
+
+@pytest.mark.asyncio
+async def test_clear_air_on_the_fog_camera_tops_up(requests):
+    import asyncio
+
+    w, h = 80, 45
+    sharp = bytes((0 if (x + y) % 2 else 200) for y in range(h) for x in range(w))
+    conf = {"enabled": True, "host": "10.0.0.9", "burst_s": 0.5, "top_up": True, "on_visitor": False,
+            "camera": "cam1", "zone": [0, 0, 1, 1]}
+    f = fog.Fog(Svc(), lambda: conf, allowed=lambda: False)
+    f.thumb(sharp, w, h, "cam1")
+    conf["clear_detail"] = f.calibrate()
+    for _ in range(3):
+        f._last_thumb = 0  # skip the once-a-second limit
+        f.thumb(sharp, w, h, "cam1")
+    assert f.state.level == 0 and f._thin_since
+    f._thin_since -= 20  # clear air for 20 s
+    f._last_thumb = 0
+    f.thumb(sharp, w, h, "cam1")
+    for _ in range(40):
+        await asyncio.sleep(0.05)
+        if f.state.last_at and not f._lock.locked():
+            break
+    assert f.state.last_why.startswith("Fog thinned out"), f.snapshot()
+
+
+@pytest.mark.asyncio
+async def test_fog_during_quiet_hours_for_testing(requests):
+    conf = {"enabled": True, "host": "10.0.0.9", "burst_s": 0.5, "top_up": True, "ignore_quiet_hours": True}
+    f = fog.Fog(Svc(), lambda: conf, allowed=lambda: False, quiet_hours=lambda: True, skelly_on=lambda: True)
+    assert await f.auto("Fog thinned out", top_up=True) is True
+    f.state.last_at = None
+    assert await f.auto("Someone walked up") is True  # Skelly is on; quiet hours ignored
+    f.state.last_at = None
+    f2 = fog.Fog(Svc(), lambda: conf, allowed=lambda: False, quiet_hours=lambda: True, skelly_on=lambda: False)
+    assert await f2.auto("Someone walked up") is False  # still needs Skelly on

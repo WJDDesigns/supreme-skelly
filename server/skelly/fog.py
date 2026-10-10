@@ -56,6 +56,7 @@ class FogConfig:
     on_visitor: bool = True  # puff when someone walks up or Skelly calls them over
     top_up: bool = False  # puff when the camera says the fog has thinned out
     top_up_with_skelly: bool = False  # top up only while Skelly is on (otherwise only quiet hours pause it)
+    ignore_quiet_hours: bool = False  # automatic fog runs in quiet hours too (handy for testing)
     thin_below: int = 30  # "thin" means the fog meter reads below this (0..100)
     camera: str = ""  # camera the fog meter watches: "" = the Vision page's camera, else a Protect camera id
     zone: list = field(default_factory=list)  # [x, y, w, h] fractions of the picture to watch
@@ -195,11 +196,13 @@ def fog_level(now_detail: float | None, clear_detail: float) -> int | None:
 
 
 class Fog:
-    def __init__(self, svc, config_getter, allowed=lambda: True, quiet_hours=lambda: False) -> None:
+    def __init__(self, svc, config_getter, allowed=lambda: True, quiet_hours=lambda: False,
+                 skelly_on=lambda: True) -> None:
         self.svc = svc
         self._config = config_getter  # -> dict
         self._allowed = allowed  # Skelly is on and it's not quiet hours: visitor fog may run
         self._quiet_hours = quiet_hours  # topping up runs whether Skelly is on or not, but not in quiet hours
+        self._skelly_on = skelly_on
         self.state = FogState()
         self._lock = asyncio.Lock()
         self._auto: deque = deque(maxlen=200)  # times of automatic puffs
@@ -209,6 +212,7 @@ class Fog:
         self._zone: list = []
         self.frame: bytes | None = None  # latest picture from the fog camera, when it isn't the Vision camera
         self.viewed_at = 0.0  # when the Fog page last showed the fog camera
+        self._tasks: set = set()
 
     @property
     def cfg(self) -> FogConfig:
@@ -224,11 +228,11 @@ class Fog:
         """What stops automatic fog from working at all right now, in words for the Fog page."""
         if not cfg.enabled or not (cfg.on_visitor or cfg.top_up):
             return ""
-        visitors_paused = cfg.on_visitor and not self._allowed()
+        visitors_paused = cfg.on_visitor and not self._visitors_ok(cfg)
         top_up_paused = cfg.top_up and self._top_up_paused(cfg)
         if top_up_paused or (visitors_paused and not cfg.top_up):
             return "Paused: Skelly is switched off or it's quiet hours." if cfg.top_up_with_skelly or not cfg.top_up \
-                else "Paused for quiet hours."
+                else "Paused for quiet hours. Turn on \"Fog during quiet hours\" to test now."
         if not cfg.top_up:
             return ""
         note = "Visitor fog waits for Skelly to switch on; topping up keeps going. " if visitors_paused else ""
@@ -241,8 +245,15 @@ class Fog:
                            if not cfg.camera else "Topping up is waiting for a picture from the fog camera.")
         return note.strip()
 
+    def _quiet(self, cfg: FogConfig) -> bool:
+        return not cfg.ignore_quiet_hours and self._quiet_hours()
+
+    def _visitors_ok(self, cfg: FogConfig) -> bool:
+        """Visitor fog (and topping up that follows Skelly) runs while Skelly is on, outside quiet hours."""
+        return self._skelly_on() if cfg.ignore_quiet_hours else self._allowed()
+
     def _top_up_paused(self, cfg: FogConfig) -> bool:
-        return not self._allowed() if cfg.top_up_with_skelly else self._quiet_hours()
+        return not self._visitors_ok(cfg) if cfg.top_up_with_skelly else self._quiet(cfg)
 
     def _publish(self) -> None:
         self.svc.bus.publish("fog", self.snapshot())
@@ -327,9 +338,9 @@ class Fog:
         if not cfg.enabled:
             return "the fog machine is off"
         if top_up and not cfg.top_up_with_skelly:
-            if self._quiet_hours():
+            if self._quiet(cfg):
                 return "it's quiet hours"
-        elif not self._allowed():
+        elif not self._visitors_ok(cfg):
             return "Skelly is off or it's quiet hours"
         if self._lock.locked():
             return "already fogging"
@@ -388,7 +399,9 @@ class Fog:
         self._thin_since = self._thin_since or now
         if now - self._thin_since >= 15:  # thin for a while, not just a gust
             self._thin_since = None
-            asyncio.get_running_loop().create_task(self.auto(f"Fog thinned out (meter {level})", top_up=True))
+            task = asyncio.get_running_loop().create_task(self.auto(f"Fog thinned out (meter {level})", top_up=True))
+            self._tasks.add(task)  # asyncio only keeps a weak reference; don't let the burst be collected
+            task.add_done_callback(self._tasks.discard)
 
     def calibrate(self) -> float:
         """The fog zone's detail right now, to save as the "no fog" reference."""
