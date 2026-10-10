@@ -1679,7 +1679,8 @@ async function loadUsage() {
     const secs = talk.reduce((a, [, v]) => a + v.seconds, 0), chats = talk.reduce((a, [, v]) => a + v.calls, 0);
     const vis = (it.vision?.calls || 0) + (it.photo?.calls || 0);
     const tok = Object.values(it).reduce((a, v) => a + v.tokens_in + v.tokens_out, 0);
-    return `<tr><td>${d.day}</td><td>${chats} chats, ${fmtMins(secs)}</td><td>${vis}</td><td>${tok.toLocaleString()}</td><td>$${d.usd.toFixed(2)}</td></tr>`;
+    const day = new Date(`${d.day}T12:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return `<tr><td title="${d.day}">${day}</td><td>${chats} chats, ${fmtMins(secs)}</td><td>${vis}</td><td>${tok.toLocaleString()}</td><td>$${d.usd.toFixed(2)}</td></tr>`;
   });
   $("#usage-rows").innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">Nothing used yet.</td></tr>`;
   renderUsageStat(r);
