@@ -8,6 +8,12 @@ him, change his eyes and lights, play sounds, have him **talk with visitors usin
 Works with the Skelly-family Bluetooth animatronics: Ultra Skelly v2, Animated Skelly,
 12 ft Skelly, Lethal Lily and Ultra Santa.
 
+<p align="center">
+  <img src="docs/images/controls.png" alt="The Controls page: a live drawing of Skelly and one-tap looks" width="72%">
+  &nbsp;
+  <img src="docs/images/phone.png" alt="Supreme Skelly on a phone" width="22%">
+</p>
+
 ## What you need
 
 - **Your Skelly** (switched on, within Bluetooth range).
@@ -58,14 +64,32 @@ Open **Conversation** and pick an "AI brain". You can switch any time:
 Add keys under **Settings > API keys**. Each one has a link and a one-line "how to get it".
 Keys never leave the mini PC, and the page only ever shows their last 4 characters.
 **Settings > Usage** shows what each night cost, and **Quiet hours** keeps him from chatting
-at night. Conversations always end after a few minutes so nothing can run up a bill.
+at night. Conversations always end after a few minutes so nothing can run up a bill, and a
+chat Skelly started himself ends shortly after he stops talking if nobody answers. If your
+ElevenLabs credits run out, he says so and carries on with OpenAI's voice and hearing.
+
+<img src="docs/images/conversation.png" alt="Chat bubbles with the time and a camera picture on each" width="360" align="right">
+
+Every chat bubble shows **when it was said and what the camera saw at that moment**, so you can
+look back and see why he said what he did. Tap a picture to see it big. Pictures stay on the
+mini PC and are deleted after a week. Saved recordings show the same bubbles.
+
+**Settings > Sound** picks the mic, Skelly's speaker and any extra Bluetooth speakers, with level
+meters and volume caps. **Keep speakers awake** plays silence so Bluetooth speakers don't chime
+each time he starts talking.
+<br clear="right">
 
 ## Seeing visitors (Vision)
 
 Open **Vision** and pick where the picture comes from: a USB webcam, an RTSP camera link,
 or UniFi Protect (add a Protect API key in Settings and your console's address on the
 Vision page, then tick which cameras count). Skelly can then notice people, call passers-by
-over, and greet people by name once they've told him.
+over, and greet people by name once they've told him (or welcome them back by name next time).
+
+**Check with AI** has an AI look at each picture to confirm it's a person and describe them,
+for costume compliments. It costs a little per look. Switch it off for a free mode: with UniFi
+Protect, Skelly then goes by UniFi's own person detection. **Recent sightings** lists everyone
+the cameras spotted, with their picture and what Skelly did about it.
 
 **Face memory stays on the mini PC:** faces are recognised on the mini PC itself and never
 sent anywhere. You can rename or forget anyone, or everyone, on the Vision page. Recording
@@ -88,6 +112,12 @@ thick it is. Every automatic burst respects a rest time, an hourly limit and qui
 ![The Fog page](docs/images/fog-page.png)
 
 The **[fog guide](docs/fog.md)** has a wiring diagram for a Shelly Plus Uni and step-by-step setup.
+
+## Make it yours
+
+**Settings > Wallpaper** has wallpapers (graveyard, pumpkin patch, spider web and more) and a
+see-through setting for the cards. The Device page shows today's AI use with a week graph,
+and **Settings > Usage** breaks it down by night.
 
 ## Security
 

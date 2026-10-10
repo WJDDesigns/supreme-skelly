@@ -265,10 +265,10 @@ def asked_name(said: str) -> bool:
 
 
 def heard_names(text: str, asked: bool = False) -> list[str]:
-    """Every name given in one go: "I'm Willow and this is Gabe" gives both.
+    """Every name given in one go: "I'm Morticia and this is Gomez" gives both.
 
     With `asked` (Skelly just asked their name), a bare answer counts too: kids just say
-    "Willow", or "Willow and Gabe".
+    "Morticia", or "Morticia and Gomez".
     """
     names: list[str] = []
     rest = text or ""

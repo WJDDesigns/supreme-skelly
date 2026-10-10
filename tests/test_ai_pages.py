@@ -153,9 +153,9 @@ def test_sightings_log_what_skelly_did(tmp_path, monkeypatch):
         app.state.vision._on_passerby = passerby
         c.portal.call(app.state.vision.maybe_visitor_from, b"\xff\xd8\xff fake", [], "Front Door camera")
         app.state.vision.state.last_visitor_at -= 100  # past the short gap after a passer-by
-        c.portal.call(app.state.vision.maybe_visitor_from, b"\xff\xd8\xff other", [], "Garage Hoop camera")
+        c.portal.call(app.state.vision.maybe_visitor_from, b"\xff\xd8\xff other", [], "Driveway camera")
         rows = c.get("/api/sightings").json()
-        assert [r["camera"] for r in rows] == ["Garage Hoop camera", "Front Door camera"]
+        assert [r["camera"] for r in rows] == ["Driveway camera", "Front Door camera"]
         assert rows[1]["outcome"].startswith("Called them over") and called
         assert rows[0]["outcome"] == "Ignored: nobody in the picture"
         assert rows[1]["snap"] and c.get(f"/api/snaps/{rows[1]['snap']}").status_code == 200
@@ -176,6 +176,6 @@ def test_cyclists_riding_past_are_not_called_over(tmp_path, monkeypatch):
             called.append(verdict)
 
         c.app.state.vision._on_passerby = passerby
-        c.portal.call(c.app.state.vision.maybe_visitor_from, b"\xff\xd8\xff bike", [], "Garage Mailbox camera")
+        c.portal.call(c.app.state.vision.maybe_visitor_from, b"\xff\xd8\xff bike", [], "Sidewalk camera")
         assert not called
         assert c.get("/api/sightings").json()[0]["outcome"].startswith("Ignored: riding past on a bike")

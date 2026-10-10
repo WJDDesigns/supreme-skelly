@@ -48,7 +48,7 @@ def test_only_people_once_per_event_and_spaced(monkeypatch):
 def test_welcome_back_by_name():
     from skelly.callouts import greeting
 
-    assert "Willow" in greeting("Willow")
+    assert "Morticia" in greeting("Morticia")
 
 
 def test_protect_verdict_is_free_and_sensible():
