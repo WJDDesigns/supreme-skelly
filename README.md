@@ -43,6 +43,21 @@ The moves, lights and eye choices on the Controls page always match the connecte
 - Optional, for fog: a **Wi-Fi relay** (Shelly, Sonoff in LAN mode, Tasmota or ESPHome) wired
   across the fog button on your fog machine's remote.
 
+### Hardware we've used that works
+
+This is the setup the project is built and tested on every day. Other hardware should work too.
+
+| What | We use | Notes |
+|---|---|---|
+| Animatronic | Home Depot **6 ft Ultra Skelly v2** | Connects and reconnects on its own. Lily, Santa and the 12 ft Skelly are supported but not tested on real hardware yet. |
+| Mini PC | **Beelink Mini S12 Pro** (Intel N100) with Ubuntu Server 24.04 | Runs everything, including face recognition on one camera, without breaking a sweat. |
+| Bluetooth | **Realtek RTL8761B USB Bluetooth dongle** | Stronger signal than the mini PC's built-in radio. Pick it in Settings > Bluetooth radio. |
+| Getting the radio close to Skelly | **USB-over-Ethernet extender** (4 USB 2.0 ports, up to 50 m over one Cat5/6 cable, no drivers) | Puts the Bluetooth dongle and mic right next to Skelly while the mini PC stays indoors. If the dongle freezes, turn off USB power saving (see Settings for tinkerers). |
+| Microphone | A plain **USB microphone** on the extender | |
+| Speaker | **Skelly's own Bluetooth speaker** | Paired automatically. Extra Bluetooth speakers can play along. |
+| Cameras | **UniFi Protect** cameras on a UniFi NVR | No live video decoding needed: Protect's own person detection and snapshots drive Vision. |
+| Fog *(being tested)* | **AGPTEK LED-500** fog machine + **Shelly Plus Uni** relay on a 12 V adapter | The relay is wired across the fog button on the machine's remote. See the [fog guide](docs/fog.md). |
+
 ## Quick start (about 10 minutes)
 
 1. On the mini PC, open a terminal (or SSH in) and paste this one line:
@@ -183,7 +198,9 @@ These go in `docker-compose.yml` (or the environment when running natively).
 | `SKELLY_LOG_LEVEL` | `INFO` | |
 
 **Bluetooth through a USB-over-Ethernet extender** (to keep the radio close to Skelly)
-works; if the dongle freezes, turn off USB autosuspend for it.
+works. If the dongle freezes after a few minutes, USB power saving is the usual cause: add
+`usbcore.autosuspend=-1` to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then run
+`sudo update-grub` and reboot.
 
 ## Troubleshooting
 
