@@ -1,5 +1,5 @@
-// Live preview of the 6ft Ultra Skelly: chest and mouth glow, eye screens and movement,
-// redrawn from the "look" the service reports after every change.
+// Live preview of the connected animatronic (Skelly, Lethal Lily or Santa): its light glows,
+// eye screens and movement, redrawn from the "look" the service reports after every change.
 
 const IRIS = {
   "Blue Eyes": "#3aa0ff", "Hazel Eyes": "#a8873a", "Green Eyes": "#3fdc5a", "Orange Eyes": "#ff8a00",
@@ -97,6 +97,102 @@ export function skeletonSVG() {
 </svg>`;
 }
 
+const DEFS = `<defs>
+    <radialGradient id="chest-grad"><stop offset="0" style="stop-color:var(--chest);stop-opacity:1"/><stop offset=".6" style="stop-color:var(--chest);stop-opacity:.55"/><stop offset="1" style="stop-color:var(--chest);stop-opacity:0"/></radialGradient>
+    <radialGradient id="mouth-grad"><stop offset="0" style="stop-color:var(--mouth)"/><stop offset="1" style="stop-color:var(--mouth);stop-opacity:0"/></radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>
+    <clipPath id="eye-clip"><circle r="12.5"/></clipPath>
+  </defs>`;
+
+// Lethal Lily: a witch in a tattered robe and pointed hat, her lantern glowing in one hand.
+function lilySVG() {
+  const skin = "#9cc48a", robe = "#2d1f3d", robeDark = "#1c1328", hair = "#1b1b22";
+  return `<svg class="skelly-svg" viewBox="0 0 300 430" role="img" aria-label="Live preview of Lethal Lily">${DEFS}
+  <g class="torso" style="transform-origin:150px 400px">
+    <path d="M112 196 Q150 186 188 196 L 236 404 L 222 396 L 208 410 L 192 398 L 176 414 L 160 400 L 146 414 L 130 398 L 114 412 L 100 396 L 84 408 L 64 404 Z" fill="${robe}" stroke="${robeDark}" stroke-width="2"/>
+    <path d="M150 196 L 150 404" stroke="${robeDark}" stroke-width="3"/>
+    <path d="M118 200 Q150 232 182 200" fill="none" stroke="#5b3f78" stroke-width="5"/>
+    <g class="arm arm-l" style="transform-origin:118px 206px">
+      <path d="M118 202 Q 92 250 84 318 L 104 322 Q 112 262 132 214 Z" fill="${robe}" stroke="${robeDark}" stroke-width="2"/>
+      <ellipse cx="92" cy="330" rx="10" ry="12" fill="${skin}"/>
+      <path d="M86 338 l -4 12 M92 341 l -1 13 M98 339 l 2 12" stroke="${skin}" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g class="arm arm-r" style="transform-origin:182px 206px">
+      <path d="M182 202 Q 214 236 222 280 L 204 286 Q 196 248 168 214 Z" fill="${robe}" stroke="${robeDark}" stroke-width="2"/>
+      <ellipse cx="214" cy="290" rx="11" ry="10" fill="${skin}"/>
+      <path d="M214 290 L 226 300" stroke="#3a2f22" stroke-width="3"/>
+      <g class="fx chest-fx"><circle cx="230" cy="326" r="48" fill="url(#chest-grad)" filter="url(#glow)"/></g>
+      <path d="M220 298 h20 l4 8 h-28 Z" fill="#3a3026"/>
+      <rect x="218" y="306" width="24" height="36" rx="3" fill="#2a231c" opacity=".6"/>
+      <g class="fx chest-fx"><rect x="221" y="309" width="18" height="30" rx="3" style="fill:var(--chest)"/></g>
+      <path d="M218 306 v36 M230 306 v36 M242 306 v36" stroke="#3a3026" stroke-width="2.5"/>
+      <path d="M215 342 h30 l-3 7 h-24 Z" fill="#3a3026"/>
+    </g>
+    <g class="head" style="transform-origin:150px 190px">
+      <path d="M112 128 Q 104 196 98 232 Q 124 214 132 186 Z M188 128 Q 196 196 202 232 Q 176 214 168 186 Z" fill="${hair}"/>
+      <ellipse cx="150" cy="150" rx="33" ry="40" fill="${skin}" stroke="#6d8d5f" stroke-width="1.2"/>
+      <path d="M150 148 L 160 170 L 148 168 Z" fill="#87ad76"/>
+      <circle class="socket" cx="136" cy="146" r="8"/><circle class="socket" cx="164" cy="146" r="8"/>
+      <g class="eye-scr" transform="translate(136 146) scale(.6)"><g clip-path="url(#eye-clip)" class="eye-img"></g></g>
+      <g class="eye-scr" transform="translate(164 146) scale(.6)"><g clip-path="url(#eye-clip)" class="eye-img"></g></g>
+      <g class="fx mouth-fx"><ellipse cx="150" cy="178" rx="14" ry="6" fill="url(#mouth-grad)" filter="url(#soft)"/></g>
+      <path d="M137 176 Q150 186 163 176" fill="none" stroke="#3b2a2a" stroke-width="3" stroke-linecap="round"/>
+      <path d="M86 118 Q150 100 214 118 Q150 132 86 118 Z" fill="${robeDark}"/>
+      <path d="M118 114 L 142 30 Q 150 14 176 22 Q 158 30 166 44 L 182 114 Z" fill="${robeDark}"/>
+      <path d="M120 106 Q150 98 180 106 L 182 114 Q150 106 118 114 Z" fill="#ff8a00"/>
+    </g>
+  </g>
+</svg>`;
+}
+
+// Ultra Santa: red suit, white beard, belt and boots; his light glows behind his chest.
+function santaSVG() {
+  const red = "#c8202c", redDark = "#8e1520", fur = "#f4efe6", skin = "#f2c6a4";
+  return `<svg class="skelly-svg" viewBox="0 0 300 430" role="img" aria-label="Live preview of Santa">${DEFS}
+  <path d="M118 360 L 112 408 Q 96 412 94 422 L 140 422 L 142 360 Z M182 360 L 188 408 Q 204 412 206 422 L 160 422 L 158 360 Z" fill="#17120e"/>
+  <g class="torso" style="transform-origin:150px 400px">
+    <g class="fx chest-fx"><ellipse cx="150" cy="270" rx="86" ry="90" fill="url(#chest-grad)" filter="url(#glow)"/></g>
+    <path d="M150 196 C 92 200 76 290 90 344 Q 96 368 150 370 Q 204 368 210 344 C 224 290 208 200 150 196 Z" fill="${red}" stroke="${redDark}" stroke-width="2"/>
+    <path d="M90 344 Q 150 384 210 344 L 212 358 Q 150 398 88 358 Z" fill="${fur}"/>
+    <path d="M150 210 L 150 352" stroke="${fur}" stroke-width="12"/>
+    <rect x="86" y="296" width="128" height="16" rx="3" fill="#17120e"/>
+    <rect x="138" y="292" width="24" height="24" rx="3" fill="none" stroke="#ffcc33" stroke-width="4"/>
+    <g class="fx chest-fx tint"><ellipse cx="150" cy="270" rx="62" ry="70" style="fill:var(--chest)" filter="url(#glow)"/></g>
+    <g class="arm arm-l" style="transform-origin:110px 214px">
+      <path d="M112 208 Q 76 240 70 304 L 92 310 Q 98 258 128 226 Z" fill="${red}" stroke="${redDark}" stroke-width="2"/>
+      <path d="M68 300 L 94 308 L 92 320 L 66 312 Z" fill="${fur}"/>
+      <ellipse cx="78" cy="326" rx="12" ry="11" fill="#17120e"/>
+    </g>
+    <g class="arm arm-r" style="transform-origin:190px 214px">
+      <path d="M188 208 Q 224 240 230 304 L 208 310 Q 202 258 172 226 Z" fill="${red}" stroke="${redDark}" stroke-width="2"/>
+      <path d="M232 300 L 206 308 L 208 320 L 234 312 Z" fill="${fur}"/>
+      <ellipse cx="222" cy="326" rx="12" ry="11" fill="#17120e"/>
+    </g>
+    <g class="head" style="transform-origin:150px 196px">
+      <ellipse cx="150" cy="140" rx="32" ry="36" fill="${skin}"/>
+      <path d="M116 146 Q 112 210 150 232 Q 188 210 184 146 Q 172 168 150 168 Q 128 168 116 146 Z" fill="${fur}" stroke="#d9d2c4" stroke-width="1"/>
+      <g class="fx mouth-fx"><ellipse cx="150" cy="172" rx="14" ry="6" fill="url(#mouth-grad)" filter="url(#soft)"/></g>
+      <path d="M140 174 Q150 180 160 174" fill="none" stroke="#8a3b34" stroke-width="3" stroke-linecap="round"/>
+      <path d="M150 160 Q 134 156 122 166 Q 136 172 150 166 Q 164 172 178 166 Q 166 156 150 160 Z" fill="${fur}" stroke="#d9d2c4" stroke-width="1"/>
+      <ellipse cx="150" cy="152" rx="7" ry="6" fill="#e8a088"/>
+      <circle cx="138" cy="136" r="8" fill="#fff"/><circle cx="162" cy="136" r="8" fill="#fff"/>
+      <g class="eye-scr" transform="translate(138 136) scale(.6)"><g clip-path="url(#eye-clip)" class="eye-img"></g></g>
+      <g class="eye-scr" transform="translate(162 136) scale(.6)"><g clip-path="url(#eye-clip)" class="eye-img"></g></g>
+      <path d="M128 124 Q138 118 146 124 M154 124 Q162 118 172 124" stroke="${fur}" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M116 112 Q 140 48 196 66 Q 214 76 222 104 Q 206 94 192 92 L 186 112 Z" fill="${red}" stroke="${redDark}" stroke-width="2"/>
+      <circle cx="222" cy="108" r="11" fill="${fur}"/>
+      <rect x="110" y="104" width="82" height="18" rx="9" fill="${fur}"/>
+    </g>
+  </g>
+</svg>`;
+}
+
+/** The drawing for a profile's character; every skeleton model gets the skeleton. */
+export function figureSVG(character) {
+  return character === "lily" ? lilySVG() : character === "santa" ? santaSVG() : skeletonSVG();
+}
+
 // ---------- eye screens ----------
 const bg = (c = "#050505") => `<circle r="13" fill="${c}"/>`;
 
@@ -175,8 +271,9 @@ export function updateSkeleton(root, { look, moves, profile }) {
   if (!root) return;
   const modes = profile?.light_modes ?? [];
   const lightKeys = (profile?.lights ?? []).map((l) => l.key);
-  applyLight(root, "chest", lightFor(look, "chest"), modes);
-  applyLight(root, "mouth", lightFor(look, lightKeys.includes("head") ? "head" : "chest"), modes);
+  const main = lightKeys[0] ?? "chest";  // chest for Skelly, lantern for Lily, light for Santa
+  applyLight(root, "chest", lightFor(look, main), modes);
+  applyLight(root, "mouth", lightFor(look, lightKeys.includes("head") ? "head" : main), modes);
   root.querySelector(".mouth-fx").style.display = lightKeys.length ? "" : "none";
 
   const eyes = profile?.eyes ?? [];
