@@ -1679,7 +1679,8 @@ async function loadUsage() {
     const secs = talk.reduce((a, [, v]) => a + v.seconds, 0), chats = talk.reduce((a, [, v]) => a + v.calls, 0);
     const vis = (it.vision?.calls || 0) + (it.photo?.calls || 0);
     const tok = Object.values(it).reduce((a, v) => a + v.tokens_in + v.tokens_out, 0);
-    return `<tr><td>${d.day}</td><td>${chats} chats, ${fmtMins(secs)}</td><td>${vis}</td><td>${tok.toLocaleString()}</td><td>$${d.usd.toFixed(2)}</td></tr>`;
+    const day = new Date(`${d.day}T12:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return `<tr><td title="${d.day}">${day}</td><td>${chats} chats, ${fmtMins(secs)}</td><td>${vis}</td><td>${tok.toLocaleString()}</td><td>$${d.usd.toFixed(2)}</td></tr>`;
   });
   $("#usage-rows").innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">Nothing used yet.</td></tr>`;
   renderUsageStat(r);
@@ -1785,8 +1786,14 @@ function renderFogZone() {
     Object.assign(d.style, { left: `${b[0] * 100}%`, top: `${b[1] * 100}%`, width: `${b[2] * 100}%`, height: `${b[3] * 100}%` });
     return d;
   }));
-  $("#fog-zone-sub").textContent = z.length === 4 ? (fogCfg.clear_detail ? "Fog area set and calibrated" : "Fog area set, not calibrated yet") : "Fog area: none";
-  $("#fog-calibrate").disabled = z.length !== 4;
+  const calibrated = z.length === 4 && !!fogCfg.clear_detail;
+  const sub = $("#fog-zone-sub");
+  sub.textContent = calibrated ? "✓ Calibrated" : z.length === 4 ? "Fog area set, not calibrated yet" : "Fog area: none";
+  sub.className = calibrated ? "badge green" : "muted";
+  const cal = $("#fog-calibrate");
+  cal.disabled = z.length !== 4;
+  cal.textContent = calibrated ? "Recalibrate (no fog now)" : "Calibrate (no fog now)";
+  cal.className = `btn ${calibrated ? "outline" : "primary"} small`;
 }
 let fTimer;
 function saveFogCfg(patch) {
