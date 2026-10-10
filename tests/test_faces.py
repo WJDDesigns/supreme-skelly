@@ -69,14 +69,14 @@ def test_heard_names_bare_answers_and_pairs():
     assert asked_name("And who are you, little one?")
     assert not asked_name("Love the running shorts!")
     # Kids answer "what's your name?" with just the name
-    assert heard_names("Willow.", asked=True) == ["Willow"]
-    assert heard_names("Willow and Gabe!", asked=True) == ["Willow", "Gabe"]
+    assert heard_names("Morticia.", asked=True) == ["Morticia"]
+    assert heard_names("Morticia and Gomez!", asked=True) == ["Morticia", "Gomez"]
     assert heard_names("Yeah.", asked=True) == []
-    assert heard_names("Willow.") == []  # without being asked, a lone word isn't a name
+    assert heard_names("Morticia.") == []  # without being asked, a lone word isn't a name
     assert heard_names("Do you like golf? How tall are you anyway?", asked=True) == []
     # Two introductions in one breath
-    assert heard_names("I'm Willow and this is Gabe") == ["Willow", "Gabe"]
-    assert heard_names("My name is Gabe") == ["Gabe"]
+    assert heard_names("I'm Morticia and this is Gomez") == ["Morticia", "Gomez"]
+    assert heard_names("My name is Gomez") == ["Gomez"]
 
 
 def test_notice_drops_colours_in_the_dark():
