@@ -55,6 +55,7 @@ class FogConfig:
     max_per_hour: int = 20  # automatic puffs per hour, so a busy night can't empty the tank
     on_visitor: bool = True  # puff when someone walks up or Skelly calls them over
     top_up: bool = False  # puff when the camera says the fog has thinned out
+    top_up_with_skelly: bool = False  # top up only while Skelly is on (otherwise only quiet hours pause it)
     thin_below: int = 30  # "thin" means the fog meter reads below this (0..100)
     camera: str = ""  # camera the fog meter watches: "" = the Vision page's camera, else a Protect camera id
     zone: list = field(default_factory=list)  # [x, y, w, h] fractions of the picture to watch
@@ -194,10 +195,11 @@ def fog_level(now_detail: float | None, clear_detail: float) -> int | None:
 
 
 class Fog:
-    def __init__(self, svc, config_getter, allowed=lambda: True) -> None:
+    def __init__(self, svc, config_getter, allowed=lambda: True, quiet_hours=lambda: False) -> None:
         self.svc = svc
         self._config = config_getter  # -> dict
-        self._allowed = allowed  # automatic fog only when Skelly is on and it's not quiet hours
+        self._allowed = allowed  # Skelly is on and it's not quiet hours: visitor fog may run
+        self._quiet_hours = quiet_hours  # topping up runs whether Skelly is on or not, but not in quiet hours
         self.state = FogState()
         self._lock = asyncio.Lock()
         self._auto: deque = deque(maxlen=200)  # times of automatic puffs
@@ -222,18 +224,25 @@ class Fog:
         """What stops automatic fog from working at all right now, in words for the Fog page."""
         if not cfg.enabled or not (cfg.on_visitor or cfg.top_up):
             return ""
-        if not self._allowed():
-            return "Paused: Skelly is switched off or it's quiet hours."
+        visitors_paused = cfg.on_visitor and not self._allowed()
+        top_up_paused = cfg.top_up and self._top_up_paused(cfg)
+        if top_up_paused or (visitors_paused and not cfg.top_up):
+            return "Paused: Skelly is switched off or it's quiet hours." if cfg.top_up_with_skelly or not cfg.top_up \
+                else "Paused for quiet hours."
         if not cfg.top_up:
             return ""
+        note = "Visitor fog waits for Skelly to switch on; topping up keeps going. " if visitors_paused else ""
         if len(cfg.zone) != 4:
-            return "Topping up needs a fog area: draw it on the picture."
+            return note + "Topping up needs a fog area: draw it on the picture."
         if cfg.clear_detail <= 0:
-            return "Topping up needs calibrating: tap Calibrate while there's no fog."
+            return note + "Topping up needs calibrating: tap Calibrate while there's no fog."
         if not self._last_thumb or time.monotonic() - self._last_thumb > 30:
-            return ("Topping up needs the fog camera's picture: start the camera on the Vision page."
-                    if not cfg.camera else "Topping up is waiting for a picture from the fog camera.")
-        return ""
+            return note + ("Topping up needs the fog camera's picture: start the camera on the Vision page."
+                           if not cfg.camera else "Topping up is waiting for a picture from the fog camera.")
+        return note.strip()
+
+    def _top_up_paused(self, cfg: FogConfig) -> bool:
+        return not self._allowed() if cfg.top_up_with_skelly else self._quiet_hours()
 
     def _publish(self) -> None:
         self.svc.bus.publish("fog", self.snapshot())
@@ -312,12 +321,15 @@ class Fog:
 
     # -- automatic fog ------------------------------------------------------------
 
-    def _can_auto(self, cfg: FogConfig) -> str | None:
+    def _can_auto(self, cfg: FogConfig, top_up: bool = False) -> str | None:
         """Why an automatic puff can't happen right now, or None if it can."""
         now = time.time()
         if not cfg.enabled:
             return "the fog machine is off"
-        if not self._allowed():
+        if top_up and not cfg.top_up_with_skelly:
+            if self._quiet_hours():
+                return "it's quiet hours"
+        elif not self._allowed():
             return "Skelly is off or it's quiet hours"
         if self._lock.locked():
             return "already fogging"
@@ -327,9 +339,9 @@ class Fog:
             return "hourly limit reached"
         return None
 
-    async def auto(self, why: str) -> bool:
+    async def auto(self, why: str, top_up: bool = False) -> bool:
         cfg = self.cfg
-        if (reason := self._can_auto(cfg)) is not None:
+        if (reason := self._can_auto(cfg, top_up)) is not None:
             note = f"{why}: {reason}"
             if note != self.state.skipped:
                 log.info("no automatic fog (%s)", note)
@@ -376,7 +388,7 @@ class Fog:
         self._thin_since = self._thin_since or now
         if now - self._thin_since >= 15:  # thin for a while, not just a gust
             self._thin_since = None
-            asyncio.get_running_loop().create_task(self.auto(f"Fog thinned out (meter {level})"))
+            asyncio.get_running_loop().create_task(self.auto(f"Fog thinned out (meter {level})", top_up=True))
 
     def calibrate(self) -> float:
         """The fog zone's detail right now, to save as the "no fog" reference."""
