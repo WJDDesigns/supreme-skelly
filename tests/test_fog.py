@@ -164,3 +164,26 @@ def test_switching_fog_camera_starts_the_area_over(tmp_path):
         cfg = c.put("/api/fog/config", json={"camera": "cam-sidewalk"}).json()["config"]
         assert cfg["camera"] == "cam-sidewalk" and cfg["zone"] == [] and cfg["clear_detail"] == 0
         assert c.get("/api/fog/snapshot.jpg").status_code == 404  # no Protect set up here
+
+
+def test_fog_page_says_why_automatic_fog_is_waiting():
+    f = make_fog(top_up=True)
+    assert "fog area" in f.snapshot()["waiting"]
+    f = make_fog(top_up=True, zone=[0, 0, 1, 1])
+    assert "calibrat" in f.snapshot()["waiting"]
+    f = make_fog(top_up=True, zone=[0, 0, 1, 1], clear_detail=10.0)
+    assert "Vision page" in f.snapshot()["waiting"]
+    f.thumb(bytes([120] * 80 * 45), 80, 45)
+    assert f.snapshot()["waiting"] == ""
+    assert "quiet hours" in make_fog(allowed=False, top_up=True).snapshot()["waiting"]
+    assert make_fog(enabled=False, top_up=True).snapshot()["waiting"] == ""
+
+
+@pytest.mark.asyncio
+async def test_skipped_automatic_fog_is_reported(requests):
+    f = make_fog(allowed=False)
+    assert await f.auto("Someone walked up") is False
+    snap = f.snapshot()
+    assert snap["skipped"] == "Someone walked up: Skelly is off or it's quiet hours"
+    assert snap["skipped_at"]
+    assert not requests

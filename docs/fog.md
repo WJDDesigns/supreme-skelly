@@ -85,3 +85,4 @@ buttons always work.
 | The output switches but no fog | Check the wires on the keyfob, the keyfob's battery, and that the machine has warmed up. |
 | Fog only puffs for a moment | Switch **How the button works** to the other option. |
 | The fog meter shows "–" | Turn the camera on, draw a fog area and calibrate with no fog. |
+| No automatic fog | Read the orange note in the **Automatic fog** card. It says what automatic fog is waiting for (Skelly switched off, quiet hours, no fog area, not calibrated, no camera picture) and why the last automatic burst didn't happen (for example "resting between bursts"). |

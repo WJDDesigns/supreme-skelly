@@ -1730,6 +1730,11 @@ function renderFog(st) {
   $("#fog-puff").disabled = !on || st.fogging;
   $("#fog-puff").lastElementChild.textContent = st.fogging ? "Fogging…" : "Fog!";
   $("#fog-auto-sub").textContent = `${st.puffs_last_hour ?? 0} automatic ${st.puffs_last_hour === 1 ? "burst" : "bursts"} in the last hour`;
+  const why = $("#fog-auto-why");
+  const skipped = st.skipped_at && Date.now() / 1000 - st.skipped_at < 3600
+    ? `Didn't fog at ${new Date(st.skipped_at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. ${st.skipped}.` : "";
+  why.textContent = [st.waiting, skipped].filter(Boolean).join(" ");
+  why.hidden = !on || !why.textContent;
   setFogLevel(st.level);
 }
 function setFogLevel(level) {
@@ -1884,3 +1889,6 @@ window.addEventListener("mouseup", fogEnd);
 window.addEventListener("touchend", fogEnd);
 api("/fog").then((r) => { fogCfg = r.config; fogKinds = r.kinds; fogState = r.state; renderFogCfg(); loadFogCams(); }).catch(() => {});
 fogPoll();
+setInterval(() => {  // keep "why no automatic fog" fresh while the Fog page is open
+  if (!$("#tab-fog").hidden) api("/fog").then((r) => renderFog(r.state)).catch(() => {});
+}, 5000);
