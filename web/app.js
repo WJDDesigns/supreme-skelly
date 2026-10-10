@@ -1785,8 +1785,14 @@ function renderFogZone() {
     Object.assign(d.style, { left: `${b[0] * 100}%`, top: `${b[1] * 100}%`, width: `${b[2] * 100}%`, height: `${b[3] * 100}%` });
     return d;
   }));
-  $("#fog-zone-sub").textContent = z.length === 4 ? (fogCfg.clear_detail ? "Fog area set and calibrated" : "Fog area set, not calibrated yet") : "Fog area: none";
-  $("#fog-calibrate").disabled = z.length !== 4;
+  const calibrated = z.length === 4 && !!fogCfg.clear_detail;
+  const sub = $("#fog-zone-sub");
+  sub.textContent = calibrated ? "✓ Calibrated" : z.length === 4 ? "Fog area set, not calibrated yet" : "Fog area: none";
+  sub.className = calibrated ? "badge green" : "muted";
+  const cal = $("#fog-calibrate");
+  cal.disabled = z.length !== 4;
+  cal.textContent = calibrated ? "Recalibrate (no fog now)" : "Calibrate (no fog now)";
+  cal.className = `btn ${calibrated ? "outline" : "primary"} small`;
 }
 let fTimer;
 function saveFogCfg(patch) {

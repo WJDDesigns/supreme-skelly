@@ -77,7 +77,11 @@ all evening. Turn on **Only top up while Skelly is on** if you'd rather it follo
 Fog for visitors is part of Skelly's show, so it only fires while Skelly is on.
 
 Every automatic burst respects the **rest time** between bursts, the **hourly limit** and
-**quiet hours**. The **Fog!** and **Stop** buttons always work.
+**quiet hours**. To try automatic fog during quiet hours (say, testing in the afternoon), turn
+on **Fog during quiet hours**. The **Fog!** and **Stop** buttons always work.
+
+Once the fog area is calibrated, a green **✓ Calibrated** shows under the picture, and the
+button changes to **Recalibrate**. Recalibrate if the light changes a lot or the camera moves.
 
 ## Troubleshooting
 

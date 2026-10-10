@@ -411,13 +411,16 @@
             <label class="switch-row"><span><strong>Only top up while Skelly is on</strong>
               <span class="muted">Off: the fog stays topped up even when Skelly is switched off.</span></span>
               <input type="checkbox" data-fcfg="top_up_with_skelly" role="switch"></label>
+            <label class="switch-row"><span><strong>Fog during quiet hours</strong>
+              <span class="muted">Automatic fog keeps going in quiet hours too. Handy for testing.</span></span>
+              <input type="checkbox" data-fcfg="ignore_quiet_hours" role="switch"></label>
             <label class="slider">Top up when the meter is below <output id="fog-thin-out">30</output>
               <input type="range" min="5" max="90" step="5" data-fcfg="thin_below"></label>
             <label class="slider">Rest between automatic bursts <output id="fog-cool-out">60 s</output>
               <input type="range" min="10" max="600" step="10" data-fcfg="cooldown_s"></label>
             <label class="slider">Most automatic bursts per hour <output id="fog-max-out">20</output>
               <input type="range" min="1" max="60" step="1" data-fcfg="max_per_hour"></label>
-            <p class="muted small-note">All automatic fog pauses in quiet hours. Fog for visitors also waits for Skelly to be switched on.</p>
+            <p class="muted small-note">Automatic fog pauses in quiet hours unless "Fog during quiet hours" is on. Fog for visitors also waits for Skelly to be switched on.</p>
           </div>
         </section>
 
