@@ -109,7 +109,9 @@ watches the fog (the Vision camera or any UniFi Protect camera), draw a fog area
 the picture, tap **Calibrate** while there's no fog, and the fog meter shows how
 thick it is. Every automatic burst respects a rest time, an hourly limit and quiet hours.
 
-<p align="center"><img src="docs/images/fog.png" alt="The Fog page with the fog button, burst length and relay settings" width="80%"></p>
+![The Fog page](docs/images/fog-page.png)
+
+The **[fog guide](docs/fog.md)** has a wiring diagram for a Shelly Plus Uni and step-by-step setup.
 
 ## Make it yours
 

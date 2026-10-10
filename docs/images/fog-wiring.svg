@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" font-family="Inter, Helvetica, Arial, sans-serif">
+  <rect width="900" height="560" rx="18" fill="#141414"/>
+  <text x="40" y="52" fill="#ff8c1a" font-size="24" font-weight="700">Wiring a Shelly Plus Uni to a fog machine remote</text>
+  <text x="40" y="80" fill="#a3a3a3" font-size="15">Low voltage only. The fog machine stays plugged in as normal; the relay just presses the remote's button.</text>
+
+  <!-- 12V adapter -->
+  <rect x="40" y="130" width="200" height="150" rx="14" fill="#1f1f1f" stroke="#ff8c1a" stroke-width="2"/>
+  <text x="140" y="165" fill="#f5f5f5" font-size="18" font-weight="700" text-anchor="middle">12 V DC adapter</text>
+  <text x="140" y="188" fill="#a3a3a3" font-size="13" text-anchor="middle">screw-terminal jack</text>
+  <circle cx="90" cy="232" r="14" fill="#2a2a2a" stroke="#e5484d" stroke-width="2"/>
+  <text x="90" y="238" fill="#e5484d" font-size="18" font-weight="700" text-anchor="middle">+</text>
+  <circle cx="190" cy="232" r="14" fill="#2a2a2a" stroke="#d4d4d4" stroke-width="2"/>
+  <text x="190" y="238" fill="#d4d4d4" font-size="18" font-weight="700" text-anchor="middle">−</text>
+
+  <!-- Shelly -->
+  <rect x="330" y="120" width="240" height="300" rx="14" fill="#1f1f1f" stroke="#4a9eff" stroke-width="2"/>
+  <text x="450" y="155" fill="#f5f5f5" font-size="18" font-weight="700" text-anchor="middle">Shelly Plus Uni</text>
+  <text x="450" y="180" fill="#a3a3a3" font-size="13" text-anchor="middle">colour ribbon</text>
+  <rect x="350" y="196" width="200" height="30" rx="6" fill="#2a2a2a"/>
+  <text x="362" y="216" fill="#e5484d" font-size="14" font-weight="700">RED</text><text x="420" y="216" fill="#d4d4d4" font-size="14">VAC1 (power +)</text>
+  <rect x="350" y="232" width="200" height="30" rx="6" fill="#2a2a2a"/>
+  <text x="362" y="252" fill="#d4d4d4" font-size="14" font-weight="700">BLACK</text><text x="420" y="252" fill="#d4d4d4" font-size="14">VAC2 (power −)</text>
+  <text x="450" y="295" fill="#a3a3a3" font-size="13" text-anchor="middle">separate black pairs</text>
+  <rect x="350" y="310" width="200" height="30" rx="6" fill="#2a2a2a"/>
+  <text x="362" y="330" fill="#ff8c1a" font-size="14" font-weight="700">OUT 1</text><text x="420" y="330" fill="#d4d4d4" font-size="14">pair → remote</text>
+  <rect x="350" y="346" width="200" height="30" rx="6" fill="#2a2a2a"/>
+  <text x="362" y="366" fill="#737373" font-size="14" font-weight="700">OUT 2</text><text x="420" y="366" fill="#737373" font-size="14">spare, tape off</text>
+
+  <!-- power wires -->
+  <path d="M90 246 V300 H300 V211 H350" fill="none" stroke="#e5484d" stroke-width="3"/>
+  <path d="M190 246 V280 H315 V247 H350" fill="none" stroke="#d4d4d4" stroke-width="3"/>
+
+  <!-- Wagos -->
+  <rect x="610" y="300" width="70" height="50" rx="8" fill="#2a2a2a" stroke="#737373"/>
+  <text x="645" y="331" fill="#d4d4d4" font-size="14" font-weight="700" text-anchor="middle">Wagos</text>
+  <path d="M550 320 H610" stroke="#ff8c1a" stroke-width="3"/>
+  <path d="M550 330 H610" stroke="#ff8c1a" stroke-width="3"/>
+
+  <!-- Remote -->
+  <rect x="720" y="230" width="150" height="190" rx="14" fill="#1f1f1f" stroke="#ff8c1a" stroke-width="2"/>
+  <text x="795" y="262" fill="#f5f5f5" font-size="18" font-weight="700" text-anchor="middle">Fog remote</text>
+  <text x="795" y="284" fill="#a3a3a3" font-size="13" text-anchor="middle">battery keyfob</text>
+  <rect x="765" y="310" width="60" height="60" rx="6" fill="#2a2a2a" stroke="#d4d4d4"/>
+  <circle cx="795" cy="340" r="16" fill="#3a3a3a"/>
+  <circle cx="770" cy="315" r="4" fill="#ff8c1a"/>
+  <circle cx="820" cy="365" r="4" fill="#ff8c1a"/>
+  <text x="795" y="400" fill="#a3a3a3" font-size="12" text-anchor="middle">fog button: two</text>
+  <text x="795" y="414" fill="#a3a3a3" font-size="12" text-anchor="middle">opposite corner pads</text>
+  <path d="M680 320 H745 V315 H766" fill="none" stroke="#ff8c1a" stroke-width="3"/>
+  <path d="M680 330 H700 V365 H816" fill="none" stroke="#ff8c1a" stroke-width="3"/>
+
+  <!-- notes -->
+  <text x="40" y="470" fill="#f5f5f5" font-size="15" font-weight="700">Good to know</text>
+  <text x="40" y="496" fill="#a3a3a3" font-size="14">• Use both wires of ONE output pair; either wire can go to either pad. Power needs red to + and black to −.</text>
+  <text x="40" y="518" fill="#a3a3a3" font-size="14">• Don't use the gray (+5 V) or green (GND) wires with a 12 V adapter. Tape off every unused wire on its own.</text>
+  <text x="40" y="540" fill="#a3a3a3" font-size="14">• Outputs are solid-state (no click), rated 30 V / 300 mA. Never wire them to mains or the machine's wired remote.</text>
+</svg>
