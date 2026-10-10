@@ -175,7 +175,8 @@ def test_fog_page_says_why_automatic_fog_is_waiting():
     assert "Vision page" in f.snapshot()["waiting"]
     f.thumb(bytes([120] * 80 * 45), 80, 45)
     assert f.snapshot()["waiting"] == ""
-    assert "quiet hours" in make_fog(allowed=False, top_up=True).snapshot()["waiting"]
+    assert "Visitor fog waits" in make_fog(allowed=False, top_up=True).snapshot()["waiting"]
+    assert "quiet hours" in make_fog(allowed=False).snapshot()["waiting"]
     assert make_fog(enabled=False, top_up=True).snapshot()["waiting"] == ""
 
 
@@ -187,3 +188,32 @@ async def test_skipped_automatic_fog_is_reported(requests):
     assert snap["skipped"] == "Someone walked up: Skelly is off or it's quiet hours"
     assert snap["skipped_at"]
     assert not requests
+
+
+@pytest.mark.asyncio
+async def test_topping_up_runs_while_skelly_is_off(requests):
+    conf = {"enabled": True, "host": "10.0.0.9", "burst_s": 0.5, "top_up": True}
+    f = fog.Fog(Svc(), lambda: conf, allowed=lambda: False, quiet_hours=lambda: False)
+    assert await f.auto("Someone walked up") is False  # visitor fog waits for Skelly
+    assert await f.auto("Fog thinned out", top_up=True) is True
+    assert requests
+
+    conf["top_up_with_skelly"] = True
+    f = fog.Fog(Svc(), lambda: conf, allowed=lambda: False, quiet_hours=lambda: False)
+    assert await f.auto("Fog thinned out", top_up=True) is False
+
+
+@pytest.mark.asyncio
+async def test_topping_up_pauses_in_quiet_hours(requests):
+    conf = {"enabled": True, "host": "10.0.0.9", "burst_s": 0.5, "top_up": True}
+    f = fog.Fog(Svc(), lambda: conf, allowed=lambda: False, quiet_hours=lambda: True)
+    assert await f.auto("Fog thinned out", top_up=True) is False
+    assert f.snapshot()["skipped"] == "Fog thinned out: it's quiet hours"
+    assert f.snapshot()["waiting"] == "Paused for quiet hours."
+
+
+def test_waiting_note_when_only_skelly_is_off():
+    conf = {"enabled": True, "host": "10.0.0.9", "top_up": True, "zone": [0, 0, 1, 1], "clear_detail": 10.0}
+    f = fog.Fog(Svc(), lambda: conf, allowed=lambda: False)
+    f.thumb(bytes([120] * 80 * 45), 80, 45)
+    assert f.snapshot()["waiting"] == "Visitor fog waits for Skelly to switch on; topping up keeps going."

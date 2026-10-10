@@ -139,7 +139,8 @@ Then pick the relay type and its IP address, tap **Check connection** and **Fog!
 fog can fire when a visitor walks up, and can keep the fog topped up: pick which camera
 watches the fog (the Vision camera or any UniFi Protect camera), draw a fog area on
 the picture, tap **Calibrate** while there's no fog, and the fog meter shows how
-thick it is. Every automatic burst respects a rest time, an hourly limit and quiet hours.
+thick it is. Topping up keeps going even while Skelly is switched off. Every automatic burst
+respects a rest time, an hourly limit and quiet hours.
 
 ![The Fog page](docs/images/fog-page.png)
 
