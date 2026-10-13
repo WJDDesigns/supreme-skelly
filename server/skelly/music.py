@@ -196,6 +196,44 @@ def _level(mix: np.ndarray) -> float:
     return min(0.12 / rms, 0.99 / peak, 4.0)
 
 
+VOICE_TARGET = 0.25  # RMS of the singing on Skelly's speaker (loud, like his conversation voice)
+BAND_TARGET = 0.22  # RMS of the band on the other speakers
+MAX_GAIN = 10.0
+
+
+def _active_rms(x: np.ndarray, rate: int) -> float:
+    """Loudness of the parts that aren't silent (the gaps between sung phrases would drag it down)."""
+    block = rate // 20
+    n = len(x) // block * block
+    if not n:
+        return 0.0
+    env = np.sqrt((x[:n].reshape(-1, block) ** 2).mean(axis=1))
+    loud = env[env > 0.15 * np.percentile(env, 95)]
+    return float(np.sqrt((loud ** 2).mean())) if len(loud) else 0.0
+
+
+async def _gains(folder: Path) -> dict:
+    """How much to turn the voice and the band up when playing, so every song is good and loud."""
+    out = {}
+    for name, target in (("voice", VOICE_TARGET), ("band", BAND_TARGET)):
+        raw = await _run("ffmpeg", "-v", "error", "-i", str(folder / f"{name}.ogg"), "-f", "f32le", "-ac", "1",
+                         "-ar", "8000", "-")
+        rms = _active_rms(np.frombuffer(raw[: len(raw) // 4 * 4], np.float32), 8000)
+        out[name] = round(min(MAX_GAIN, target / rms), 2) if rms > 1e-4 else 1.0
+    return out
+
+
+def _limit(x: np.ndarray) -> np.ndarray:
+    """Soft limiter: untouched below 0.8, rounded off above it, never past full scale."""
+    a = np.abs(x)
+    over = a > 0.8
+    if not over.any():
+        return x
+    y = x.copy()
+    y[over] = np.sign(x[over]) * (0.8 + 0.2 * np.tanh((a[over] - 0.8) / 0.2))
+    return y
+
+
 async def _run(*args: str, stdin: bytes | None = None) -> bytes:
     proc = await asyncio.create_subprocess_exec(*args, stdin=asyncio.subprocess.PIPE if stdin is not None else None,
                                                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -388,7 +426,7 @@ class _Out:
         if not self.enabled:
             return
         args = ["pacat", "--raw", "--format=s16le", f"--rate={RATE}", f"--channels={self.channels}",
-                "--latency-msec=100", "--client-name=Supreme Skelly music"]
+                "--latency-msec=100", "--volume=65536", "--client-name=Supreme Skelly music"]
         if self.sink:
             args.append(f"--device={self.sink}")
         self.proc = await asyncio.create_subprocess_exec(*args, stdin=asyncio.subprocess.PIPE,
@@ -397,7 +435,7 @@ class _Out:
     async def write(self, samples: np.ndarray) -> None:
         if not self.proc or not self.proc.stdin:
             return
-        pcm = (np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes()
+        pcm = (np.clip(_limit(samples), -1, 1) * 32767).astype("<i2").tobytes()
         self.proc.stdin.write(pcm)
         try:
             await self.proc.stdin.drain()
@@ -531,6 +569,13 @@ class Player:
         cfg = self.cfg()
         folder = self.lib.folder(song["id"])
         analysis = json.loads((folder / "analysis.json").read_text())
+        gains = song.get("gains")
+        if not gains:  # worked out once per song, then remembered
+            gains = await _gains(folder)
+            try:
+                self.lib.update(song["id"], gains=gains)
+            except KeyError:
+                pass
         profile = self.svc.profile.to_dict()
         events = beats.choreograph(analysis, profile, dance=cfg["dance"], lights=cfg["lights"],
                                    palette=cfg["palette"] or None, seed=song["id"])
@@ -547,9 +592,9 @@ class Player:
         try:
             await voice_out.open()
             await band_out.open()
-            gain_v = cfg["voice_level"] / 100
-            gain_b_skelly = cfg["skelly_band"] / 100
-            gain_spk = cfg["speakers_level"] / 100
+            gain_v = cfg["voice_level"] / 100 * gains["voice"]
+            gain_b_skelly = cfg["skelly_band"] / 100 * gains["band"]
+            gain_spk = cfg["speakers_level"] / 100 * gains["band"]
             n = int(RATE * CHUNK_S)
             # Line the other speakers up with Skelly by starting one stream a little late.
             offset = cfg["speakers_offset_ms"] / 1000
@@ -582,7 +627,7 @@ class Player:
                 b = np.pad(b, ((0, m - len(b)), (0, 0)))
                 await voice_out.write(v * gain_v + b.mean(axis=1) * gain_b_skelly)
                 if band_out.enabled:
-                    spk = b + (v[:, None] if cfg["speakers_voice"] else 0)
+                    spk = b + (v[:, None] * (gains["voice"] / gains["band"]) if cfg["speakers_voice"] else 0)
                     await band_out.write((spk * gain_spk).reshape(-1))
                 written += m / RATE
                 now = time.monotonic()
