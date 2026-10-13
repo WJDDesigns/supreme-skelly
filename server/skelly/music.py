@@ -130,6 +130,13 @@ class Library:
         self.save()
         shutil.rmtree(self.folder(song_id), ignore_errors=True)
 
+    def remove_unready(self) -> int:
+        """Drop every song that isn't ready (still queued, being prepared, or failed)."""
+        gone = [s["id"] for s in self.data["songs"] if s["status"] != "ready"]
+        for sid in gone:
+            self.remove(sid)
+        return len(gone)
+
     def playlist(self, playlist_id: str) -> dict:
         for p in self.data["playlists"]:
             if p["id"] == playlist_id:
