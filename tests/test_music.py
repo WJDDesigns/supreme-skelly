@@ -81,6 +81,23 @@ def test_link_kinds():
     assert sources.Track("Monster Mash", "Bobby Pickett").query.startswith("ytsearch1:Bobby Pickett - Monster Mash")
 
 
+def test_watch_link_with_a_mix_is_one_song():
+    assert sources.single_video("https://www.youtube.com/watch?v=NdFEl7bg8MM&list=RDNdFEl7bg8MM")
+    assert sources.single_video("https://youtu.be/dQw4w9WgXcQ?list=PL123")
+    assert not sources.single_video("https://www.youtube.com/playlist?list=PL123")
+    assert not sources.single_video("https://music.youtube.com/playlist?list=OLAK5uy_x")
+
+
+def test_clear_unready(tmp_path):
+    lib = music.Library(tmp_path / "music")
+    a = lib.add(sources.Track("Ready"))
+    lib.update(a["id"], status="ready")
+    lib.add(sources.Track("Queued"))
+    lib.update(lib.add(sources.Track("Broken"))["id"], status="failed")
+    assert lib.remove_unready() == 2
+    assert [s["title"] for s in lib.data["songs"]] == ["Ready"]
+
+
 def test_spotify_embed_playlist():
     data = {"props": {"pageProps": {"state": {"data": {"entity": {"type": "playlist", "trackList": [
         {"title": "Thriller", "subtitle": "Michael Jackson"},

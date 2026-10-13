@@ -87,6 +87,7 @@ export function initMusic({ $, el, api, run, toast }) {
     const songs = lib.songs;
     const nReady = songs.filter((s) => s.status === "ready").length;
     $("#mu-count").textContent = songs.length ? `${nReady} ready${songs.length > nReady ? `, ${songs.length - nReady} getting ready` : ""}` : "No songs yet";
+    $("#mu-clear").hidden = nReady === songs.length;
     const to = $("#mu-to").value;
     $("#mu-to").replaceChildren(el("option", { value: "", textContent: "Library only" }),
       ...lib.playlists.map((p) => el("option", { value: p.id, textContent: p.name })));
@@ -203,6 +204,12 @@ export function initMusic({ $, el, api, run, toast }) {
     return box;
   }
 
+  $("#mu-clear").addEventListener("click", (e) => {
+    const n = m.library.songs.filter((s) => s.status !== "ready").length;
+    if (confirm(`Remove the ${n} song${n === 1 ? "" : "s"} that aren't ready yet? Ready songs stay.`)) {
+      run(e.currentTarget, () => api("/music/songs", undefined, "DELETE"), `Removed ${n} song${n === 1 ? "" : "s"}`);
+    }
+  });
   $("#mu-new").addEventListener("click", (e) => {
     const name = prompt("Name for the new playlist", "Halloween night");
     if (name === null) return;

@@ -228,11 +228,20 @@ def _ydl_opts(**more) -> dict:
             "js_runtimes": {"deno": {}, "node": {}}, **more}
 
 
+def single_video(url: str) -> bool:
+    return bool(re.search(r"[?&]v=[\w-]+|youtu\.be/[\w-]+|/shorts/[\w-]+", url))
+
+
 def _ytdlp_list(url: str) -> list[Track]:
-    """A YouTube link: one video, or every video in a playlist (names only, nothing downloaded)."""
+    """A YouTube link: one video, or every video in a playlist (names only, nothing downloaded).
+
+    A link to one video counts as just that video, even when it carries a list (YouTube adds its
+    endless auto "Mix" to links shared from the player); only a playlist page link adds them all.
+    """
     import yt_dlp
 
-    with yt_dlp.YoutubeDL(_ydl_opts(extract_flat="in_playlist", playlistend=MAX_TRACKS)) as ydl:
+    one = single_video(url)
+    with yt_dlp.YoutubeDL(_ydl_opts(extract_flat="in_playlist", playlistend=MAX_TRACKS, noplaylist=one)) as ydl:
         info = ydl.extract_info(url, download=False)
     entries = info.get("entries")
     if entries is None:
