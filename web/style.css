@@ -828,3 +828,30 @@ body.has-wall .haunt { display: none; }
   .nav-more, .more-sheet { display: none !important; }
 }
 .transcript li.note .snap { margin: 6px auto 0; }
+
+/* ---------- music ---------- */
+.music-grid { display: grid; gap: 18px; }
+@media (min-width: 1000px) { .music-grid { grid-template-columns: 1fr 1.3fr; gap: 22px; align-items: start; } }
+.mu-progress { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; color: var(--muted);
+  font-size: .85rem; font-variant-numeric: tabular-nums; }
+.mu-progress .bar, .song-bar { height: 8px; border-radius: 99px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+.mu-progress .bar i, .song-bar i { display: block; height: 100%; width: 0; border-radius: inherit;
+  background: linear-gradient(90deg, #ff7a1a, #ffb547); transition: width .4s linear; }
+.song-bar { flex-basis: 100%; height: 4px; margin-top: 2px; }
+.mu-controls { margin-top: 16px; justify-content: center; gap: 12px; }
+#mu-songs li, #mu-playlists li { flex-wrap: wrap; }
+#mu-songs .end, #mu-playlists .end { gap: 8px; margin-left: auto; }
+.mini-select { font: inherit; font-size: .85rem; color: var(--text); background: var(--panel-2, #18181b);
+  border: 1px solid rgba(255, 255, 255, .12); border-radius: 10px; padding: 6px 8px; max-width: 130px; }
+#mu-to { font: inherit; color: var(--text); background: var(--panel-2, #18181b); border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 12px; padding: 10px 12px; }
+.small-drop { margin-top: 14px; padding: 16px; flex-direction: row; }
+.small-drop svg { width: 22px; height: 22px; flex: none; }
+.pl-editor { flex-basis: 100%; display: grid; gap: 10px; padding: 12px 0 4px; }
+.pl-editor .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.pl-editor input { flex: 1; min-width: 160px; font: inherit; color: var(--text); background: var(--panel-2, #18181b);
+  border: 1px solid rgba(255, 255, 255, .12); border-radius: 10px; padding: 8px 10px; }
+.pl-songs { list-style: decimal inside; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pl-songs li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--line); }
+.pl-songs li .name { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-songs li .end { display: flex; gap: 6px; margin-left: auto; }
