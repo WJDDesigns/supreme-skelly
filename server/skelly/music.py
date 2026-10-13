@@ -592,9 +592,6 @@ class Player:
         try:
             await voice_out.open()
             await band_out.open()
-            gain_v = cfg["voice_level"] / 100 * gains["voice"]
-            gain_b_skelly = cfg["skelly_band"] / 100 * gains["band"]
-            gain_spk = cfg["speakers_level"] / 100 * gains["band"]
             n = int(RATE * CHUNK_S)
             # Line the other speakers up with Skelly by starting one stream a little late.
             offset = cfg["speakers_offset_ms"] / 1000
@@ -609,7 +606,27 @@ class Player:
             clock = {"t0": t0, "lead": lead}
             show = asyncio.create_task(self._show(events, clock), name="music-show")
             last_pub = 0.0
+            live = {"sync_ms": cfg["sync_ms"], "offset_ms": cfg["speakers_offset_ms"]}
+            last_cfg = 0.0
             while True:
+                if time.monotonic() - last_cfg > 0.25:  # sliders moved mid-song apply straight away
+                    last_cfg = time.monotonic()
+                    cfg = self.cfg()
+                    gain_v = cfg["voice_level"] / 100 * gains["voice"]
+                    gain_b_skelly = cfg["skelly_band"] / 100 * gains["band"]
+                    gain_spk = cfg["speakers_level"] / 100 * gains["band"]
+                    clock["lead"] += (cfg["sync_ms"] - live["sync_ms"]) / 1000
+                    live["sync_ms"] = cfg["sync_ms"]
+                    # A new "other speakers" offset: hold back whichever stream should now be later,
+                    # a little at a time so neither speaker runs dry. Holding back the voice is
+                    # picked up by the clock below like any other delay.
+                    step = max(-100, min(100, cfg["speakers_offset_ms"] - live["offset_ms"]))
+                    if band_out.enabled and step:
+                        live["offset_ms"] += step
+                        if step > 0:
+                            await band_out.write(np.zeros(int(RATE * step / 1000) * 2, np.float32))
+                        else:
+                            await voice_out.write(np.zeros(int(RATE * -step / 1000), np.float32))
                 if not self._resume.is_set():
                     await self._halt_body()
                     await self._resume.wait()
@@ -645,7 +662,7 @@ class Player:
                     self._publish(position=round(max(0.0, heard), 1))
             # Let the end of the song play out before the next one (or stillness).
             if not self._skip.is_set():
-                await asyncio.sleep(max(0.0, clock["t0"] + written + lead - time.monotonic()))
+                await asyncio.sleep(max(0.0, clock["t0"] + written + clock["lead"] - time.monotonic()))
         finally:
             if show:
                 show.cancel()
