@@ -199,7 +199,11 @@ def _level(mix: np.ndarray) -> float:
 async def _run(*args: str, stdin: bytes | None = None) -> bytes:
     proc = await asyncio.create_subprocess_exec(*args, stdin=asyncio.subprocess.PIPE if stdin is not None else None,
                                                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    out, err = await proc.communicate(stdin)
+    try:
+        out, err = await proc.communicate(stdin)
+    except asyncio.CancelledError:
+        proc.kill()
+        raise
     if proc.returncode:
         raise RuntimeError(err.decode(errors="replace").strip().splitlines()[-1] if err else f"{args[0]} failed")
     return out
@@ -223,6 +227,7 @@ class Preparer:
         self._wake = asyncio.Event()
         self._task: asyncio.Task | None = None
         self._uploads: dict[str, Path] = {}
+        self._current: tuple[str, asyncio.Task] | None = None  # the song being prepared
 
     def start(self) -> None:
         # Anything left half-done by a restart starts again.
@@ -238,6 +243,11 @@ class Preparer:
 
     def kick(self) -> None:
         self._wake.set()
+
+    def cancel(self, song_ids) -> None:
+        """Stop work on removed songs at once, so the next song doesn't wait behind one that's gone."""
+        if self._current and self._current[0] in set(song_ids):
+            self._current[1].cancel()
 
     def add_file(self, song: dict, path: Path) -> None:
         self._uploads[song["id"]] = path
@@ -258,11 +268,18 @@ class Preparer:
                 nxt = next((s for s in self.lib.data["songs"] if s["status"] == "waiting"), None)
                 if not nxt:
                     break
+                job = asyncio.create_task(self.prepare(nxt))
+                self._current = (nxt["id"], job)
                 try:
-                    await self.prepare(nxt)
+                    await asyncio.wait({job})
                 except asyncio.CancelledError:
+                    job.cancel()
                     raise
-                except Exception as exc:
+                finally:
+                    self._current = None
+                if job.cancelled():  # the song was removed: tidy up anything it left behind
+                    shutil.rmtree(self.lib.folder(nxt["id"]), ignore_errors=True)
+                elif exc := job.exception():
                     log.warning("song %s failed: %r", nxt.get("title"), exc)
                     self._set(nxt["id"], status="failed", error=_friendly(exc))
 
