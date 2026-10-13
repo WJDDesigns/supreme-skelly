@@ -50,7 +50,7 @@ def _run(conv, cfg, monkeypatch):
     monkeypatch.setattr(conv, "_claude", claude)
     monkeypatch.setattr(conv, "_body", lambda *a: asyncio.sleep(0))
     monkeypatch.setattr(conv, "_still", lambda: asyncio.sleep(0))
-    monkeypatch.setattr(c, "Speaker", lambda *a: SimpleNamespace(close=lambda: asyncio.sleep(0)))
+    monkeypatch.setattr(c, "Speaker", lambda *a: SimpleNamespace(close=lambda: asyncio.sleep(0), echoing=False))
     cfg.speaker = "sink"
     asyncio.run(conv._run(cfg))
     return used

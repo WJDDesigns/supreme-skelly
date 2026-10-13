@@ -249,6 +249,27 @@ def said_something(text: str) -> bool:
     return bool(words) and " ".join(words) not in NOT_SPEECH and sum(len(w) for w in words) >= 2
 
 
+SIGN_OFF_WAIT_S = 20  # longest he may keep talking after a chat has ended
+
+LOVE_WORDS = re.compile(r"\b(love|luv)\b", re.I)
+BYE_WORDS = re.compile(r"\b(bye|goodbye|see (you|ya)|good ?night|later|gotta go|have to go)\b", re.I)
+
+
+def goodbye_line(heard: str) -> str:
+    """A kind last line when no AI is at hand to write one."""
+    if LOVE_WORDS.search(heard):
+        return "Aww, I love you too! Bye bye, come back and see me again soon!"
+    if BYE_WORDS.search(heard):
+        return "Bye bye! Thanks for visiting me, come back and see me again soon!"
+    return "It was so nice talking with you! Bye bye, come back and see me again soon!"
+
+
+async def _until_quiet(speaker) -> None:
+    """Until everything he's been given to say has played out of the speaker."""
+    while speaker.echoing:
+        await asyncio.sleep(0.05)
+
+
 class MissingKey(ValueError):
     pass
 
@@ -479,9 +500,11 @@ class Conversation:
                 self.state.provider = alt.provider
                 self._last_heard = time.monotonic()
                 await self._claude(alt, speaker)
+                await self._sign_off(alt, speaker)
             else:
                 if "elevenlabs" in (cfg.provider, cfg.tts, cfg.stt):
                     self._eleven_out_at = None
+                await self._sign_off(cfg, speaker)
         except asyncio.CancelledError:
             raise
         except OutOfCredits:
@@ -511,6 +534,73 @@ class Conversation:
                     await self.on_ended(list(self.state.transcript))
                 except Exception as exc:
                     log.warning("conversation end hook failed: %r", exc)
+
+    async def _sign_off(self, cfg: ConversationConfig, speaker: Speaker) -> None:
+        """The chat is ending on its own: let his last words play out, and never leave a visitor's
+        last words unanswered (a goodbye said as the AI hung up, or as the time limit hit)."""
+        try:
+            await asyncio.wait_for(_until_quiet(speaker), SIGN_OFF_WAIT_S)
+            last = next((t for t in reversed(self.state.transcript) if t.get("role") in ("user", "skelly")), None)
+            if not last or last["role"] != "user" or not said_something(last["text"]):
+                return
+            voice = self._sign_off_voice(cfg)
+            if not voice:
+                log.info("visitor's last words went unanswered, and there's no voice to answer with")
+                return
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=20)) as http:
+                line = await self._goodbye_line(http, cfg, last["text"])
+                log.info("answering the visitor's last words before ending: %s", line)
+                self._say("skelly", line)
+                self._set("speaking")
+                await self._speak(http, voice, speaker, line)
+            await asyncio.wait_for(_until_quiet(speaker), SIGN_OFF_WAIT_S)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("signing off failed: %r", exc)
+
+    def _sign_off_voice(self, cfg: ConversationConfig) -> ConversationConfig | None:
+        """The same voice he's been talking in, for a last line outside the AI's own session."""
+        voice = ConversationConfig.from_dict(asdict(cfg))
+        eleven = bool(self.vault.get("elevenlabs_api_key")) and self._eleven_out_at is None
+        if cfg.provider == "openai":
+            voice.tts, voice.openai_tts_voice = "openai", cfg.openai_voice
+        elif cfg.provider == "elevenlabs":
+            voice.tts = "elevenlabs" if eleven else "openai"
+        if voice.tts == "elevenlabs" and not eleven:
+            voice.tts = "openai"
+        if voice.tts == "openai" and not self.vault.get("openai_api_key"):
+            return None
+        return voice
+
+    async def _goodbye_line(self, http: httpx.AsyncClient, cfg: ConversationConfig, heard: str) -> str:
+        """A short, warm answer to what the visitor said last, ending the chat. Claude writes it
+        in character when there's a key; otherwise a kind stock line."""
+        key = self.vault.get("anthropic_api_key")
+        if key:
+            said = [f"{'Visitor' if t['role'] == 'user' else 'You'}: {t['text']}"
+                    for t in self.state.transcript[-12:] if t.get("role") in ("user", "skelly")]
+            try:
+                r = await http.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
+                    json={"model": cfg.claude_model, "max_tokens": 60,
+                          "system": f"{cfg.prompt}\n\n{SPOKEN_RULES}",
+                          "messages": [{"role": "user", "content": (
+                              "The conversation so far:\n" + "\n".join(said) + "\n\nThe visitor is leaving "
+                              "now. Answer what they said last warmly and say goodbye, in one or two short "
+                              "sentences. If they said they love you, tell them you love them too.")}]})
+                _raise_for(r, "Claude")
+                data = r.json()
+                use = data.get("usage") or {}
+                usage.add("chat", model=cfg.claude_model, tokens_in=use.get("input_tokens", 0),
+                          tokens_out=use.get("output_tokens", 0))
+                line = speakable("".join(b.get("text", "") for b in data.get("content", [])))
+                if line:
+                    return line
+            except Exception as exc:
+                log.info("goodbye line from Claude failed: %r", exc)
+        return goodbye_line(heard)
 
     async def _idle_watch(self, cfg: ConversationConfig, speaker: Speaker) -> None:
         """Ends the conversation once nobody has spoken for a while."""
