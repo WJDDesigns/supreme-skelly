@@ -97,7 +97,9 @@ Add keys under **Settings > API keys**. Each one has a link and a one-line "how 
 Keys never leave the mini PC, and the page only ever shows their last 4 characters.
 **Settings > Usage** shows what each night cost, and **Quiet hours** keeps him from chatting
 at night. Conversations always end after a few minutes so nothing can run up a bill, and a
-chat Skelly started himself ends shortly after he stops talking if nobody answers. If your
+chat Skelly started himself ends shortly after he stops talking if nobody answers. When a
+chat ends, he always finishes his last sentence, and if the visitor's last words (a "bye" or
+"I love you") haven't been answered yet, he answers them warmly before going quiet. If your
 ElevenLabs credits run out, he says so and carries on with OpenAI's voice and hearing.
 
 <img src="docs/images/conversation.png" alt="Chat bubbles with the time and a camera picture on each" width="360" align="right">
