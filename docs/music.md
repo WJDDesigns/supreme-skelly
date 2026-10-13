@@ -64,7 +64,7 @@ on the Conversation page stops the music.
 | **Dance** | Head, arms and torso move to the beat: just his head in quiet parts, everything in the loud parts. His head always moves while he sings. |
 | **Lights follow the music** | Colours change on the beat (every bar when it's quiet, every beat when it's loud) and brightness follows the loudness. His own look comes back after the song. |
 | **Light colours** | Halloween, blood red, ghostly blues, party, or a different set for each song |
-| **Voice volume** | How loud the singing is on Skelly |
+| **Voice volume** | How loud the singing is on Skelly. Every song is already evened out and turned up loud, so 100% is a good start |
 | **Band on Skelly's speaker** | 0% gives the cleanest singing. If Skelly is your only speaker, turn it up so you hear the music; his jaw will then move a little to the music too. |
 | **Band on my other speakers** / **Singing on my other speakers too** | Where the band (and, optionally, the voice) plays |
 
