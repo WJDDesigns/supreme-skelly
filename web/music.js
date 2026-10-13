@@ -234,13 +234,19 @@ export function initMusic({ $, el, api, run, toast }) {
     $("#mu-palette").disabled = !cfg.lights;
   }
   let saveTimer;
+  let pending = {};
   document.querySelectorAll("[data-mcfg]").forEach((i) => {
     i.addEventListener(i.type === "range" ? "input" : "change", () => {
       const k = i.dataset.mcfg;
       const v = i.type === "checkbox" ? i.checked : i.tagName === "SELECT" ? i.value : Number(i.value);
       renderConfig({ ...m.config, [k]: v });
+      pending[k] = v;
       clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => run(null, () => api("/music/config", { [k]: v }, "PUT").then(renderConfig)), i.type === "range" ? 300 : 0);
+      saveTimer = setTimeout(() => {
+        const body = pending;
+        pending = {};
+        run(null, () => api("/music/config", body, "PUT").then(renderConfig));
+      }, i.type === "range" ? 150 : 0);
     });
   });
 
