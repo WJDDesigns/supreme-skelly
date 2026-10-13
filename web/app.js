@@ -2,6 +2,7 @@
 
 import { timeZones } from "./zones.js";
 import { figureSVG, updateSkeleton } from "./skeleton.js";
+import { initMusic } from "./music.js";
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, props = {}, ...kids) => {
@@ -784,6 +785,7 @@ function applySnapshot(s) {
   if (s.vision) renderVision(s.vision);
   if (s.fog) renderFog(s.fog);
   if (s.playlist) { state.playlist = s.playlist; renderFiles(); }
+  if (s.music) musicUI?.renderPlayer(s.music);
 }
 
 function connectEvents() {
@@ -808,6 +810,8 @@ function connectEvents() {
     else if (msg.type === "vision") renderVision(msg.data);
     else if (msg.type === "vision_motion") setMotion(msg.data.motion);
     else if (msg.type === "fog") renderFog(msg.data);
+    else if (msg.type === "music") musicUI?.renderPlayer(msg.data);
+    else if (msg.type === "music_library") musicUI?.renderLibrary(msg.data);
     else if (msg.type === "fog_level") setFogLevel(msg.data.level);
     else if (msg.type === "visitor") onVisitor(msg.data);
     else if (msg.type === "meters") setMeters(msg.data);
@@ -825,6 +829,7 @@ function connectEvents() {
 }
 // Load once over HTTP so the page works even before the live stream is up.
 api("/state").then(applySnapshot).catch(() => {});
+const musicUI = initMusic({ $, el, api, run, toast });
 connectEvents();
 
 // ---------- sound upload ----------

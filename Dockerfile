@@ -19,6 +19,8 @@ RUN pip install --no-cache-dir .
 # Face models (OpenCV Zoo): YuNet finds faces, SFace fingerprints them. ~40 MB, fetched once at build.
 RUN mkdir -p /app/models && python -c "import urllib.request as u; b='https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/'; \
     [u.urlretrieve(b + p, '/app/models/' + p.split('/')[-1]) for p in ('face_detection_yunet/face_detection_yunet_2023mar.onnx', 'face_recognition_sface/face_recognition_sface_2021dec.onnx')]"
+# Music mode's voice/band splitter (UVR MDX-Net "Kim Vocal 2", ONNX). ~65 MB, fetched once at build.
+RUN python -c "import urllib.request as u; u.urlretrieve('https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/Kim_Vocal_2.onnx', '/app/models/Kim_Vocal_2.onnx')"
 COPY web ./web
 COPY VERSION ./VERSION
 

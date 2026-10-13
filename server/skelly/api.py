@@ -15,7 +15,21 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import audio, audio_io, protect, recorder, scene, snaps, speaker, system, updates, usage, voices
+from . import (
+    audio,
+    audio_io,
+    music,
+    music_api,
+    protect,
+    recorder,
+    scene,
+    snaps,
+    speaker,
+    system,
+    updates,
+    usage,
+    voices,
+)
 from . import protocol as proto
 from .auth import COOKIE, SESSION_DAYS, Auth
 from .conversation import (
@@ -279,6 +293,12 @@ def create_app(
         app.state.vision._on_passerby = on_passerby
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
                                   lambda: svc.settings.audio.get("mic_gain", 100) / 100)
+        app.state.library = music.Library()
+        app.state.preparer = music.Preparer(
+            app.state.library, lambda: svc.bus.publish("music_library", app.state.library.public()))
+        app.state.preparer.start()
+        app.state.music = music.Player(svc, app.state.library, music_outputs, lambda: music.config(svc.settings.music),
+                                       simulate=os.environ.get("SKELLY_SIMULATE") == "1")
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
             try:
                 await app.state.vision.start()
@@ -302,6 +322,8 @@ def create_app(
         await app.state.protect.stop()
         await app.state.meters.stop()
         await app.state.playlist.stop()
+        await app.state.music.stop()
+        await app.state.preparer.stop()
         await svc.stop()
 
     app = FastAPI(title="Supreme Skelly", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -323,7 +345,8 @@ def create_app(
 
     def full_snapshot() -> dict:
         return {**svc().snapshot(), "conversation": app.state.conv.snapshot(), "vision": app.state.vision.snapshot(),
-                "playlist": app.state.playlist.snapshot(), "fog": app.state.fog.snapshot()}
+                "playlist": app.state.playlist.snapshot(), "fog": app.state.fog.snapshot(),
+                "music": app.state.music.snapshot()}
 
     # -- Skelly's Live speaker ---------------------------------------------------
 
@@ -382,6 +405,16 @@ def create_app(
             sinks.append(await skelly_sink())
         if os.environ.get("SKELLY_SIMULATE") == "1":
             return None
+        live = [s for s in sinks if s] + await extra_sinks()
+        if not live:
+            raise ConnectionError("None of the chosen speakers are connected")
+        await set_saved_volumes(live)
+        return await audio_io.output_for(live)
+
+    async def extra_sinks() -> list[str]:
+        """The extra speakers from Settings > Sound that are connected (reconnecting any that dropped)."""
+        audio = svc().settings.audio
+        sinks: list[str] = []
         have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
         for sink in audio.get("extra", []):
             if sink not in have and sink.startswith("bluez_output."):
@@ -397,9 +430,10 @@ def create_app(
                     log.info("extra speaker %s not connected: %s", mac, exc)
             sinks.append(sink)
         have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
-        live = [s for s in sinks if s and s in have]
-        if not live:
-            raise ConnectionError("None of the chosen speakers are connected")
+        return [s for s in sinks if s and s in have]
+
+    async def set_saved_volumes(live: list[str]) -> None:
+        audio = svc().settings.audio
         # PipeWire gives every newly connected Bluetooth speaker 40% (-24 dB), which made Skelly
         # nearly silent. Put each one at its saved volume, full by default, every time.
         saved = audio.get("volumes", {})
@@ -411,7 +445,15 @@ def create_app(
                     await audio_io.set_volume(sink, want)
                 except RuntimeError as exc:
                     log.info("volume for %s not set: %s", sink, exc)
-        return await audio_io.output_for(live)
+
+    async def music_outputs(with_speakers: bool) -> tuple[str | None, str | None]:
+        """Music: Skelly's own speaker for the voice (it moves his jaw), the extra speakers for the band."""
+        if app.state.conv.running:
+            await app.state.conv.stop()
+        voice = await skelly_sink()
+        extras = [s for s in await extra_sinks() if s != voice] if with_speakers else []
+        await set_saved_volumes([voice, *extras])
+        return voice, await audio_io.output_for(extras) if extras else None
 
     async def meter_sink() -> str | None:
         """The output to meter: the conversation's if one is running, else Skelly's/combined if awake."""
@@ -523,7 +565,7 @@ def create_app(
 
         Home Assistant powers Skelly down on a schedule; a chat then would talk to nobody but still cost credits.
         """
-        if not svc().link.connected:
+        if not svc().link.connected or app.state.music.playing:  # no chats in the middle of a song
             return True
         return is_quiet(ConversationConfig.from_dict(svc().settings.conversation))
 
@@ -1069,6 +1111,7 @@ def create_app(
         parts = [f"People you recognise standing here: {', '.join(here)}." if here else "",
                  costume_hint(v.costumes).strip() if recent else ""]
         app.state.costumes_mentioned = {c.lower() for c in v.costumes} if recent else set()
+        await app.state.music.stop()  # pressing Start means talk now, even mid-song
         try:
             return await app.state.conv.start(context=" ".join(p for p in parts if p) or None)
         except ValueError as exc:  # MissingKey included
@@ -1581,6 +1624,8 @@ def create_app(
             pass
         finally:
             bus.unsubscribe(q)
+
+    music_api.register(app)
 
     if WEB_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")

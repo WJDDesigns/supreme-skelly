@@ -31,6 +31,10 @@
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
       <symbol id="i-fog" viewBox="0 0 24 24"><path d="M4 9a4 4 0 0 1 7.5-2A3.5 3.5 0 0 1 18 9.5M3 13h13M7 17h14M3 21h10"/></symbol>
       <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+      <symbol id="i-sing" viewBox="0 0 24 24"><path d="M12 17V3l7 2.5"/><circle cx="8.5" cy="17" r="3.5"/><path d="M17 11.5c1.3.9 2 2.2 2 3.7M19.5 9c2 1.6 3 3.6 3 6"/></symbol>
+      <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 5v14l10-7ZM18 5v14"/></symbol>
+      <symbol id="i-prev" viewBox="0 0 24 24"><path d="M19 5v14L9 12ZM6 5v14"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
       <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></symbol>
     </defs>
   </svg>
@@ -58,6 +62,7 @@
         <p class="nav-label">Control</p>
         <button role="tab" data-tab="controls"><span class="nav-ico"><svg><use href="#i-sliders"/></svg></span>Controls</button>
         <button role="tab" data-tab="sounds" class="nav-extra"><span class="nav-ico"><svg><use href="#i-music"/></svg></span>Sounds</button>
+        <button role="tab" data-tab="music" class="nav-extra"><span class="nav-ico"><svg><use href="#i-sing"/></svg></span>Music</button>
         <button role="tab" data-tab="fog" class="nav-extra"><span class="nav-ico"><svg><use href="#i-fog"/></svg></span>Fog</button>
         <p class="nav-label">AI</p>
         <button role="tab" data-tab="talk"><span class="nav-ico"><svg><use href="#i-chat"/></svg></span>Conversation</button>
@@ -243,6 +248,95 @@
               <span class="muted" id="pl-status"></span>
             </div>
             <ul id="files" class="list sounds"></ul>
+          </div>
+        </section>
+
+        <!-- Music -->
+        <section id="tab-music" class="tab" hidden>
+          <div class="card now-card">
+            <div class="card-head">
+              <div><h2 id="mu-title">Nothing playing</h2><p class="muted" id="mu-sub">Pick a song or a playlist below and Skelly will sing it.</p></div>
+              <span class="badge orange" id="mu-badge" hidden></span>
+            </div>
+            <div class="mu-progress"><span id="mu-pos">0:00</span><div class="bar"><i id="mu-bar"></i></div><span id="mu-dur">0:00</span></div>
+            <div class="row mu-controls">
+              <button id="mu-prev" class="btn outline icon-only" title="Previous song"><svg><use href="#i-prev"/></svg></button>
+              <button id="mu-play" class="btn primary"><svg><use href="#i-play"/></svg><span>Sing everything</span></button>
+              <button id="mu-next" class="btn outline icon-only" title="Next song"><svg><use href="#i-next"/></svg></button>
+              <button id="mu-stop" class="btn outline" hidden><svg><use href="#i-stop"/></svg>Stop</button>
+            </div>
+            <p class="fog-why" id="mu-error" hidden></p>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div><h2>Add songs</h2><p class="muted">Paste a YouTube, Spotify or Apple Music link (a song, album or playlist), or just type a song's name.</p></div>
+            </div>
+            <form id="mu-add" class="upload-row">
+              <label class="field grow"><span class="muted">Link or song name</span>
+                <input type="text" id="mu-text" placeholder="https://open.spotify.com/playlist/… or Monster Mash" autocomplete="off"></label>
+              <label class="field"><span class="muted">Add to</span><select id="mu-to"><option value="">Library only</option></select></label>
+              <button id="mu-add-btn" class="btn primary" type="submit">Add</button>
+            </form>
+            <label class="drop small-drop" id="mu-drop">
+              <input type="file" id="mu-file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac" hidden multiple>
+              <svg><use href="#i-upload"/></svg>
+              <span><strong>Or drop your own song files here</strong> (MP3, M4A, WAV, FLAC)</span>
+            </label>
+            <p class="muted small-note">Each new song takes a few minutes to get ready: the mini PC separates the singer from the band, so only the words move Skelly's mouth, and finds the beat for his dance.</p>
+          </div>
+
+          <div class="music-grid">
+            <div class="card">
+              <div class="card-head">
+                <div><h2>Playlists</h2><p class="muted">Sets for Skelly to sing in order</p></div>
+                <button id="mu-new" class="btn outline small">New playlist</button>
+              </div>
+              <ul id="mu-playlists" class="list"></ul>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <div><h2>Songs</h2><p class="muted" id="mu-count">No songs yet</p></div>
+              </div>
+              <ul id="mu-songs" class="list songs"></ul>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div><h2>The show</h2><p class="muted">How Skelly performs</p></div></div>
+            <label class="switch-row"><span><strong>Dance</strong>
+              <span class="muted">Head, arms and torso move to the beat, harder in the loud parts.</span></span>
+              <input type="checkbox" data-mcfg="dance" role="switch"></label>
+            <label class="switch-row"><span><strong>Lights follow the music</strong>
+              <span class="muted">Colours change on the beat and brightness follows how loud the song is. Off: his own look stays on.</span></span>
+              <input type="checkbox" data-mcfg="lights" role="switch"></label>
+            <label class="field-row">Light colours<select data-mcfg="palette" id="mu-palette"></select></label>
+            <label class="slider">Voice volume <output id="mu-voice-out">100%</output>
+              <input type="range" min="0" max="150" step="5" data-mcfg="voice_level"></label>
+            <label class="slider">Band on Skelly's speaker <output id="mu-band-out">30%</output>
+              <input type="range" min="0" max="100" step="5" data-mcfg="skelly_band"></label>
+            <p class="muted small-note">0% gives the cleanest singing: his mouth only moves to the words. Turn it up if Skelly is your only speaker; his jaw will then move a little to the music too.</p>
+            <label class="switch-row"><span><strong>Band on my other speakers</strong>
+              <span class="muted">Plays the music on the extra speakers from Settings &gt; Sound while Skelly sings.</span></span>
+              <input type="checkbox" data-mcfg="speakers" role="switch"></label>
+            <label class="switch-row"><span><strong>Singing on my other speakers too</strong>
+              <span class="muted">Off: the voice comes only from Skelly, so it sounds like it's him.</span></span>
+              <input type="checkbox" data-mcfg="speakers_voice" role="switch"></label>
+            <label class="slider">Other speakers volume <output id="mu-spk-out">100%</output>
+              <input type="range" min="0" max="150" step="5" data-mcfg="speakers_level"></label>
+            <details class="more">
+              <summary>Timing</summary>
+              <div class="more-body">
+                <label class="slider">Moves and lights <output id="mu-sync-out">0 ms</output>
+                  <input type="range" min="-600" max="600" step="10" data-mcfg="sync_ms"></label>
+                <p class="muted small-note">If he dances behind the beat, slide left; ahead of it, slide right.</p>
+                <label class="slider">Other speakers <output id="mu-off-out">0 ms</output>
+                  <input type="range" min="-800" max="800" step="10" data-mcfg="speakers_offset_ms"></label>
+                <p class="muted small-note">If the band sounds behind Skelly's voice, slide left; ahead of it, slide right.</p>
+                <label class="slider">Pause between songs <output id="mu-gap-out">2 s</output>
+                  <input type="range" min="0" max="15" step="1" data-mcfg="gap_s"></label>
+              </div>
+            </details>
           </div>
         </section>
 
