@@ -200,7 +200,8 @@ async def test_prepare_and_sing(tmp_path, monkeypatch):
     await svc.connect("SIM", "Ultra Skelly v2")
     await asyncio.sleep(0.6)
     monkeypatch.setattr(music, "AUDIO_DELAY_S", 0.0)
-    player = music.Player(svc, lib, None, lambda: music.config({"gap_s": 0}), simulate=True)
+    live_cfg = {"gap_s": 0}
+    player = music.Player(svc, lib, None, lambda: music.config(live_cfg), simulate=True)
     link.sent.clear()
     await player.play([s["id"]])
     await asyncio.sleep(3)
@@ -208,6 +209,11 @@ async def test_prepare_and_sing(tmp_path, monkeypatch):
     colours = [d for d in link.sent if d[1] == p.Cmd.SET_RGB]
     assert moves and colours
     assert player.state.playing and 1.5 < player.state.position < 3.2
+    # Moving the timing slider mid-song shifts the show at once (here, a full second later).
+    before = player.state.position
+    live_cfg["sync_ms"] = 1000
+    await asyncio.sleep(1.2)
+    assert player.state.position < before + 0.7
     gains = lib.song(s["id"])["gains"]  # measured once, remembered, and turned up (the clicks are quiet)
     assert gains["voice"] > 1 and gains["band"] > 1
     await player.stop()

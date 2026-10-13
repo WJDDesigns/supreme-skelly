@@ -75,7 +75,7 @@ Every Bluetooth speaker has its own delay, so two sliders under **Timing** let y
 - **Moves and lights:** if he dances behind the beat, slide left; ahead of it, slide right.
 - **Other speakers:** if the band sounds behind Skelly's voice, slide left; ahead of it, slide right.
 
-Small steps (20 to 50 ms) make a visible difference. The settings are saved and used for every song.
+Small steps (20 to 50 ms) make a visible difference. Every slider changes the song that is playing straight away, so line things up while he sings. The settings are saved and used for every song.
 
 ## Under the hood
 
