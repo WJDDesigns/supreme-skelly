@@ -36,6 +36,7 @@ class Settings:
     playlist: dict = field(default_factory=dict)
     # Per-sound Live Performance, by sound name: {"moves", "eye", "color", "mode", "speed", "brightness", "cycle"}
     performances: dict = field(default_factory=dict)
+    music: dict = field(default_factory=dict)  # music mode options; see music.DEFAULTS
     timezone: str = ""  # IANA name, e.g. "America/New_York"; empty = the mini PC's own clock zone
     setup_done: bool = False  # the first-run welcome has been finished or skipped
     auto_update: bool = True  # install new releases by itself (the host's skelly-update timer reads this)

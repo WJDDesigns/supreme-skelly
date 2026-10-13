@@ -2,8 +2,8 @@
 
 Bring your Home Depot Skelly to life from your phone. Supreme Skelly runs on a small
 always-on computer next to your animatronic and gives you a web page where you can move
-him, change his eyes and lights, play sounds, have him **talk with visitors using AI**, and
-**greet people he sees on camera**.
+him, change his eyes and lights, play sounds, have him **talk with visitors using AI**,
+**greet people he sees on camera**, and **sing and dance to your playlists**.
 
 Works with the Skelly-family Bluetooth animatronics: Ultra Skelly v2, Animated Skelly,
 12 ft Skelly, Lethal Lily and Ultra Santa.
@@ -128,6 +128,25 @@ sent anywhere. You can rename or forget anyone, or everyone, on the Vision page.
 faces may be regulated where you live; check your local rules and consider a sign telling
 visitors they're on camera.
 
+## Singing and dancing (Music)
+
+The **Music** page makes Skelly sing. Paste a YouTube, Spotify or Apple Music link (a song,
+album or playlist) or just type a song's name, build playlists, and press **Sing**. The mini
+PC separates the singer from the band, so his mouth moves only with the words, finds every
+beat so he dances in time, and can make his lights follow the music. The band plays on any
+extra speakers you've added in Settings > Sound.
+
+<p align="center">
+  <img src="docs/images/music-page.png" alt="The Music page: now playing, adding songs, playlists" width="68%">
+  &nbsp;
+  <img src="docs/images/music-phone.png" alt="The Music page on a phone" width="24%">
+</p>
+
+![How a song becomes a performance](docs/images/music-flow.svg)
+
+The **[music guide](docs/music.md)** covers which links work, playlists, the show settings
+and lining up the timing.
+
 ## Fog on cue
 
 The **Fog** page drives a fog machine through a Wi-Fi relay on your network (no cloud).
@@ -234,7 +253,9 @@ Protocol knowledge builds on the community reverse engineering in
 [martinecker/SkellyUltraWebController](https://github.com/martinecker/SkellyUltraWebController)
 (ISC) and [martinecker/SkellyUltra](https://github.com/martinecker/SkellyUltra). Face
 models come from [OpenCV Zoo](https://github.com/opencv/opencv_zoo), the free local voice
-from [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx).
+from [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx), the singer/band separation
+model from [Ultimate Vocal Remover](https://github.com/Anjok07/ultimatevocalremovergui), and
+song downloads use [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
 MIT licensed (see [LICENSE](LICENSE)). Not affiliated with Home Depot or the makers of any
 other Skelly app. Use at your own risk.

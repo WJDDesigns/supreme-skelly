@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#ff8c1a"/>
+    </marker>
+  </defs>
+  <rect width="900" height="380" rx="18" fill="#111"/>
+  <g fill="none" stroke="#ff8c1a" stroke-width="2.2" marker-end="url(#a)">
+    <path d="M190 190 H250"/>
+    <path d="M430 150 C470 150 470 85 520 85"/>
+    <path d="M430 190 H520"/>
+    <path d="M430 230 C470 230 470 295 520 295"/>
+    <path d="M700 85 H745"/>
+    <path d="M700 190 H745"/>
+    <path d="M700 295 H745"/>
+  </g>
+  <g font-size="15" fill="#f6f3ee">
+    <rect x="30" y="140" width="160" height="100" rx="14" fill="#1c1c1f" stroke="#333"/>
+    <text x="110" y="175" text-anchor="middle" font-weight="700">A song</text>
+    <text x="110" y="200" text-anchor="middle" font-size="12.5" fill="#a9a29a">YouTube, Spotify or</text>
+    <text x="110" y="217" text-anchor="middle" font-size="12.5" fill="#a9a29a">Apple Music link, or a file</text>
+
+    <rect x="250" y="120" width="180" height="140" rx="14" fill="#1c1c1f" stroke="#ff8c1a"/>
+    <text x="340" y="155" text-anchor="middle" font-weight="700">Mini PC, once</text>
+    <text x="340" y="182" text-anchor="middle" font-size="12.5" fill="#a9a29a">splits the singer</text>
+    <text x="340" y="199" text-anchor="middle" font-size="12.5" fill="#a9a29a">from the band,</text>
+    <text x="340" y="216" text-anchor="middle" font-size="12.5" fill="#a9a29a">finds every beat and</text>
+    <text x="340" y="233" text-anchor="middle" font-size="12.5" fill="#a9a29a">the loud and quiet parts</text>
+
+    <rect x="520" y="50" width="180" height="70" rx="14" fill="#1c1c1f" stroke="#333"/>
+    <text x="610" y="80" text-anchor="middle" font-weight="700">🎤 Voice</text>
+    <text x="610" y="102" text-anchor="middle" font-size="12.5" fill="#a9a29a">to Skelly's speaker</text>
+
+    <rect x="520" y="155" width="180" height="70" rx="14" fill="#1c1c1f" stroke="#333"/>
+    <text x="610" y="185" text-anchor="middle" font-weight="700">🥁 Beat</text>
+    <text x="610" y="207" text-anchor="middle" font-size="12.5" fill="#a9a29a">to Skelly over Bluetooth</text>
+
+    <rect x="520" y="260" width="180" height="70" rx="14" fill="#1c1c1f" stroke="#333"/>
+    <text x="610" y="290" text-anchor="middle" font-weight="700">🎸 Band</text>
+    <text x="610" y="312" text-anchor="middle" font-size="12.5" fill="#a9a29a">to your other speakers</text>
+
+    <text x="755" y="80" font-weight="600" fill="#ffb547">Jaw moves</text>
+    <text x="755" y="99" font-size="12.5" fill="#a9a29a">only with the words</text>
+    <text x="755" y="185" font-weight="600" fill="#ffb547">Dance + lights</text>
+    <text x="755" y="204" font-size="12.5" fill="#a9a29a">timed to what you hear</text>
+    <text x="755" y="290" font-weight="600" fill="#ffb547">Music</text>
+    <text x="755" y="309" font-size="12.5" fill="#a9a29a">lined up with his voice</text>
+  </g>
+  <text x="450" y="362" text-anchor="middle" font-size="12" fill="#77706a">Everything runs on the mini PC. No accounts, no cloud, nothing to pay for.</text>
+</svg>
