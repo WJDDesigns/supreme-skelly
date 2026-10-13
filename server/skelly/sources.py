@@ -303,7 +303,11 @@ async def _child(*args: str) -> tuple[int, str, str]:
     env = {**os.environ, "PYTHONPATH": server + os.pathsep + os.environ.get("PYTHONPATH", "")}
     proc = await asyncio.create_subprocess_exec(sys.executable, *args, stdout=asyncio.subprocess.PIPE,
                                                 stderr=asyncio.subprocess.PIPE, env=env)
-    out, err = await asyncio.wait_for(proc.communicate(), 900)
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), 900)
+    except (asyncio.CancelledError, TimeoutError):
+        proc.kill()
+        raise
     return proc.returncode or 0, out.decode(errors="replace"), err.decode(errors="replace")
 
 

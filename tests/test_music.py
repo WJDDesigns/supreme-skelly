@@ -98,6 +98,36 @@ def test_clear_unready(tmp_path):
     assert [s["title"] for s in lib.data["songs"]] == ["Ready"]
 
 
+async def test_removing_the_song_being_prepared_frees_the_queue(tmp_path, monkeypatch):
+    """A cleared song stops at once; the next one doesn't wait minutes behind it."""
+    lib = music.Library(tmp_path / "music")
+    prep = music.Preparer(lib, lambda: None, models=tmp_path / "models")
+    started: list[str] = []
+
+    async def slow_prepare(song):
+        started.append(song["title"])
+        if song["title"] == "Gone":
+            await asyncio.sleep(3600)
+        lib.update(song["id"], status="ready")
+
+    monkeypatch.setattr(prep, "prepare", slow_prepare)
+    gone = lib.add(sources.Track("Gone"))
+    lib.add(sources.Track("Next"))
+    prep.start()
+    for _ in range(50):
+        if started:
+            break
+        await asyncio.sleep(0.01)
+    prep.cancel([gone["id"]])
+    lib.remove(gone["id"])
+    for _ in range(50):
+        if lib.data["songs"][0]["status"] == "ready":
+            break
+        await asyncio.sleep(0.01)
+    assert started == ["Gone", "Next"] and lib.data["songs"][0]["status"] == "ready"
+    await prep.stop()
+
+
 def test_spotify_embed_playlist():
     data = {"props": {"pageProps": {"state": {"data": {"entity": {"type": "playlist", "trackList": [
         {"title": "Thriller", "subtitle": "Michael Jackson"},
