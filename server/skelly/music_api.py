@@ -127,6 +127,12 @@ def register(app: FastAPI) -> None:
         app.state.preparer.kick()
         return changed()
 
+    @app.delete("/api/music/songs")
+    async def music_clear_unready():
+        """Remove every song still waiting, being got ready, or failed (e.g. a link that added too many)."""
+        lib().remove_unready()
+        return changed()
+
     @app.delete("/api/music/songs/{song_id}")
     async def music_remove(song_id: str):
         if app.state.music.state.song == song_id:

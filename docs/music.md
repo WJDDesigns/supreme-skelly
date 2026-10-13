@@ -32,7 +32,7 @@ Paste one of these into **Add songs**, or type a song's name:
 
 | What you paste | What happens |
 |---|---|
-| A YouTube or YouTube Music link | That video, or every video in a playlist |
+| A YouTube or YouTube Music link | A video link adds just that song (even if YouTube tacked a "Mix" onto it); a playlist page link adds the whole playlist |
 | A Spotify song, album or playlist link | The track names are read from Spotify, and each song is fetched from YouTube |
 | An Apple Music song, album or playlist link | Same as Spotify |
 | A song name, e.g. "Monster Mash" | The best match on YouTube |
