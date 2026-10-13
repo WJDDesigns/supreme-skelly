@@ -208,6 +208,19 @@ async def test_prepare_and_sing(tmp_path, monkeypatch):
     colours = [d for d in link.sent if d[1] == p.Cmd.SET_RGB]
     assert moves and colours
     assert player.state.playing and 1.5 < player.state.position < 3.2
+    gains = lib.song(s["id"])["gains"]  # measured once, remembered, and turned up (the clicks are quiet)
+    assert gains["voice"] > 1 and gains["band"] > 1
     await player.stop()
     assert not player.state.playing
     await svc.stop()
+
+
+def test_quiet_songs_are_turned_up_without_clipping():
+    """Gaps between phrases don't count towards loudness, and the limiter never passes full scale."""
+    t = np.arange(8000 * 4) / 8000
+    voice = 0.03 * np.sin(2 * np.pi * 220 * t) * (t % 1 < 0.5)  # half sung, half silent
+    assert abs(music._active_rms(voice, 8000) - 0.03 / np.sqrt(2)) < 0.002
+    loud = np.linspace(-3, 3, 1001)
+    out = music._limit(loud)
+    assert np.abs(out).max() <= 1.0 and np.allclose(out[np.abs(loud) <= 0.8], loud[np.abs(loud) <= 0.8])
+    assert np.all(np.diff(out) >= 0)
