@@ -25,6 +25,8 @@ mini PC itself, no cloud). While the song plays:
 
 Getting a song ready takes a few minutes per song on a small mini PC (an Intel N100 splits a
 4-minute song in roughly 3 to 5 minutes). It happens once; after that the song plays straight away.
+While Skelly is singing, getting songs ready pauses, so the music never skips; it carries on
+when he stops.
 
 ## Adding songs
 

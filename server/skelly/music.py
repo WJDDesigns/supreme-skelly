@@ -22,6 +22,7 @@ import logging
 import os
 import random
 import shutil
+import signal
 import sys
 import time
 import uuid
@@ -41,7 +42,7 @@ RATE = 48000
 CHUNK_S = 0.05
 # From handing audio to PipeWire to hearing it from Skelly: our 100 ms pacat buffer plus his
 # Bluetooth (A2DP) delay. The owner fine-tunes the rest with the "Moves timing" slider.
-AUDIO_DELAY_S = float(os.environ.get("SKELLY_MUSIC_DELAY_S", "0.35"))
+AUDIO_DELAY_S = float(os.environ.get("SKELLY_MUSIC_DELAY_S", "0.5"))
 BLE_LEAD_S = 0.04  # a BLE command takes about this long to reach Skelly and act
 LATE_S = 0.3  # a light or move this late is skipped rather than sent out of time
 MAX_SONGS = 300
@@ -266,6 +267,9 @@ class Preparer:
         self._task: asyncio.Task | None = None
         self._uploads: dict[str, Path] = {}
         self._current: tuple[str, asyncio.Task] | None = None  # the song being prepared
+        self._go = asyncio.Event()  # cleared while Skelly sings, so playback gets the whole mini PC
+        self._go.set()
+        self._split_proc: asyncio.subprocess.Process | None = None
 
     def start(self) -> None:
         # Anything left half-done by a restart starts again.
@@ -281,6 +285,23 @@ class Preparer:
 
     def kick(self) -> None:
         self._wake.set()
+
+    def hold(self) -> None:
+        """Pause getting songs ready while one plays: the split hogs the CPU and made playback skip."""
+        self._go.clear()
+        self._signal(signal.SIGSTOP)
+
+    def release(self) -> None:
+        self._go.set()
+        self._signal(signal.SIGCONT)
+
+    def _signal(self, sig: int) -> None:
+        proc = self._split_proc
+        if proc and proc.returncode is None:
+            try:
+                proc.send_signal(sig)
+            except ProcessLookupError:
+                pass
 
     def cancel(self, song_ids) -> None:
         """Stop work on removed songs at once, so the next song doesn't wait behind one that's gone."""
@@ -303,6 +324,7 @@ class Preparer:
             await self._wake.wait()
             self._wake.clear()
             while True:
+                await self._go.wait()
                 nxt = next((s for s in self.lib.data["songs"] if s["status"] == "waiting"), None)
                 if not nxt:
                     break
@@ -338,6 +360,7 @@ class Preparer:
             self._set(sid, title=info["title"] or song["title"], artist=info["artist"] or song.get("artist", ""),
                       url=info.get("url"))
 
+        await self._go.wait()
         self._set(sid, status="splitting", progress=0)
         mix_raw = await _run("ffmpeg", "-v", "error", "-i", str(src), "-t", str(sources.MAX_SECONDS),
                              "-f", "f32le", "-ac", "2", "-ar", "44100", "-")
@@ -349,6 +372,7 @@ class Preparer:
         mix.astype(np.float32).tofile(work)
         await self._split(sid, work, folder)
 
+        await self._go.wait()
         self._set(sid, status="analysing", progress=100)
         voice = np.fromfile(folder / "vocals.f32", np.float32).reshape(-1, 2)
         band = np.fromfile(folder / "band.f32", np.float32).reshape(-1, 2)
@@ -371,6 +395,9 @@ class Preparer:
             "nice", "-n", "10", sys.executable, "-m", "skelly.separate", str(mix), str(folder), str(self.models),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env)
         assert proc.stdout
+        self._split_proc = proc
+        if not self._go.is_set():
+            self._signal(signal.SIGSTOP)
         try:
             async for line in proc.stdout:
                 text = line.decode(errors="replace").strip()
@@ -383,6 +410,8 @@ class Preparer:
         except asyncio.CancelledError:
             proc.kill()
             raise
+        finally:
+            self._split_proc = None
 
 
 def _friendly(exc: Exception) -> str:
@@ -426,7 +455,7 @@ class _Out:
         if not self.enabled:
             return
         args = ["pacat", "--raw", "--format=s16le", f"--rate={RATE}", f"--channels={self.channels}",
-                "--latency-msec=100", "--volume=65536", "--client-name=Supreme Skelly music"]
+                "--latency-msec=250", "--volume=65536", "--client-name=Supreme Skelly music"]
         if self.sink:
             args.append(f"--device={self.sink}")
         self.proc = await asyncio.create_subprocess_exec(*args, stdin=asyncio.subprocess.PIPE,
@@ -460,8 +489,10 @@ class Player:
     """Plays a queue of ready songs: voice on Skelly, band on the other speakers, moves and lights in time."""
 
     def __init__(self, svc, library: Library, outputs: Callable[[bool], Awaitable[tuple[str | None, str | None]]],
-                 cfg: Callable[[], dict], simulate: bool = False) -> None:
+                 cfg: Callable[[], dict], simulate: bool = False,
+                 busy: Callable[[bool], None] | None = None) -> None:
         self.svc = svc
+        self.busy = busy or (lambda _: None)  # told when singing starts and stops
         self.lib = library
         self.outputs = outputs  # (want extra speakers) -> (Skelly's sink, extra speakers' sink)
         self.cfg = cfg
@@ -532,6 +563,7 @@ class Player:
         return self.snapshot()
 
     async def _run(self) -> None:
+        self.busy(True)
         try:
             while self.state.playing:
                 q = self.state.queue
@@ -564,6 +596,7 @@ class Player:
             self._publish(error=_friendly(exc))
         finally:
             self._publish(playing=False, paused=False, position=0.0)
+            self.busy(False)
 
     async def _play_song(self, song: dict) -> None:
         cfg = self.cfg()
