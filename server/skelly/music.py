@@ -51,7 +51,7 @@ DEFAULTS = {
     "dance": True,  # move to the beat
     "lights": True,  # lights follow the music
     "palette": "",  # beats.PALETTES key, "" = a different one per song
-    "skelly_band": 30,  # % of the band mixed into Skelly's own speaker (0 = voice only: cleanest mouth)
+    "skelly_band": 100,  # % of the band on Skelly's speaker when it's the only one (100 = the song as recorded)
     "speakers": True,  # also play on the extra speakers from Settings > Sound
     "speakers_voice": False,  # the extra speakers get the voice too, not just the band
     "voice_level": 100,  # % volume of the voice on Skelly
@@ -60,10 +60,19 @@ DEFAULTS = {
     "speakers_offset_ms": 0,  # extra speakers later (+) or earlier (-) than Skelly
     "gap_s": 2.0,  # pause between songs
 }
+LEVELS = ("voice_level", "skelly_band", "speakers_level")
+MIX_VERSION = 2  # v2: levels start at the song's own voice/music balance
+
+
+def upgrade_config(raw: dict) -> dict:
+    """Saved settings from before v2 had the music turned down under the voice: start from the real song."""
+    if raw and raw.get("mix_version") != MIX_VERSION:
+        raw = {**raw, **{k: DEFAULTS[k] for k in LEVELS}, "mix_version": MIX_VERSION}
+    return raw
 
 
 def config(raw: dict | None) -> dict:
-    cfg = {**DEFAULTS, **{k: v for k, v in (raw or {}).items() if k in DEFAULTS}}
+    cfg = {**DEFAULTS, **{k: v for k, v in (raw or {}).items() if k in DEFAULTS}, "mix_version": MIX_VERSION}
     for k in ("skelly_band", "voice_level", "speakers_level"):
         cfg[k] = int(max(0, min(150, float(cfg[k]))))
     for k in ("sync_ms", "speakers_offset_ms"):
@@ -197,8 +206,7 @@ def _level(mix: np.ndarray) -> float:
     return min(0.12 / rms, 0.99 / peak, 4.0)
 
 
-VOICE_TARGET = 0.25  # RMS of the singing on Skelly's speaker (loud, like his conversation voice)
-BAND_TARGET = 0.22  # RMS of the band on the other speakers
+MIX_TARGET = 0.25  # RMS of the whole song (voice + band) when played: loud, like his conversation voice
 MAX_GAIN = 10.0
 
 
@@ -213,15 +221,17 @@ def _active_rms(x: np.ndarray, rate: int) -> float:
     return float(np.sqrt((loud ** 2).mean())) if len(loud) else 0.0
 
 
-async def _gains(folder: Path) -> dict:
-    """How much to turn the voice and the band up when playing, so every song is good and loud."""
-    out = {}
-    for name, target in (("voice", VOICE_TARGET), ("band", BAND_TARGET)):
+async def _gain(folder: Path) -> float:
+    """How much to turn the song up when playing. One gain for the voice and the band alike, so
+    they keep the balance they have in the real song; the sliders adjust from there."""
+    parts = []
+    for name in ("voice", "band"):
         raw = await _run("ffmpeg", "-v", "error", "-i", str(folder / f"{name}.ogg"), "-f", "f32le", "-ac", "1",
                          "-ar", "8000", "-")
-        rms = _active_rms(np.frombuffer(raw[: len(raw) // 4 * 4], np.float32), 8000)
-        out[name] = round(min(MAX_GAIN, target / rms), 2) if rms > 1e-4 else 1.0
-    return out
+        parts.append(np.frombuffer(raw[: len(raw) // 4 * 4], np.float32))
+    n = min(len(p) for p in parts)
+    rms = _active_rms(parts[0][:n] + parts[1][:n], 8000)
+    return round(min(MAX_GAIN, MIX_TARGET / rms), 2) if rms > 1e-4 else 1.0
 
 
 def _limit(x: np.ndarray) -> np.ndarray:
@@ -602,11 +612,11 @@ class Player:
         cfg = self.cfg()
         folder = self.lib.folder(song["id"])
         analysis = json.loads((folder / "analysis.json").read_text())
-        gains = song.get("gains")
-        if not gains:  # worked out once per song, then remembered
-            gains = await _gains(folder)
+        gain = song.get("gain")
+        if not gain:  # worked out once per song, then remembered
+            gain = await _gain(folder)
             try:
-                self.lib.update(song["id"], gains=gains)
+                self.lib.update(song["id"], gain=gain)
             except KeyError:
                 pass
         profile = self.svc.profile.to_dict()
@@ -645,9 +655,10 @@ class Player:
                 if time.monotonic() - last_cfg > 0.25:  # sliders moved mid-song apply straight away
                     last_cfg = time.monotonic()
                     cfg = self.cfg()
-                    gain_v = cfg["voice_level"] / 100 * gains["voice"]
-                    gain_b_skelly = cfg["skelly_band"] / 100 * gains["band"]
-                    gain_spk = cfg["speakers_level"] / 100 * gains["band"]
+                    gain_v = cfg["voice_level"] / 100 * gain
+                    # With other speakers playing the band, Skelly's speaker keeps to the voice (cleanest mouth).
+                    gain_b_skelly = 0.0 if band_out.enabled else cfg["skelly_band"] / 100 * gain
+                    gain_spk = cfg["speakers_level"] / 100 * gain
                     clock["lead"] += (cfg["sync_ms"] - live["sync_ms"]) / 1000
                     live["sync_ms"] = cfg["sync_ms"]
                     # A new "other speakers" offset: hold back whichever stream should now be later,
@@ -677,7 +688,7 @@ class Player:
                 b = np.pad(b, ((0, m - len(b)), (0, 0)))
                 await voice_out.write(v * gain_v + b.mean(axis=1) * gain_b_skelly)
                 if band_out.enabled:
-                    spk = b + (v[:, None] * (gains["voice"] / gains["band"]) if cfg["speakers_voice"] else 0)
+                    spk = b + (v[:, None] if cfg["speakers_voice"] else 0)
                     await band_out.write((spk * gain_spk).reshape(-1))
                 written += m / RATE
                 now = time.monotonic()
