@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from . import beats, music, sources
+from . import autosync, beats, music, sources
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +60,29 @@ def register(app: FastAPI) -> None:
     async def music_state():
         return {"library": lib().public(), "player": app.state.music.snapshot(), "config": cfg(),
                 "palettes": sorted(beats.PALETTES)}
+
+    @app.post("/api/music/autosync")
+    async def music_autosync():
+        """Play a test sound on each speaker, hear it on Skelly's mic and set both timing sliders."""
+        player = app.state.music
+        if player.playing:
+            raise HTTPException(409, "Stop the music first, then run Auto sync")
+        svc = app.state.svc
+        current = cfg()
+        try:
+            voice_sink, band_sink = await player.outputs(current["speakers"])
+            mic = svc.settings.audio.get("mic") or None
+            voice_s = await autosync.measure(voice_sink, mic)
+            band_s = await autosync.measure(band_sink, mic) if band_sink else None
+        except LookupError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except (ConnectionError, RuntimeError, TimeoutError) as exc:
+            raise HTTPException(409, f"Auto sync couldn't run: {exc}") from exc
+        found = autosync.settings(voice_s, band_s, music.AUDIO_DELAY_S)
+        svc.settings.music = music.config({**svc.settings.music, **found})
+        svc.settings.save()
+        return {"config": svc.settings.music, "skelly_ms": round(voice_s * 1000),
+                "speakers_ms": None if band_s is None else round(band_s * 1000)}
 
     @app.put("/api/music/config")
     async def music_config(body: dict):

@@ -662,13 +662,14 @@ class Player:
             await voice_out.open()
             await band_out.open()
             n = int(RATE * CHUNK_S)
-            # Line the other speakers up with Skelly by starting one stream a little late.
+            await asyncio.sleep(0.4)  # give PipeWire a moment to hook the streams up before timing starts
+            # Line the other speakers up with Skelly by starting one stream a little late. This goes
+            # after the pause: silence queued before it would partly play away and shrink the offset.
             offset = cfg["speakers_offset_ms"] / 1000
             if offset > 0:
                 band_out.pad(offset)
             elif offset < 0:
                 voice_out.pad(-offset)
-            await asyncio.sleep(0.4)  # give PipeWire a moment to hook the streams up before timing starts
             lead = AUDIO_DELAY_S + cfg["sync_ms"] / 1000 + max(0.0, -offset)
             t0 = time.monotonic()
             written = 0.0
