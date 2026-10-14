@@ -112,7 +112,7 @@ mini PC and are deleted after a week. Saved recordings show the same bubbles.
 meters and volume caps. **Keep speakers awake** plays silence so Bluetooth speakers don't chime
 each time he starts talking. When the mini PC has two Bluetooth radios, extra speakers pair on the
 one Skelly isn't using, so music on them doesn't skip. Skelly's own speaker never shows up in the
-scan, and an extra speaker that's off or out of range never stops Skelly's voice.
+scan, and an extra speaker that's off, out of range or reconnecting never stops Skelly's voice.
 <br clear="right">
 
 ## Seeing visitors (Vision)
