@@ -39,6 +39,7 @@ from .settings import data_dir
 log = logging.getLogger(__name__)
 
 RATE = 48000
+MAX_SHIFT_MS = 3000  # timing sliders reach 3 s either way (Bluetooth speakers can lag a lot)
 CHUNK_S = 0.05
 # From handing audio to PipeWire to hearing it from Skelly: our 100 ms pacat buffer plus his
 # Bluetooth (A2DP) delay. The owner fine-tunes the rest with the "Moves timing" slider.
@@ -80,7 +81,7 @@ def config(raw: dict | None) -> dict:
     for k in ("skelly_band", "voice_level", "speakers_level"):
         cfg[k] = int(max(0, min(150, float(cfg[k]))))
     for k in ("sync_ms", "speakers_offset_ms"):
-        cfg[k] = int(max(-1500, min(1500, float(cfg[k]))))
+        cfg[k] = int(max(-MAX_SHIFT_MS, min(MAX_SHIFT_MS, float(cfg[k]))))
     cfg["gap_s"] = max(0.0, min(30.0, float(cfg["gap_s"])))
     if cfg["voice_side"] not in VOICE_SIDES:
         cfg["voice_side"] = "mix"
@@ -499,6 +500,14 @@ class _Out:
             self.proc = None
             raise ConnectionError("A speaker went away during the song") from None
 
+    def pad(self, seconds: float) -> None:
+        """Queue silence without waiting for it to play, so the other stream keeps flowing.
+
+        Waiting here held the other speaker back too, which ate most of a big offset.
+        """
+        if self.proc and self.proc.stdin and seconds > 0:
+            self.proc.stdin.write(bytes(int(RATE * seconds) * self.channels * 2))
+
     async def close(self) -> None:
         from .audio_io import _stop
 
@@ -653,13 +662,14 @@ class Player:
             await voice_out.open()
             await band_out.open()
             n = int(RATE * CHUNK_S)
-            # Line the other speakers up with Skelly by starting one stream a little late.
+            await asyncio.sleep(0.4)  # give PipeWire a moment to hook the streams up before timing starts
+            # Line the other speakers up with Skelly by starting one stream a little late. This goes
+            # after the pause: silence queued before it would partly play away and shrink the offset.
             offset = cfg["speakers_offset_ms"] / 1000
             if offset > 0:
-                await band_out.write(np.zeros(int(RATE * offset) * 2, np.float32))
+                band_out.pad(offset)
             elif offset < 0:
-                await voice_out.write(np.zeros(int(RATE * -offset) * 2, np.float32))
-            await asyncio.sleep(0.4)  # give PipeWire a moment to hook the streams up before timing starts
+                voice_out.pad(-offset)
             lead = AUDIO_DELAY_S + cfg["sync_ms"] / 1000 + max(0.0, -offset)
             t0 = time.monotonic()
             written = 0.0
@@ -685,9 +695,9 @@ class Player:
                     if band_out.enabled and step:
                         live["offset_ms"] += step
                         if step > 0:
-                            await band_out.write(np.zeros(int(RATE * step / 1000) * 2, np.float32))
+                            band_out.pad(step / 1000)
                         else:
-                            await voice_out.write(np.zeros(int(RATE * -step / 1000) * 2, np.float32))
+                            voice_out.pad(-step / 1000)
                 if not self._resume.is_set():
                     await self._halt_body()
                     await self._resume.wait()

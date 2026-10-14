@@ -73,10 +73,12 @@ on the Conversation page stops the music.
 
 ### Timing
 
-Every Bluetooth speaker has its own delay, so two sliders under **Timing** let you line things up:
+Every Bluetooth speaker has its own delay. The easy way: stop the music, keep the room quiet and press
+**Auto sync** under **Timing**. Skelly plays a few chirps on his speaker and on your other speakers, listens
+with his mic, and sets both sliders below for you. The setting covers every song. To fine-tune by hand:
 
 - **Moves and lights:** if he dances behind the beat, slide left; ahead of it, slide right.
-- **Other speakers:** if the band sounds behind Skelly's voice, slide left; ahead of it, slide right.
+- **Other speakers:** if the band sounds behind Skelly's voice, slide left; ahead of it, slide right. Both sliders reach 3 seconds either way; a speaker on a different Bluetooth radio can lag by a second or more.
 
 If the music on your other speakers skips, check the mini PC has a second Bluetooth radio (most have
 one built in). Extra speakers pair on the radio Skelly isn't using. A speaker added before v0.7.8
