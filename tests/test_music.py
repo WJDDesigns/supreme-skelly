@@ -167,7 +167,8 @@ def test_library_and_playlists(tmp_path):
 
 def test_config_is_clamped():
     cfg = music.config({"skelly_band": 900, "sync_ms": -9999, "palette": "nope", "junk": 1})
-    assert cfg["skelly_band"] == 150 and cfg["sync_ms"] == -1500 and cfg["palette"] == "" and "junk" not in cfg
+    assert cfg["skelly_band"] == 150 and cfg["sync_ms"] == -music.MAX_SHIFT_MS == -3000
+    assert cfg["palette"] == "" and "junk" not in cfg
 
 
 @needs_ffmpeg

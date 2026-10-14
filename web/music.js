@@ -253,6 +253,16 @@ export function initMusic({ $, el, api, run, toast }) {
   $("#mu-reset-mix").addEventListener("click", () => run(null, () =>
     api("/music/config", { voice_level: 100, skelly_band: 100, speakers_level: 100 }, "PUT").then(renderConfig)));
 
+  $("#mu-autosync").addEventListener("click", (e) => {
+    const note = $("#mu-autosync-note");
+    note.textContent = "Listening... (about 10 seconds)";
+    return run(e.currentTarget, () => api("/music/autosync", {}).then((r) => {
+      renderConfig(r.config);
+      note.textContent = `Done. Skelly's speaker plays ${r.skelly_ms} ms late` +
+        (r.speakers_ms == null ? "." : `, your other speakers ${r.speakers_ms} ms late. Both sliders are set.`);
+    }).catch((err) => { note.textContent = err.message; throw err; }));
+  });
+
   load().catch((e) => toast(e.message, true));
   return { renderPlayer, renderLibrary };
 }
