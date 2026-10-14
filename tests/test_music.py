@@ -230,3 +230,28 @@ def test_quiet_songs_are_turned_up_without_clipping():
     out = music._limit(loud)
     assert np.abs(out).max() <= 1.0 and np.allclose(out[np.abs(loud) <= 0.8], loud[np.abs(loud) <= 0.8])
     assert np.all(np.diff(out) >= 0)
+
+
+async def test_songs_wait_while_skelly_sings(tmp_path, monkeypatch):
+    """Getting songs ready pauses while one plays, so playback has the whole mini PC and doesn't skip."""
+    lib = music.Library(tmp_path / "music")
+    prep = music.Preparer(lib, lambda: None, models=tmp_path / "models")
+    started: list[str] = []
+
+    async def quick_prepare(song):
+        started.append(song["title"])
+        lib.update(song["id"], status="ready")
+
+    monkeypatch.setattr(prep, "prepare", quick_prepare)
+    prep.hold()
+    lib.add(sources.Track("Later"))
+    prep.start()
+    await asyncio.sleep(0.1)
+    assert started == []
+    prep.release()
+    for _ in range(50):
+        if started:
+            break
+        await asyncio.sleep(0.01)
+    assert started == ["Later"]
+    await prep.stop()
