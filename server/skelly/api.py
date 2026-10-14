@@ -138,6 +138,7 @@ class AudioBody(BaseModel):
     skelly: bool | None = None
     extra: list[str] | None = None
     keep_awake: bool | None = None
+    extra_in_chat: bool | None = None
 
 
 class AddressBody(BaseModel):
@@ -424,7 +425,9 @@ def create_app(
             sinks.append(await skelly_sink())
         if os.environ.get("SKELLY_SIMULATE") == "1":
             return None
-        live = [s for s in sinks if s] + [s for s in await extra_sinks() if s not in sinks]
+        # The extra speakers are for music; chats stay on Skelly's own speaker unless asked
+        extras = await extra_sinks() if audio.get("extra_in_chat", False) or not sinks else []
+        live = [s for s in sinks if s] + [s for s in extras if s not in sinks]
         # Only speakers that are really there: a combined output with a missing speaker plays nothing
         have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
         missing = [s for s in live if s not in have]
@@ -586,9 +589,18 @@ def create_app(
         return {"sink": sink}
 
     async def keep_awake_watch() -> None:
-        """Silence to the Bluetooth speakers so they don't chime each time Skelly starts talking."""
+        """Silence to the Bluetooth speakers so they don't chime each time Skelly starts talking.
+
+        It also reconnects the music speakers about once a minute if they drop, so they're ready
+        when a song starts instead of being found missing then.
+        """
+        rounds = 0
         while True:
+            rounds += 1
             try:
+                if rounds % 4 == 0 and svc().settings.audio.get("extra") and svc().link.connected \
+                        and os.environ.get("SKELLY_SIMULATE") != "1":
+                    await extra_sinks()
                 sinks: set[str] = set()
                 if svc().settings.audio.get("keep_awake", True) and os.environ.get("SKELLY_SIMULATE") != "1":
                     have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}

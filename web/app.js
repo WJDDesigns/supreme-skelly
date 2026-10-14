@@ -1293,6 +1293,7 @@ function speakerRow({ label, meta, sink, on, onToggle, connected, extraBtn, idle
     sink && connected ? volSlider(sink) : "", end);
 }
 $("#keep-awake").addEventListener("change", (e) => saveAudio({ keep_awake: e.target.checked }));
+$("#extra-in-chat").addEventListener("change", (e) => saveAudio({ extra_in_chat: e.target.checked }));
 function renderAudio() {
   const { devices, config } = audio;
   const mics = devices.mics;
@@ -1300,6 +1301,7 @@ function renderAudio() {
     ...mics.map((m) => el("option", { value: m.name, textContent: m.label })));
   $("#mic-pick").value = config.mic || "";
   $("#keep-awake").checked = config.keep_awake ?? true;
+  $("#extra-in-chat").checked = !!config.extra_in_chat;
   renderGains();
   const have = new Set(devices.speakers.map((d) => d.name));
   const skellySink = audio.skelly_sink;

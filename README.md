@@ -113,6 +113,8 @@ meters and volume caps. **Keep speakers awake** plays silence so Bluetooth speak
 each time he starts talking. When the mini PC has two Bluetooth radios, extra speakers pair on the
 one Skelly isn't using, so music on them doesn't skip. Skelly's own speaker never shows up in the
 scan, and an extra speaker that's off, out of range or reconnecting never stops Skelly's voice.
+The extra speakers are kept for music: chats use Skelly's own speaker unless **Extra speakers when he
+talks** is on, and the mini PC reconnects them about once a minute if they drop.
 <br clear="right">
 
 ## Seeing visitors (Vision)
