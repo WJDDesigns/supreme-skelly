@@ -314,9 +314,10 @@
             <label class="field-row">Light colours<select data-mcfg="palette" id="mu-palette"></select></label>
             <label class="slider">Voice volume <output id="mu-voice-out">100%</output>
               <input type="range" min="0" max="150" step="5" data-mcfg="voice_level"></label>
-            <label class="slider">Band on Skelly's speaker <output id="mu-band-out">30%</output>
-              <input type="range" min="0" max="100" step="5" data-mcfg="skelly_band"></label>
-            <p class="muted small-note">0% gives the cleanest singing: his mouth only moves to the words. Turn it up if Skelly is your only speaker; his jaw will then move a little to the music too.</p>
+            <label class="slider">Music on Skelly's speaker <output id="mu-band-out">100%</output>
+              <input type="range" min="0" max="150" step="5" data-mcfg="skelly_band"></label>
+            <p class="muted small-note">When Skelly is your only speaker. 100% is the song as recorded. Lower it and his mouth moves only to the words, not the drums. With other speakers on, the music plays there and Skelly sings.</p>
+            <button id="mu-reset-mix" class="btn outline" type="button">Back to the song's own mix</button>
             <label class="switch-row"><span><strong>Band on my other speakers</strong>
               <span class="muted">Plays the music on the extra speakers from Settings &gt; Sound while Skelly sings.</span></span>
               <input type="checkbox" data-mcfg="speakers" role="switch"></label>

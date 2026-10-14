@@ -17,8 +17,8 @@ mini PC itself, no cloud). While the song plays:
 
 - **Skelly's speaker gets the voice.** His mouth opens on the words and closes when the singer stops.
 - **Your other speakers get the band.** These are the extra speakers you added in
-  **Settings > Sound**. With no other speaker, a little of the band can go to Skelly's
-  speaker as well (see "Band on Skelly's speaker" below).
+  **Settings > Sound**. If Skelly is your only speaker, he plays the whole song, with the
+  voice and music balanced as in the original recording (see "Music on Skelly's speaker" below).
 - **The beat drives the dance and the lights.** Every beat of the song is found ahead of
   time, so moves and colour changes are sent to land on the beat you hear. Bluetooth
   speakers play about a third of a second late, and that's allowed for.
@@ -67,7 +67,7 @@ on the Conversation page stops the music.
 | **Lights follow the music** | Colours change on the beat (every bar when it's quiet, every beat when it's loud) and brightness follows the loudness. His own look comes back after the song. |
 | **Light colours** | Halloween, blood red, ghostly blues, party, or a different set for each song |
 | **Voice volume** | How loud the singing is on Skelly. Every song is already evened out and turned up loud, so 100% is a good start |
-| **Band on Skelly's speaker** | 0% gives the cleanest singing. If Skelly is your only speaker, turn it up so you hear the music; his jaw will then move a little to the music too. |
+| **Music on Skelly's speaker** | When Skelly is your only speaker: 100% is the song as recorded. Lower it for a cleaner mouth that moves only to the words. **Back to the song's own mix** puts every level back to the original balance. |
 | **Band on my other speakers** / **Singing on my other speakers too** | Where the band (and, optionally, the voice) plays |
 
 ### Timing
