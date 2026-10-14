@@ -297,8 +297,10 @@ def create_app(
         app.state.preparer = music.Preparer(
             app.state.library, lambda: svc.bus.publish("music_library", app.state.library.public()))
         app.state.preparer.start()
+        prep = app.state.preparer
         app.state.music = music.Player(svc, app.state.library, music_outputs, lambda: music.config(svc.settings.music),
-                                       simulate=os.environ.get("SKELLY_SIMULATE") == "1")
+                                       simulate=os.environ.get("SKELLY_SIMULATE") == "1",
+                                       busy=lambda on: prep.hold() if on else prep.release())
         if VisionConfig.from_dict(svc.settings.vision).start_on_boot:
             try:
                 await app.state.vision.start()
