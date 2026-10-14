@@ -248,18 +248,17 @@ async def _pactl(*args: str) -> str:
 async def output_for(sinks: list[str]) -> str | None:
     """One sink to play on: the only one, or a combined sink that plays on all of them at once.
 
-    PipeWire's combine-sink keeps the speakers in step and resamples for each one.
+    PipeWire's combine-sink keeps the speakers in step and resamples for each one. It's built fresh
+    every time: when a Bluetooth speaker drops and comes back, an older combined sink stays linked to
+    the speaker that went away and plays into nothing, which left Skelly talking without sound.
     """
     sinks = list(dict.fromkeys(s for s in sinks if s))
     if not sinks:
         return None
     if len(sinks) == 1:
         return sinks[0]
-    modules = await _pactl_json("list", "modules")
-    for m in modules:
+    for m in await _pactl_json("list", "modules"):
         if m.get("name") == "module-combine-sink" and f"sink_name={COMBINED}" in (m.get("argument") or ""):
-            if f"slaves={','.join(sinks)}" in m["argument"]:
-                return COMBINED
             await _pactl("unload-module", str(m["index"]))
     await _pactl("load-module", "module-combine-sink", f"sink_name={COMBINED}", f"slaves={','.join(sinks)}",
                  "sink_properties=device.description='Skelly+speakers'")
