@@ -80,6 +80,9 @@ with his mic, and sets both sliders below for you. The setting covers every song
 - **Moves and lights:** if he dances behind the beat, slide left; ahead of it, slide right.
 - **Other speakers:** if the band sounds behind Skelly's voice, slide left; ahead of it, slide right. Both sliders reach 3 seconds either way; a speaker on a different Bluetooth radio can lag by a second or more.
 
+Your other speakers only play music. When the song stops, Skelly goes back to chatting on his own
+speaker, and the mini PC keeps the other speakers connected (it reconnects them about once a minute).
+
 If the music on your other speakers skips, check the mini PC has a second Bluetooth radio (most have
 one built in). Extra speakers pair on the radio Skelly isn't using. A speaker added before v0.7.8
 needs removing and adding again in **Settings > Sound** to move over.
