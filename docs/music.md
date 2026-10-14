@@ -68,6 +68,7 @@ on the Conversation page stops the music.
 | **Light colours** | Halloween, blood red, ghostly blues, party, or a different set for each song |
 | **Voice volume** | How loud the singing is on Skelly. Every song is already evened out and turned up loud, so 100% is a good start |
 | **Music on Skelly's speaker** | When Skelly is your only speaker: 100% is the song as recorded. Lower it for a cleaner mouth that moves only to the words. **Back to the song's own mix** puts every level back to the original balance. |
+| **Voice and music on Skelly** | Together, or the voice on one side and the music on the other. If his mouth moves to the music, try each side while a song plays: if his jaw listens to one side only, one of them makes it follow just the words. |
 | **Band on my other speakers** / **Singing on my other speakers too** | Where the band (and, optionally, the voice) plays |
 
 ### Timing

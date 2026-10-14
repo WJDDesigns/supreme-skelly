@@ -262,3 +262,11 @@ def test_old_settings_start_from_the_real_song():
     assert (new["voice_level"], new["skelly_band"], new["speakers_level"]) == (100, 100, 100)
     assert new["sync_ms"] == 120  # timing the user tuned is kept
     assert music.upgrade_config(music.config(new)) == music.config(new)  # only once
+
+
+def test_voice_can_have_a_side_of_its_own():
+    v, m = np.array([1.0, 2.0]), np.array([10.0, 20.0])
+    assert music._skelly_mix(v, m, "mix").tolist() == [11, 11, 22, 22]
+    assert music._skelly_mix(v, m, "left").tolist() == [1, 10, 2, 20]
+    assert music._skelly_mix(v, m, "right").tolist() == [10, 1, 20, 2]
+    assert music.config({"voice_side": "up"})["voice_side"] == "mix"
