@@ -317,6 +317,11 @@
             <label class="slider">Music on Skelly's speaker <output id="mu-band-out">100%</output>
               <input type="range" min="0" max="150" step="5" data-mcfg="skelly_band"></label>
             <p class="muted small-note">When Skelly is your only speaker. 100% is the song as recorded. Lower it and his mouth moves only to the words, not the drums. With other speakers on, the music plays there and Skelly sings.</p>
+            <label class="field-row">Voice and music on Skelly<select data-mcfg="voice_side">
+              <option value="mix">Together</option>
+              <option value="left">Voice left, music right</option>
+              <option value="right">Voice right, music left</option></select></label>
+            <p class="muted small-note">If his mouth moves to the music, try the other two while a song plays. If his jaw listens to one side only, one of them makes it follow just the words.</p>
             <button id="mu-reset-mix" class="btn outline" type="button">Back to the song's own mix</button>
             <label class="switch-row"><span><strong>Band on my other speakers</strong>
               <span class="muted">Plays the music on the extra speakers from Settings &gt; Sound while Skelly sings.</span></span>

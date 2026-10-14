@@ -59,7 +59,11 @@ DEFAULTS = {
     "sync_ms": 0,  # moves and lights earlier (-) or later (+) than the estimated audio delay
     "speakers_offset_ms": 0,  # extra speakers later (+) or earlier (-) than Skelly
     "gap_s": 2.0,  # pause between songs
+    # How the voice and music share Skelly's speaker: "mix" = both on both sides; "left"/"right" = the
+    # voice alone on that side and the music on the other, for a jaw that listens to one side only.
+    "voice_side": "mix",
 }
+VOICE_SIDES = ("mix", "left", "right")
 LEVELS = ("voice_level", "skelly_band", "speakers_level")
 MIX_VERSION = 2  # v2: levels start at the song's own voice/music balance
 
@@ -78,6 +82,8 @@ def config(raw: dict | None) -> dict:
     for k in ("sync_ms", "speakers_offset_ms"):
         cfg[k] = int(max(-1500, min(1500, float(cfg[k]))))
     cfg["gap_s"] = max(0.0, min(30.0, float(cfg["gap_s"])))
+    if cfg["voice_side"] not in VOICE_SIDES:
+        cfg["voice_side"] = "mix"
     if cfg["palette"] not in beats.PALETTES:
         cfg["palette"] = ""
     return cfg
@@ -232,6 +238,17 @@ async def _gain(folder: Path) -> float:
     n = min(len(p) for p in parts)
     rms = _active_rms(parts[0][:n] + parts[1][:n], 8000)
     return round(min(MAX_GAIN, MIX_TARGET / rms), 2) if rms > 1e-4 else 1.0
+
+
+def _skelly_mix(voice: np.ndarray, music: np.ndarray, side: str) -> np.ndarray:
+    """Interleaved stereo for Skelly's speaker: voice and music together, or each on its own side."""
+    if side == "left":
+        left, right = voice, music
+    elif side == "right":
+        left, right = music, voice
+    else:
+        left = right = voice + music
+    return np.stack([left, right], axis=1).reshape(-1)
 
 
 def _limit(x: np.ndarray) -> np.ndarray:
@@ -627,7 +644,7 @@ class Player:
         log.info("singing %s (%d moves/lights)", song["title"], len(events))
 
         skelly_sink, band_sink = (None, None) if self.simulate else await self.outputs(cfg["speakers"])
-        voice_out = _Out(skelly_sink, 1, not self.simulate)
+        voice_out = _Out(skelly_sink, 2, not self.simulate)
         band_out = _Out(band_sink, 2, not self.simulate and band_sink is not None)
         voice_dec = await _decoder(folder / "voice.ogg", 1)
         band_dec = await _decoder(folder / "band.ogg", 2)
@@ -641,7 +658,7 @@ class Player:
             if offset > 0:
                 await band_out.write(np.zeros(int(RATE * offset) * 2, np.float32))
             elif offset < 0:
-                await voice_out.write(np.zeros(int(RATE * -offset), np.float32))
+                await voice_out.write(np.zeros(int(RATE * -offset) * 2, np.float32))
             await asyncio.sleep(0.4)  # give PipeWire a moment to hook the streams up before timing starts
             lead = AUDIO_DELAY_S + cfg["sync_ms"] / 1000 + max(0.0, -offset)
             t0 = time.monotonic()
@@ -670,7 +687,7 @@ class Player:
                         if step > 0:
                             await band_out.write(np.zeros(int(RATE * step / 1000) * 2, np.float32))
                         else:
-                            await voice_out.write(np.zeros(int(RATE * -step / 1000), np.float32))
+                            await voice_out.write(np.zeros(int(RATE * -step / 1000) * 2, np.float32))
                 if not self._resume.is_set():
                     await self._halt_body()
                     await self._resume.wait()
@@ -686,7 +703,7 @@ class Player:
                 m = max(len(v), len(b))
                 v = np.pad(v, (0, m - len(v)))
                 b = np.pad(b, ((0, m - len(b)), (0, 0)))
-                await voice_out.write(v * gain_v + b.mean(axis=1) * gain_b_skelly)
+                await voice_out.write(_skelly_mix(v * gain_v, b.mean(axis=1) * gain_b_skelly, cfg["voice_side"]))
                 if band_out.enabled:
                     spk = b + (v[:, None] if cfg["speakers_voice"] else 0)
                     await band_out.write((spk * gain_spk).reshape(-1))
