@@ -110,7 +110,8 @@ mini PC and are deleted after a week. Saved recordings show the same bubbles.
 
 **Settings > Sound** picks the mic, Skelly's speaker and any extra Bluetooth speakers, with level
 meters and volume caps. **Keep speakers awake** plays silence so Bluetooth speakers don't chime
-each time he starts talking.
+each time he starts talking. When the mini PC has two Bluetooth radios, extra speakers pair on the
+one Skelly isn't using, so music on them doesn't skip.
 <br clear="right">
 
 ## Seeing visitors (Vision)
