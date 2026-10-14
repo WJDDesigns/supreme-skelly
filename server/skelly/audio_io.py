@@ -257,9 +257,11 @@ async def output_for(sinks: list[str]) -> str | None:
         return None
     if len(sinks) == 1:
         return sinks[0]
-    for m in await _pactl_json("list", "modules"):
-        if m.get("name") == "module-combine-sink" and f"sink_name={COMBINED}" in (m.get("argument") or ""):
-            await _pactl("unload-module", str(m["index"]))
+    # The short listing always has the module number (the JSON one leaves it out on some versions)
+    for line in (await _pactl("list", "short", "modules")).splitlines():
+        index, _, rest = line.partition("\t")
+        if "module-combine-sink" in rest and f"sink_name={COMBINED}" in rest and index.strip().isdigit():
+            await _pactl("unload-module", index.strip())
     await _pactl("load-module", "module-combine-sink", f"sink_name={COMBINED}", f"slaves={','.join(sinks)}",
                  "sink_properties=device.description='Skelly+speakers'")
     for _ in range(20):
