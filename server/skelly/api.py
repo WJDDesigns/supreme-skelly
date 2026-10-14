@@ -424,7 +424,13 @@ def create_app(
             sinks.append(await skelly_sink())
         if os.environ.get("SKELLY_SIMULATE") == "1":
             return None
-        live = [s for s in sinks if s] + await extra_sinks()
+        live = [s for s in sinks if s] + [s for s in await extra_sinks() if s not in sinks]
+        # Only speakers that are really there: a combined output with a missing speaker plays nothing
+        have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
+        missing = [s for s in live if s not in have]
+        if missing:
+            log.warning("speakers not available for Skelly's voice: %s", ", ".join(missing))
+        live = [s for s in live if s in have]
         if not live:
             raise ConnectionError("None of the chosen speakers are connected")
         await set_saved_volumes(live)
@@ -435,18 +441,20 @@ def create_app(
         audio = svc().settings.audio
         sinks: list[str] = []
         have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
+        own = audio_io.skelly_sink_name(svc().settings.live_speaker)
         for sink in audio.get("extra", []):
+            if sink == own:
+                continue  # Skelly's own speaker is never an extra one
             if sink not in have and sink.startswith("bluez_output."):
                 mac = sink.split(".")[1].replace("_", ":")
+                # An extra speaker that's off or out of range must never cost Skelly his voice:
+                # no restarting the sound service for it (that drops Skelly's speaker too) and
+                # no waiting on it for long.
                 try:
-                    try:
-                        await speaker.connect_address(await speaker_adapter(), mac)
-                    except speaker.NoAudioProfile:
-                        await heal_audio(f"Bluetooth had no audio profile for {mac}")
-                        await speaker.connect_address(await speaker_adapter(), mac)
+                    await asyncio.wait_for(speaker.connect_address(await speaker_adapter(), mac), 15)
                     await asyncio.sleep(2)
                 except Exception as exc:
-                    log.info("extra speaker %s not connected: %s", mac, exc)
+                    log.info("extra speaker %s not connected: %r", mac, exc)
             sinks.append(sink)
         have = {d["name"] for d in (await audio_io.list_devices())["speakers"]}
         return [s for s in sinks if s and s in have]
@@ -506,12 +514,23 @@ def create_app(
     @app.post("/api/audio/scan")
     async def audio_scan():
         try:
-            return await speaker.scan_speakers(await speaker_adapter())
+            found = await speaker.scan_speakers(await speaker_adapter())
         except Exception as exc:
             raise HTTPException(502, f"Bluetooth scan failed: {exc}") from exc
+        return [d for d in found if not is_skelly_speaker(d.get("address"), d.get("name"))]
+
+    def is_skelly_speaker(address: str | None, name: str | None = None) -> bool:
+        """Skelly's own Live speaker: it belongs on his radio and can't also be an extra speaker."""
+        s = svc()
+        if address and s.settings.live_speaker and address.upper() == s.settings.live_speaker.upper():
+            return True
+        names = {*s.profile.live_audio_names, *([s.state.bt_name] if s.state.bt_name else [])}
+        return bool(name) and name in names
 
     @app.post("/api/audio/pair")
     async def audio_pair(body: AddressBody):
+        if is_skelly_speaker(body.address):
+            raise HTTPException(400, "That's Skelly's own speaker. He already uses it; pick a different speaker.")
         try:
             try:
                 info = await speaker.connect_address(await speaker_adapter(), body.address)
