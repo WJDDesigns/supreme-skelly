@@ -78,6 +78,10 @@ Every Bluetooth speaker has its own delay, so two sliders under **Timing** let y
 - **Moves and lights:** if he dances behind the beat, slide left; ahead of it, slide right.
 - **Other speakers:** if the band sounds behind Skelly's voice, slide left; ahead of it, slide right.
 
+If the music on your other speakers skips, check the mini PC has a second Bluetooth radio (most have
+one built in). Extra speakers pair on the radio Skelly isn't using. A speaker added before v0.7.8
+needs removing and adding again in **Settings > Sound** to move over.
+
 Small steps (20 to 50 ms) make a visible difference. Every slider changes the song that is playing straight away, so line things up while he sings. The settings are saved and used for every song.
 
 ## Under the hood

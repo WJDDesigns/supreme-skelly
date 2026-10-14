@@ -402,6 +402,20 @@ def create_app(
     def adapter_name() -> str:
         return getattr(svc().link, "adapter_in_use", None) or "hci0"
 
+    async def speaker_adapter() -> str:
+        """The radio for the extra speakers: a different one from Skelly's when the mini PC has two.
+
+        Skelly's radio already carries his controls and his own speaker; a second music stream on
+        the same radio made the music skip, so it goes on the other radio (usually the built-in one).
+        """
+        skelly = adapter_name()
+        try:
+            others = [a["name"] for a in await svc().adapters() if a["name"] != skelly and a.get("powered")]
+        except Exception as exc:
+            log.info("couldn't list Bluetooth radios: %s", exc)
+            others = []
+        return others[0] if others else skelly
+
     async def resolve_output() -> str | None:
         """Where Skelly's voice plays: his Live speaker and/or extra speakers, combined if several."""
         audio = svc().settings.audio
@@ -426,10 +440,10 @@ def create_app(
                 mac = sink.split(".")[1].replace("_", ":")
                 try:
                     try:
-                        await speaker.connect_address(adapter_name(), mac)
+                        await speaker.connect_address(await speaker_adapter(), mac)
                     except speaker.NoAudioProfile:
                         await heal_audio(f"Bluetooth had no audio profile for {mac}")
-                        await speaker.connect_address(adapter_name(), mac)
+                        await speaker.connect_address(await speaker_adapter(), mac)
                     await asyncio.sleep(2)
                 except Exception as exc:
                     log.info("extra speaker %s not connected: %s", mac, exc)
@@ -492,7 +506,7 @@ def create_app(
     @app.post("/api/audio/scan")
     async def audio_scan():
         try:
-            return await speaker.scan_speakers(adapter_name())
+            return await speaker.scan_speakers(await speaker_adapter())
         except Exception as exc:
             raise HTTPException(502, f"Bluetooth scan failed: {exc}") from exc
 
@@ -500,10 +514,10 @@ def create_app(
     async def audio_pair(body: AddressBody):
         try:
             try:
-                info = await speaker.connect_address(adapter_name(), body.address)
+                info = await speaker.connect_address(await speaker_adapter(), body.address)
             except speaker.NoAudioProfile:
                 await heal_audio(f"Bluetooth had no audio profile for {body.address}")
-                info = await speaker.connect_address(adapter_name(), body.address)
+                info = await speaker.connect_address(await speaker_adapter(), body.address)
         except Exception as exc:
             raise HTTPException(502, f"Couldn't pair: {exc}. Is the speaker in pairing mode?") from exc
         sink = audio_io.skelly_sink_name(info["address"])
@@ -519,10 +533,12 @@ def create_app(
         audio = svc().settings.audio
         svc().settings.audio = {**audio, "extra": [s for s in audio.get("extra", []) if s != sink]}
         svc().settings.save()
-        try:
-            await speaker.forget(adapter_name(), body.address)
-        except Exception as exc:
-            log.info("forget %s: %s", body.address, exc)
+        radios = {adapter_name(), await speaker_adapter()}  # it may have been paired on either
+        for radio in radios:
+            try:
+                await speaker.forget(radio, body.address)
+            except Exception as exc:
+                log.info("forget %s on %s: %s", body.address, radio, exc)
         return svc().settings.audio
 
     @app.post("/api/audio/volume")
