@@ -214,8 +214,7 @@ async def test_prepare_and_sing(tmp_path, monkeypatch):
     live_cfg["sync_ms"] = 1000
     await asyncio.sleep(1.2)
     assert player.state.position < before + 0.7
-    gains = lib.song(s["id"])["gains"]  # measured once, remembered, and turned up (the clicks are quiet)
-    assert gains["voice"] > 1 and gains["band"] > 1
+    assert lib.song(s["id"])["gain"] > 1  # measured once, remembered, and turned up (the clicks are quiet)
     await player.stop()
     assert not player.state.playing
     await svc.stop()
@@ -255,3 +254,11 @@ async def test_songs_wait_while_skelly_sings(tmp_path, monkeypatch):
         await asyncio.sleep(0.01)
     assert started == ["Later"]
     await prep.stop()
+
+
+def test_old_settings_start_from_the_real_song():
+    old = {"voice_level": 140, "skelly_band": 30, "speakers_level": 60, "sync_ms": 120}
+    new = music.upgrade_config(old)
+    assert (new["voice_level"], new["skelly_band"], new["speakers_level"]) == (100, 100, 100)
+    assert new["sync_ms"] == 120  # timing the user tuned is kept
+    assert music.upgrade_config(music.config(new)) == music.config(new)  # only once

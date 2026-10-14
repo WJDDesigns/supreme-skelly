@@ -293,6 +293,9 @@ def create_app(
         app.state.vision._on_passerby = on_passerby
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
                                   lambda: svc.settings.audio.get("mic_gain", 100) / 100)
+        if svc.settings.music and svc.settings.music.get("mix_version") != music.MIX_VERSION:
+            svc.settings.music = music.upgrade_config(svc.settings.music)
+            svc.settings.save()
         app.state.library = music.Library()
         app.state.preparer = music.Preparer(
             app.state.library, lambda: svc.bus.publish("music_library", app.state.library.public()))

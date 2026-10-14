@@ -250,6 +250,9 @@ export function initMusic({ $, el, api, run, toast }) {
     });
   });
 
+  $("#mu-reset-mix").addEventListener("click", () => run(null, () =>
+    api("/music/config", { voice_level: 100, skelly_band: 100, speakers_level: 100 }, "PUT").then(renderConfig)));
+
   load().catch((e) => toast(e.message, true));
   return { renderPlayer, renderLibrary };
 }
