@@ -27,6 +27,8 @@ log = logging.getLogger(__name__)
 
 THUMB_W, THUMB_H = 80, 45
 PASSERBY_GAP_S = 25  # after calling someone over, the next passer-by can be called this soon
+# Sightings that don't mean a camera saw anyone near Skelly
+NOBODY_THERE = ("Ignored", "Skipped: the AI look", "Mid-chat: nobody", "Heard someone")
 
 
 @dataclass
@@ -42,6 +44,7 @@ class VisionConfig:
     cooldown_s: int = 90  # minimum gap between visitor events
     faces: bool = False  # recognise faces and remember people who say their name
     call_over: bool = True  # call out to people walking past to come and chat
+    answer_voices: bool = True  # between chats, someone talking to Skelly starts one (see ears.py)
     # UniFi Protect: use its person/face detections on these cameras (sharper faces, no extra load)
     protect: bool = False
     protect_host: str = ""
@@ -121,6 +124,7 @@ class Vision:
         self._on_passerby = None  # set by the app: async (verdict, cfg) for people walking past
         self.source = "the live camera"  # which camera the visitor check is looking at, for the chat log
         self.sightings: deque = deque(maxlen=40)  # what the cameras saw lately and what Skelly did
+        self.last_person_at: float | None = None  # time.time() a camera last saw someone
         self.snaps = None  # set by the app: where sighting pictures are kept
         self.engine = FaceEngine()
         self.memory = FaceMemory()
@@ -449,6 +453,8 @@ class Vision:
                "people": int(v.get("people") or 0), "approaching": v.get("approaching"),
                "seen": str(v.get("description") or "")[:200]}
         self.sightings.append(row)
+        if not outcome.startswith(NOBODY_THERE):  # someone may be standing near Skelly
+            self.last_person_at = row["ts"]
         log.info("sighting on %s: %s", row["camera"], outcome)
         self.svc.bus.publish("sighting", row)
 

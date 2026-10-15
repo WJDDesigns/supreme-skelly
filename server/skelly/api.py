@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from . import (
     audio,
     audio_io,
+    ears,
     music,
     music_api,
     protect,
@@ -283,10 +284,12 @@ def create_app(
         app.state.keep_awake = audio_io.KeepAwake()
         awake_task = asyncio.create_task(keep_awake_watch())
         quiet_task = asyncio.create_task(quiet_watch())
+        app.state.ears_paused_until = 0.0
+        ears_task = asyncio.create_task(ears_watch())
         app.state.pending_name = None
         name_task = asyncio.create_task(pending_name_watch())
         app.state.conv.on_started = start_recording
-        app.state.conv.on_ended = stop_recording
+        app.state.conv.on_ended = chat_ended
         app.state.protect = protect.Protect(svc, app.state.vault,
                                             lambda: VisionConfig.from_dict(svc.settings.vision), on_protect_person)
         app.state.protect.start()
@@ -317,6 +320,7 @@ def create_app(
         fog_cam_task.cancel()
         name_task.cancel()
         quiet_task.cancel()
+        ears_task.cancel()
         await app.state.conv.stop()
         await app.state.recorder.stop()
         await app.state.vision.stop()
@@ -634,6 +638,69 @@ def create_app(
                 was = now
             except Exception as exc:
                 log.info("quiet hours check failed: %r", exc)
+
+    def ears_open() -> bool:
+        vcfg = VisionConfig.from_dict(svc().settings.vision)
+        conv, vision = app.state.conv, app.state.vision
+        # His own sounds playing would sound like someone talking
+        busy = conv.running or svc().state.playing is not None or app.state.playlist.status.running
+        return ears.should_listen(
+            enabled=vcfg.answer_voices and vcfg.auto_converse and os.environ.get("SKELLY_SIMULATE") != "1",
+            quiet=quiet(), chatting=busy,
+            now=time.time(), last_person_at=vision.last_person_at,
+            last_chat_end=conv.ended_at, paused_until=app.state.ears_paused_until)
+
+    async def ears_watch() -> None:
+        """Between chats, while people are about, someone talking to Skelly starts a chat."""
+        while True:
+            await asyncio.sleep(1)
+            try:
+                if ears_open() and await listen_for_voice() and ears_open():
+                    await on_voice()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.info("listening between chats failed: %r", exc)
+                await asyncio.sleep(10)
+
+    async def listen_for_voice() -> bool:
+        """Listen until someone talks (True) or the ears should close (False)."""
+        audio_cfg = svc().settings.audio
+        detector = ears.SpeechDetector()
+        async with audio_io.Mic(16000, audio_cfg.get("mic") or None, audio_cfg.get("mic_gain", 100) / 100) as mic:
+            checked = time.monotonic()
+            async for _ in mic:
+                if detector.feed(mic.level):
+                    log.info("heard someone talking between chats (mic %.3f)", mic.level)
+                    return True
+                if time.monotonic() - checked > 0.5:
+                    checked = time.monotonic()
+                    if not ears_open():
+                        return False
+        return False
+
+    async def on_voice() -> None:
+        """Someone near Skelly spoke while no chat was running: answer them."""
+        from .callouts import pardon
+
+        vision = app.state.vision
+        vision.sighting("Heard someone talking to Skelly: chatting", source="Skelly's mic")
+        vision.state.last_visitor_at = time.time()  # a camera seeing them now mustn't start a second chat
+        ctx = ("Someone standing right by you just spoke to you, but you didn't catch what they said. "
+               "Answer them warmly and invite them to say it again.")
+        try:
+            await app.state.conv.start(context=ctx, opening=pardon(svc().profile.character),
+                                       trigger="someone talked to Skelly (heard on his mic)",
+                                       picture=vision.frame)
+        except (MissingKey, ValueError) as exc:
+            log.info("chat on hearing someone not started: %s", exc)
+
+    async def chat_ended(transcript: list[dict]) -> None:
+        conv = app.state.conv
+        if conv.state.trigger and conv.state.trigger.startswith("someone talked") and not conv.state.answered:
+            # What the mic heard wasn't someone talking to him (wind, a car, the neighbours): rest the ears
+            app.state.ears_paused_until = time.time() + ears.UNANSWERED_PAUSE_S
+        await stop_recording(transcript)
 
     def costume_hint(costumes: list[str]) -> str:
         return (f" They're dressed as: {', '.join(costumes)}. Mention their costume in a fun, spooky way."
