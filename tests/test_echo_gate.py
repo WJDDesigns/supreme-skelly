@@ -51,6 +51,7 @@ def _frames(monkeypatch, levels, talk_frames, **cfg):
     conv = c.Conversation.__new__(c.Conversation)
     conv.svc = type("S", (), {"bus": Bus()})()
     conv.state = c.ConversationState()
+    conv._voice_at = conv._loudest = 0.0
 
     async def collect():
         return [f async for f in conv._mic_frames(ConversationConfig.from_dict(cfg), 8000, spk)]

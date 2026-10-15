@@ -200,3 +200,29 @@ def greeting(name: str | None = None, character: str = "skelly") -> str:
     _recent.append(line)
     del _recent[:-5]
     return line
+
+
+# Someone spoke to him while no chat was running: he heard a voice but not the words.
+PARDON = {
+    "skelly": [
+        "Oh! Did somebody say something? Sorry, my ears are just holes. Say that again!",
+        "Hello? I heard a voice! Come closer and say that again, my ears aren't what they used to be.",
+        "Was that you talking to me? Hi! Say it again, I missed it!",
+        "Oh hi! Sorry, I was miles away. What did you say?",
+        "Did I hear my name? Hello there! What was that?",
+    ],
+    "lily": [
+        "Oh! Did someone speak, dearie? Say that again, my old ears are full of cobwebs!",
+        "Hello? I heard a voice! Come closer and tell me again!",
+        "Was that you, dearie? Sorry, I was stirring my cauldron. What did you say?",
+    ],
+    "santa": [
+        "Ho ho! Did someone say something? Say it again for Santa!",
+        "Hello there! Sorry, the sleigh bells were ringing. What did you say?",
+        "Ho ho ho! Was that you talking to me? Tell me again!",
+    ],
+}
+
+
+def pardon(character: str = "skelly") -> str:
+    return random.choice(PARDON.get(character, PARDON["skelly"]))
