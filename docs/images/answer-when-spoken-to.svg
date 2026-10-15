@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="400" rx="18" fill="#111"/>
+  <text x="40" y="48" font-size="20" font-weight="700" fill="#f6f3ee">Kids walk up and talk to Skelly</text>
+  <text x="40" y="74" font-size="13" fill="#a9a29a">What each part of a visit looks like, left to right</text>
+
+  <!-- Before -->
+  <text x="40" y="125" font-size="14" font-weight="700" fill="#a9a29a">BEFORE</text>
+  <g font-size="12.5" fill="#f6f3ee">
+    <rect x="140" y="102" width="150" height="38" rx="10" fill="#2a1d10" stroke="#ff8c1a"/>
+    <text x="215" y="126" text-anchor="middle">"Well hello there!"</text>
+    <rect x="296" y="102" width="150" height="38" rx="10" fill="#1c1c1f" stroke="#333"/>
+    <text x="371" y="126" text-anchor="middle">15 s, nothing heard</text>
+    <rect x="452" y="102" width="200" height="38" rx="10" fill="#2a1414" stroke="#d24b4b"/>
+    <text x="552" y="126" text-anchor="middle">Chat over, resting 45 s</text>
+    <rect x="658" y="102" width="200" height="38" rx="10" fill="#2a1414" stroke="#d24b4b"/>
+    <text x="758" y="126" text-anchor="middle">"Skelly? Skelly!" ... silence</text>
+  </g>
+
+  <!-- After -->
+  <text x="40" y="215" font-size="14" font-weight="700" fill="#ff8c1a">NOW</text>
+  <g font-size="12.5" fill="#f6f3ee">
+    <rect x="140" y="192" width="150" height="38" rx="10" fill="#2a1d10" stroke="#ff8c1a"/>
+    <text x="215" y="216" text-anchor="middle">"Well hello there!"</text>
+    <rect x="296" y="192" width="150" height="38" rx="10" fill="#1c1c1f" stroke="#333"/>
+    <text x="371" y="216" text-anchor="middle">waits 30 s</text>
+    <rect x="452" y="192" width="200" height="38" rx="10" fill="#132a18" stroke="#4fbf6a"/>
+    <text x="552" y="216" text-anchor="middle">still listening on his mic</text>
+    <rect x="658" y="192" width="200" height="38" rx="10" fill="#2a1d10" stroke="#ff8c1a"/>
+    <text x="758" y="216" text-anchor="middle">"Oh! Did you say something?"</text>
+  </g>
+
+  <g font-size="13" fill="#d8d2ca">
+    <circle cx="52" cy="283" r="5" fill="#ff8c1a"/>
+    <text x="66" y="288">Voices at his mic keep a chat open: he only gives up when it's really quiet.</text>
+    <circle cx="52" cy="318" r="5" fill="#ff8c1a"/>
+    <text x="66" y="323">For two minutes after anyone is seen, he keeps listening between chats.</text>
+    <circle cx="52" cy="353" r="5" fill="#ff8c1a"/>
+    <text x="66" y="358">Talk to him then and he answers, even if he just said goodbye. Vision &gt; Answer when spoken to.</text>
+  </g>
+</svg>

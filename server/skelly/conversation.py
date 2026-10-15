@@ -31,6 +31,7 @@ import httpx
 
 from . import clock, usage
 from .audio_io import ECHO_DELAY_S, FRAME_MS, Mic, Speaker, rms
+from .ears import VOICE_LEVEL
 
 log = logging.getLogger(__name__)
 
@@ -149,8 +150,9 @@ class ConversationConfig:
     quiet_to: str = "16:00"
     idle_timeout_s: int = 45  # end the conversation after this long with nobody talking
     # A chat Skelly started on his own (someone seen on camera) ends this long after he stops
-    # talking if nobody has answered yet: whoever set it off walked on, or it was a false alarm.
-    no_answer_s: int = 15
+    # talking if nobody has answered or made a sound yet: whoever set it off walked on, or it
+    # was a false alarm. 15 s was too short for shy kids still walking up to him.
+    no_answer_s: int = 30
     max_minutes: int = 5  # hard stop, so a stuck or self-talking chat can't burn credits all night
     record: bool = False  # save each conversation as a video with sound
     keep_days: int = 30  # delete recordings older than this
@@ -162,7 +164,10 @@ class ConversationConfig:
     @classmethod
     def from_dict(cls, d: dict | None) -> ConversationConfig:
         known = {f for f in cls.__dataclass_fields__}
-        return cls(**{k: v for k, v in (d or {}).items() if k in known})
+        cfg = cls(**{k: v for k, v in (d or {}).items() if k in known})
+        if cfg.no_answer_s == OLD_NO_ANSWER_S:  # the old default, saved with the rest; not a choice
+            cfg.no_answer_s = cls.no_answer_s
+        return cfg
 
 
 @dataclass
@@ -176,6 +181,8 @@ class ConversationState:
     trigger: str | None = None  # why it started, e.g. "Front Door camera saw someone walk up"
     answered: bool = False  # a visitor has said something real
 
+
+OLD_NO_ANSWER_S = 15
 
 # Interrupting Skelly: the mic must beat his own echo, after a moment to learn how loud it is.
 INTERRUPT_MIN = 0.03
@@ -315,6 +322,9 @@ class Conversation:
         self._echo_gain = 1.0  # mic level per unit of played level; follows his real echo while he talks
         self._echo_delay = ECHO_DELAY_S  # measured live from how the mic tracks what was played
         self._eleven_out_at: float | None = None  # when ElevenLabs last said it's out of credits
+        self._voice_at = 0.0  # last time the open mic heard something as loud as someone talking
+        self._loudest = 0.0  # loudest the open mic has been this chat, for the logs
+        self.ended_at: float | None = None  # time.time() the last chat finished
 
     # -- public ---------------------------------------------------------------
 
@@ -478,6 +488,7 @@ class Conversation:
         speaker: Speaker | None = None
         mover: asyncio.Task | None = None
         self._last_heard = time.monotonic()
+        self._voice_at, self._loudest = 0.0, 0.0
         try:
             sink = cfg.speaker or await self._sink_for_skelly()
             self.output_sink = sink
@@ -522,6 +533,7 @@ class Conversation:
             self._set("idle")
         finally:
             self._nudges = None
+            self.ended_at = time.time()
             if self.state.started_at:  # conversation minutes are what the voice services bill
                 usage.add(f"conversation:{cfg.provider}", seconds=time.time() - self.state.started_at)
             if mover:
@@ -612,8 +624,11 @@ class Conversation:
             if speaker.speaking:
                 self._last_heard = time.monotonic()
             elif (self.state.trigger and not self.state.answered
-                  and time.monotonic() - self._last_heard > cfg.no_answer_s):
-                log.info("nobody answered within %ss (%s); ending", cfg.no_answer_s, self.state.trigger)
+                  and time.monotonic() - max(self._last_heard, self._voice_at) > cfg.no_answer_s):
+                # Someone talking that the speech-to-text hasn't made words of yet still counts
+                # as someone there, so only real quiet ends it this early.
+                log.info("nobody answered within %ss (%s; loudest the mic heard %.3f); ending",
+                         cfg.no_answer_s, self.state.trigger, self._loudest)
                 return
             elif time.monotonic() - self._last_heard > cfg.idle_timeout_s:
                 log.info("conversation idle for %ss; ending", cfg.idle_timeout_s)
@@ -703,6 +718,10 @@ class Conversation:
                         peak = max(peak, level)
                     deaf = not gate_open
                 self.state.level = 0.0 if deaf else level
+                if not deaf:
+                    self._loudest = max(self._loudest, level)
+                    if level >= VOICE_LEVEL:
+                        self._voice_at = now
                 if now - last_pub > 0.15:
                     last_pub = now
                     self.svc.bus.publish("conversation_level", {"level": round(self.state.level, 3)})

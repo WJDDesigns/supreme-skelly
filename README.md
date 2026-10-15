@@ -129,6 +129,13 @@ for costume compliments. It costs a little per look. Switch it off for a free mo
 Protect, Skelly then goes by UniFi's own person detection. **Recent sightings** lists everyone
 the cameras spotted, with their picture and what Skelly did about it.
 
+**Answer when spoken to** (on by default) keeps Skelly listening between chats for two
+minutes after a camera sees someone. A visitor who talks to him then gets an answer, even
+if he just said goodbye or was resting between visitors. A chat he started himself waits
+30 seconds for an answer, and stays open while voices are reaching his mic.
+
+<img src="docs/images/answer-when-spoken-to.svg" alt="Before: Skelly gave up after 15 seconds and ignored kids talking to him. Now he keeps listening and answers." width="720">
+
 **Face memory stays on the mini PC:** faces are recognised on the mini PC itself and never
 sent anywhere. You can rename or forget anyone, or everyone, on the Vision page. Recording
 faces may be regulated where you live; check your local rules and consider a sign telling
