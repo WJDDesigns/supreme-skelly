@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -54,6 +55,7 @@ from .profiles import PROFILES
 from .service import SkellyService
 from .settings import Settings, data_dir
 from .vault import Vault
+from .viewer import Viewer
 from .vision import (
     IGNORABLE,
     Vision,
@@ -297,6 +299,9 @@ def create_app(
         app.state.vision._on_passerby = on_passerby
         app.state.meters = Meters(svc.bus, lambda: svc.settings.audio.get("mic", ""), meter_sink,
                                   lambda: svc.settings.audio.get("mic_gain", 100) / 100)
+        app.state.viewer = Viewer(app.state.vision, app.state.protect, app.state.vault, lambda: svc.settings.vision,
+                                  lambda: svc.settings.audio.get("mic", ""),
+                                  lambda: svc.settings.audio.get("mic_gain", 100) / 100, meter_sink)
         if svc.settings.music and svc.settings.music.get("mix_version") != music.MIX_VERSION:
             svc.settings.music = music.upgrade_config(svc.settings.music)
             svc.settings.save()
@@ -331,6 +336,7 @@ def create_app(
                 pass
         await app.state.protect.stop()
         await app.state.meters.stop()
+        await app.state.viewer.stop()
         await app.state.playlist.stop()
         await app.state.music.stop()
         await app.state.preparer.stop()
@@ -1743,6 +1749,35 @@ def create_app(
             pass
         finally:
             bus.unsubscribe(q)
+
+    @app.websocket("/api/viewer")
+    async def viewer(ws: WebSocket):
+        """Live picture and sound for the Viewer page (see viewer.py for the message format)."""
+        await ws.accept()
+        v = app.state.viewer
+        w = v.join()
+
+        async def pump():
+            while True:
+                msg = await w.queue.get()
+                if isinstance(msg, str):
+                    await ws.send_text(msg)
+                else:
+                    await ws.send_bytes(msg)
+
+        sender = asyncio.create_task(pump())
+        try:
+            while True:  # the page says when it starts and stops listening
+                try:
+                    msg = json.loads(await ws.receive_text())
+                    v.want(w, bool(msg.get("listen")), bool(msg.get("video", True)))
+                except (ValueError, AttributeError):
+                    pass
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        finally:
+            sender.cancel()
+            v.leave(w)
 
     music_api.register(app)
 

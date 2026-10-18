@@ -141,6 +141,25 @@ sent anywhere. You can rename or forget anyone, or everyone, on the Vision page.
 faces may be regulated where you live; check your local rules and consider a sign telling
 visitors they're on camera.
 
+## Watching and listening (Viewer)
+
+Open **Viewer** to watch the camera live and hear the conversation as it happens: the
+visitors through Skelly's mic and Skelly's own voice, each with its own volume slider and
+mute button. Press **Listen** to start the sound. The sliders only change what you hear on
+the phone or computer you're watching on; Skelly's speaker and mic stay as they are. The
+words show up alongside as they're spoken, and the picture goes full screen with one tap.
+
+<p align="center">
+  <img src="docs/images/viewer.png" alt="The Viewer page: the live camera, sliders for the mic and Skelly's voice, and the words as they're spoken" width="68%">
+  &nbsp;
+  <img src="docs/images/viewer-phone.png" alt="The Viewer page on a phone" width="24%">
+</p>
+
+The picture is the camera shown on the Vision page. A USB or RTSP camera has to be running
+there; a UniFi Protect camera streams smoothly here (about 10 pictures a second) even though
+Vision only takes a snapshot from it every couple of seconds. Nothing extra runs on the mini
+PC unless someone has the page open, and the sound only flows while someone is listening.
+
 ## Singing and dancing (Music)
 
 The **Music** page makes Skelly sing. Paste a YouTube, Spotify or Apple Music link (a song,
