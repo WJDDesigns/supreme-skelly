@@ -855,3 +855,30 @@ body.has-wall .haunt { display: none; }
 .pl-songs li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--line); }
 .pl-songs li .name { flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl-songs li .end { display: flex; gap: 6px; margin-left: auto; }
+
+/* ---------- viewer: live camera with both voices ---------- */
+.viewer-view { box-shadow: 0 0 0 1px rgba(255, 138, 0, .12), 0 18px 40px rgba(0, 0, 0, .45); }
+.viewer-view:fullscreen { border-radius: 0; border: 0; aspect-ratio: auto; }
+.viewer-live { position: absolute; top: 12px; left: 12px; letter-spacing: .06em; background: rgba(0, 0, 0, .55) !important; }
+.viewer-chat { position: absolute; top: 12px; right: 12px; background: rgba(0, 0, 0, .6) !important; border: 1px solid rgba(255, 138, 0, .35); animation: talk-pulse 1.4s ease-in-out infinite; }
+.viewer-live[hidden], .viewer-chat[hidden], .viewer-full[hidden] { display: none; }
+.viewer-full { position: absolute; right: 10px; bottom: 10px; width: 36px; height: 36px; display: grid; place-content: center;
+  border-radius: 10px; border: 1px solid rgba(255, 255, 255, .14); background: rgba(0, 0, 0, .5); color: var(--bone); cursor: pointer; }
+.viewer-full svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mixer { display: grid; gap: 10px; margin: 14px 0 8px; }
+.mix { display: grid; grid-template-columns: 150px 1fr 120px 52px auto; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, .035); border: 1px solid var(--line); }
+.mix-name { display: flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--bone); white-space: nowrap; }
+.mix-name svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mix[data-ch="speaker"] .mix-name svg { fill: var(--accent); stroke: none; }
+.mix input[type=range] { width: 100%; accent-color: var(--accent); }
+.mix output { text-align: right; font-variant-numeric: tabular-nums; color: var(--bone); font-size: .86rem; }
+.mix .mute { padding: 6px 9px; }
+.mix .mute[aria-pressed="true"] { color: var(--bad); border-color: rgba(255, 77, 77, .4); background: var(--bad-soft); }
+.mix.muted .lvl-bar { opacity: .35; }
+.transcript.tall { max-height: 520px; }
+@media (max-width: 639px) {
+  .mix { grid-template-columns: 1fr auto auto; grid-template-areas: "name out mute" "bar bar bar" "vol vol vol"; gap: 8px 10px; }
+  .mix-name { grid-area: name; } .mix .lvl-bar { grid-area: bar; } .mix input[type=range] { grid-area: vol; }
+  .mix output { grid-area: out; } .mix .mute { grid-area: mute; }
+}

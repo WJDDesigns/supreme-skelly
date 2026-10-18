@@ -3,6 +3,7 @@
 import { timeZones } from "./zones.js";
 import { figureSVG, updateSkeleton } from "./skeleton.js";
 import { initMusic } from "./music.js";
+import { initViewer } from "./viewer.js";
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, props = {}, ...kids) => {
@@ -830,6 +831,7 @@ function connectEvents() {
 // Load once over HTTP so the page works even before the live stream is up.
 api("/state").then(applySnapshot).catch(() => {});
 const musicUI = initMusic({ $, el, api, run, toast });
+const viewerUI = initViewer({ $, el, lineEl });
 connectEvents();
 
 // ---------- sound upload ----------
@@ -914,7 +916,8 @@ function renderTalk(c) {
   $("#talk-error").hidden = c.state !== "error" || !c.error;
   $("#talk-error").textContent = c.error ?? "";
   if (!on) setTalkLevel(0);
-  if (c.transcript && !$("#transcript").children.length) c.transcript.forEach(addLine);
+  if (c.transcript && !$("#transcript").children.length) c.transcript.forEach((t) => addLine(t, false));
+  viewerUI?.talk(c);
 }
 function setTalkLevel(level) {
   $("#talk-ring").style.setProperty("--lvl", Math.min(1, level * 12).toFixed(2));
@@ -988,7 +991,8 @@ async function loadSightings() {
 $("#sight-refresh").addEventListener("click", loadSightings);
 loadSightings();
 
-function addLine(t) {
+function addLine(t, viewer = true) {
+  if (viewer) viewerUI?.addLine(t);
   const ul = $("#transcript");
   ul.append(lineEl(t));
   while (ul.children.length > 60) ul.firstChild.remove();
