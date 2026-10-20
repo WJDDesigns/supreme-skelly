@@ -168,6 +168,23 @@ there; a UniFi Protect camera streams smoothly here (about 10 pictures a second)
 Vision only takes a snapshot from it every couple of seconds. Nothing extra runs on the mini
 PC unless someone has the page open, and the sound only flows while someone is listening.
 
+### Recordings
+
+Turn on **Record conversations** on the Conversation page to save each chat as a video with
+sound, played back next to its chat bubbles. The mic stands right beside Skelly, so it hears his
+speaker too, about half a second after his voice leaves the mini PC (Bluetooth lag). Recording
+both used to make him sound doubled. **Recording sound** now picks how it's mixed:
+
+- **Clean** (the default): his voice straight from the mini PC, and the mic turned down while he
+  talks and for his speaker's lag after, so he's heard once. Visitors are heard between his lines.
+- **Room mic only**: just what the mic heard, like standing in the yard.
+
+The lag is the one Skelly measures live while he talks, so it follows your speaker.
+
+<img src="docs/images/recording-sound-setting.png" alt="The Recording sound picker on the Conversation page, set to Clean" width="420">
+
+<img src="docs/images/recording-sound.svg" alt="Before: his voice plus a late echo through the mic sounded doubled. Now the mic dips while he talks, so he's heard once." width="720">
+
 ## Singing and dancing (Music)
 
 The **Music** page makes Skelly sing. Paste a YouTube, Spotify or Apple Music link (a song,

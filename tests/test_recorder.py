@@ -1,5 +1,10 @@
 import os
+import shutil
+import subprocess
 import time
+
+import numpy as np
+import pytest
 
 from skelly import recorder
 
@@ -39,3 +44,44 @@ def test_recordings_say_how_much_the_visitor_talked(tmp_path, monkeypatch):
         "2026-10-20_18-05-00": ("brief", 1, "hi skelly"),
         "2026-10-20_18-10-00": ("chat", 2, "Hi!"),
     }
+
+
+def test_clean_sound_turns_the_mic_down_for_his_voice_and_its_echo():
+    f = recorder.audio_filter("clean", 0.4)
+    assert "sidechaincompress" in f and "adelay=650:all=1" in f  # measured lag plus the margin
+    assert f.endswith("[a]") and "[1:a]" in f and "[2:a]" in f
+    assert "adelay=2000:" in recorder.audio_filter("clean", 9)  # a wild measurement is capped
+    assert recorder.audio_filter("anything else", 0.4) == f  # unknown settings fall back to clean
+
+
+def test_room_sound_keeps_only_the_mic():
+    f = recorder.audio_filter("room", 0.4)
+    assert "[1:a]" in f and "[2:a]" not in f and "sidechaincompress" not in f
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="needs ffmpeg")
+def test_clean_sound_hears_him_once(tmp_path):
+    """His voice on input 2; the mic hears it 0.4 s later, then a visitor speaks alone."""
+    rate = 16000
+
+    def tone(hz, start, end, amp):
+        t = np.arange(rate * 4) / rate
+        return amp * np.sin(2 * np.pi * hz * t) * ((t >= start) & (t < end))
+
+    voice = tone(1000, 0.0, 1.0, 0.3)
+    mic = tone(1000, 0.4, 1.4, 0.15) + tone(300, 2.5, 3.5, 0.2)
+    for name, x in (("voice", voice), ("mic", mic)):
+        (tmp_path / f"{name}.raw").write_bytes(x.astype(np.float32).tobytes())
+    raw = ["-f", "f32le", "-ar", str(rate), "-ac", "1", "-i"]
+    out = subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=d=4",
+                          *raw, str(tmp_path / "mic.raw"), *raw, str(tmp_path / "voice.raw"),
+                          "-filter_complex", recorder.audio_filter("clean", 0.4), "-map", "[a]",
+                          "-ac", "1", "-ar", str(rate), "-f", "f32le", "-"], capture_output=True, check=True).stdout
+    y = np.frombuffer(out, np.float32)
+
+    def level(a, b):
+        return float(np.sqrt(np.mean(y[int(a * rate):int(b * rate)] ** 2)))
+
+    assert level(1.1, 1.35) < 0.005  # the echo after he stopped is gone
+    assert level(0.3, 0.9) > 0.1  # his voice is there
+    assert level(2.7, 3.3) > 0.05  # and so is the visitor

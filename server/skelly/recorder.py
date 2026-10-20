@@ -4,6 +4,11 @@ Video comes straight from the camera (an RTSP stream is copied without re-encodi
 costs almost nothing; a USB camera's preview frames are encoded). Audio is the visitor's
 mic and Skelly's voice, read from PipeWire and mixed. A JSON transcript is saved next to
 each video. Old recordings are pruned after the number of days chosen in Settings.
+
+The mic stands next to Skelly, so it hears his speaker too, a moment after his voice was
+sent (Bluetooth lag). Mixed with his voice taken straight from the sound card, that made
+him sound doubled. In "clean" sound (the default) the mic is turned right down while he
+talks and for the lag after, so his voice is heard once, crisp; "room" keeps only the mic.
 """
 
 from __future__ import annotations
@@ -23,6 +28,29 @@ from .settings import data_dir
 log = logging.getLogger(__name__)
 
 
+SOUNDS = ("clean", "room")
+MARGIN_S = 0.25  # extra time the mic stays down after his voice, on top of the measured lag
+
+
+def audio_filter(sound: str, echo_delay: float) -> str:
+    """ffmpeg filter for input 1 (mic) and input 2 (his voice), giving [a].
+
+    "clean": a copy of his voice, plus the same copy held back by the speaker's lag, works the
+    mic's volume (a sidechain compressor), so the mic is down from the moment he starts to the
+    moment his speaker goes quiet. Visitors talking between his lines are kept as they were.
+    """
+    fmt = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
+    if sound == "room":
+        return f"[1:a]{fmt},volume=0.9,alimiter=limit=0.8[a]"
+    lag_ms = round(1000 * max(0.0, min(2.0, echo_delay + MARGIN_S)))
+    return (f"[1:a]{fmt},volume=0.6[m];[2:a]{fmt},asplit=3[v][k1][k2];"
+            f"[k2]adelay={lag_ms}:all=1[k2d];[k1][k2d]amix=inputs=2:duration=first:normalize=0[key];"
+            "[m][key]sidechaincompress=threshold=0.003:ratio=20:attack=5:release=200:level_sc=4[md];"
+            "[v]volume=0.8[vv];"
+            # Mic and voice summed, then a limiter: plain mixing clipped in the first test.
+            "[md][vv]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.8[a]")
+
+
 def rec_dir() -> Path:
     d = data_dir() / "recordings"
     d.mkdir(parents=True, exist_ok=True)
@@ -40,8 +68,12 @@ class Recorder:
     def recording(self) -> bool:
         return bool(self._proc and self._proc.returncode is None)
 
-    async def start(self, *, rtsp: str | None, frames=None, mic: str | None, voice_sink: str | None) -> Path | None:
-        """Begin recording. `frames` is an async iterator of JPEGs when there is no RTSP stream."""
+    async def start(self, *, rtsp: str | None, frames=None, mic: str | None, voice_sink: str | None,
+                    sound: str = "clean", echo_delay: float = 0.5) -> Path | None:
+        """Begin recording. `frames` is an async iterator of JPEGs when there is no RTSP stream.
+
+        `echo_delay` is how long his voice takes to reach the mic through his speaker, in seconds.
+        """
         if self.recording:
             return self.path
         name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -60,9 +92,7 @@ class Recorder:
                 audio_inputs += 1
         maps = ["-map", "0:v:0"]
         if audio_inputs == 2:
-            # Mic and voice summed, then a limiter: plain mixing clipped in the first test.
-            args += ["-filter_complex", "[1:a]volume=0.6[m];[2:a]volume=0.8[v];"
-                     "[m][v]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.8[a]"]
+            args += ["-filter_complex", audio_filter(sound, echo_delay)]
             maps += ["-map", "[a]"]
         elif audio_inputs == 1:
             maps += ["-map", "1:a"]
