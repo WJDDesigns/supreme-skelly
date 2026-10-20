@@ -217,9 +217,56 @@ function renderStats(d, online) {
   $("#st-fw").textContent = d.version ?? "–";
   $("#st-model").textContent = state.profile?.name ?? "No device";
   document.querySelectorAll(".stat").forEach((s) => s.classList.toggle("off", !online));
-  $("#side-live").innerHTML = d.live_mode
-    ? "<b>On.</b> Skelly is a Bluetooth speaker right now."
-    : "Turns Skelly into a Bluetooth speaker for talking through him.";
+  $("#side-live").innerHTML = d.live_mode ? "Live Mode is <b>on</b>" : "Live Mode is off";
+  renderLiveStatus();
+}
+
+// ---------- sidebar "Right now" card ----------
+// The latest state of everything that can keep Skelly busy, kept as each part reports in.
+const live = { conv: null, vision: null, fog: null, music: null, playlist: null };
+function liveUpdate(part, data) {
+  live[part] = data;
+  renderLiveStatus();
+}
+
+// What Skelly is doing this moment, busiest thing first: [mood, headline, detail].
+function liveStatus() {
+  const d = state.device;
+  if (!d || d.status !== "connected") {
+    if (d && ["scanning", "connecting", "reconnecting"].includes(d.status))
+      return ["looking", "Looking for him", STATUS_TEXT[d.status] || "Trying to reach Skelly…"];
+    return ["offline", "Offline", "Skelly isn't connected."];
+  }
+  const c = live.conv?.state;
+  if (c === "speaking") return ["chatting", "Chatting", "Talking with a visitor."];
+  if (c === "thinking") return ["thinking", "Thinking", "Working out what to say."];
+  if (c === "listening") return ["listening", "Listening", "Waiting for a visitor to talk."];
+  if (c === "connecting") return ["thinking", "Waking up", "Getting his voice ready."];
+  if (c === "error") return ["problem", "Problem", live.conv.error || "The conversation stopped."];
+  const m = live.music;
+  if (m?.playing) return ["singing", m.paused ? "Paused" : "Singing", m.title || "A song"];
+  const pl = live.playlist;
+  if (pl?.running) return ["performing", "Performing", pl.waiting > 0 ? "Pausing before the next sound." : pl.name || "Playlist"];
+  if (d.playing != null) {
+    const f = (d.files ?? []).find((x) => x.serial === d.playing);
+    return ["performing", "Performing", f?.name || "Playing a sound"];
+  }
+  if (live.fog?.fogging) return ["fogging", "Fogging", live.fog.last_why || "Puffing fog."];
+  const v = live.vision;
+  if (v?.running && v.visitor) return ["visitor", "Someone's here", v.description || "A visitor just walked up."];
+  if (v?.running) return ["watching", "Waiting", "Watching for visitors."];
+  return ["resting", "Resting", "Connected and ready."];
+}
+
+let lastLive = "";
+function renderLiveStatus() {
+  const [mood, head, detail] = liveStatus();
+  const key = `${mood}|${head}|${detail}`;
+  if (key === lastLive) return;
+  lastLive = key;
+  $("#side-card").dataset.mood = mood;
+  $("#side-status").textContent = head;
+  $("#side-detail").textContent = detail;
 }
 
 function renderProfile() {
@@ -787,6 +834,9 @@ function applySnapshot(s) {
   if (s.fog) renderFog(s.fog);
   if (s.playlist) { state.playlist = s.playlist; renderFiles(); }
   if (s.music) musicUI?.renderPlayer(s.music);
+  Object.assign(live, { conv: s.conversation ?? null, vision: s.vision ?? null, fog: s.fog ?? null,
+    music: s.music ?? null, playlist: s.playlist ?? null });
+  renderLiveStatus();
 }
 
 function connectEvents() {
@@ -798,20 +848,20 @@ function connectEvents() {
     else if (msg.type === "state") { state.device = msg.data; renderDevice(); }
     else if (msg.type === "settings") renderSettings(msg.data);
     else if (msg.type === "upload") renderUpload(msg.data);
-    else if (msg.type === "playlist") { state.playlist = msg.data; renderFiles(); }
+    else if (msg.type === "playlist") { state.playlist = msg.data; renderFiles(); liveUpdate("playlist", msg.data); }
     else if (msg.type === "look") { state.look = msg.data; renderPreview(); }
     else if (msg.type === "profile") {
       state.profile = msg.data; state.moves.clear(); state.mode = null; renderProfile();
       // The starting personality follows the model (Skelly, Lily, Santa) until the owner edits it.
       api("/conversation").then((r) => { talkCfg = r.config; renderTalkCfg(); }).catch(() => {});
     }
-    else if (msg.type === "conversation") renderTalk(msg.data);
+    else if (msg.type === "conversation") { renderTalk(msg.data); liveUpdate("conv", msg.data); }
     else if (msg.type === "conversation_level") setTalkLevel(msg.data.level);
     else if (msg.type === "transcript") addLine(msg.data);
-    else if (msg.type === "vision") renderVision(msg.data);
+    else if (msg.type === "vision") { renderVision(msg.data); liveUpdate("vision", msg.data); }
     else if (msg.type === "vision_motion") setMotion(msg.data.motion);
-    else if (msg.type === "fog") renderFog(msg.data);
-    else if (msg.type === "music") musicUI?.renderPlayer(msg.data);
+    else if (msg.type === "fog") { renderFog(msg.data); liveUpdate("fog", msg.data); }
+    else if (msg.type === "music") { musicUI?.renderPlayer(msg.data); liveUpdate("music", msg.data); }
     else if (msg.type === "music_library") musicUI?.renderLibrary(msg.data);
     else if (msg.type === "fog_level") setFogLevel(msg.data.level);
     else if (msg.type === "visitor") onVisitor(msg.data);
