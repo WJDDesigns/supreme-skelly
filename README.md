@@ -117,6 +117,14 @@ The extra speakers are kept for music: chats use Skelly's own speaker unless **E
 talks** is on, and the mini PC reconnects them about once a minute if they drop.
 <br clear="right">
 
+**Recordings** can be filtered by how much the visitor joined in: **Conversations** (they
+talked back at least twice), **Quick hellos** (they said one thing) and **Ignored him** (he
+said his line and they walked on). Each one shows how many times the visitor replied and
+their first words. Coughs, wind and passing cars that speech-to-text turns into "thank you"
+or "um" don't count as replies. Your choice of filter is remembered.
+
+<img src="docs/images/recordings-filter.png" alt="Recordings list with filter chips for Conversations, Quick hellos and Ignored him, and a reply count on each recording" width="720">
+
 ## Seeing visitors (Vision)
 
 Open **Vision** and pick where the picture comes from: a USB webcam, an RTSP camera link,
