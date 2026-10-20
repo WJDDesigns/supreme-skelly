@@ -16,9 +16,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -145,6 +147,7 @@ class Recorder:
             return None
         meta = {"started": self.started, "seconds": round(time.time() - self.started), "transcript": transcript or []}
         path.with_suffix(".json").write_text(json.dumps(meta))
+        await asyncio.to_thread(finalize, path)
         await asyncio.to_thread(thumbnail, path)
         return info(path)
 
@@ -168,6 +171,44 @@ CHAT_REPLIES = 2  # visitor spoke at least this often: a real back-and-forth, no
 def kind(replies: int) -> str:
     """How much the visitor joined in: "chat", "brief" (said one thing) or "ignored" (said nothing)."""
     return "chat" if replies >= CHAT_REPLIES else "brief" if replies else "ignored"
+
+
+_finalizing = threading.Lock()
+
+
+def finalize(path: Path) -> None:
+    """Rewrite a finished recording as a plain MP4 with its index at the front.
+
+    While recording, the MP4 is written in fragments so a crash or power cut still leaves a
+    playable file. Safari (iPhone, iPad, Mac) stalls a few seconds into a fragmented file
+    though, so once it's finished it is copied, without re-encoding, into a normal MP4.
+    Recordings made before this are done the first time they're played.
+    """
+    meta_path = path.with_suffix(".json")
+    with _finalizing:
+        try:
+            meta = json.loads(meta_path.read_text())
+        except (OSError, ValueError):
+            meta = {}
+        if meta.get("faststart") or not path.exists():
+            return
+        part = path.with_suffix(".part")
+        try:
+            done = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(path), "-map", "0",
+                                   "-c", "copy", "-movflags", "+faststart", "-f", "mp4", str(part)],
+                                  capture_output=True, timeout=300, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log.info("couldn't tidy %s for playback: %r", path.name, exc)
+            part.unlink(missing_ok=True)
+            return
+        if done.returncode or not part.exists() or part.stat().st_size < path.stat().st_size // 2:
+            log.info("couldn't tidy %s for playback: %s", path.name, done.stderr.decode(errors="replace")[-300:])
+            part.unlink(missing_ok=True)
+            return
+        st = path.stat()
+        os.utime(part, (st.st_atime, st.st_mtime))  # its age decides when it's pruned
+        os.replace(part, path)
+        meta_path.write_text(json.dumps({**meta, "faststart": True}))
 
 
 THUMB_AT_S = 2  # a moment in, once the visitor is in view and the picture has settled
@@ -213,6 +254,7 @@ def delete(name: str) -> bool:
     p.unlink()
     p.with_suffix(".json").unlink(missing_ok=True)
     p.with_suffix(".jpg").unlink(missing_ok=True)
+    p.with_suffix(".part").unlink(missing_ok=True)
     return True
 
 

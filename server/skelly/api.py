@@ -1009,6 +1009,7 @@ def create_app(
         path = recorder.recording_path(name)
         if not path:
             raise HTTPException(404, "No such recording")
+        await asyncio.to_thread(recorder.finalize, path)  # older recordings: made playable in Safari once
         return FileResponse(path, media_type="video/mp4", filename=name if download else None)
 
     @app.get("/api/recordings/{name}/transcript")
