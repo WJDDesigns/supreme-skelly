@@ -1489,6 +1489,7 @@ const REC_KINDS = [["all", "All"], ["chat", "💬 Conversations"], ["brief", "�
 let recFilter = "all";
 try { recFilter = localStorage.getItem("recFilter") || "all"; } catch {}
 let recList = [];
+let recOpen = null;  // the recording playing in the list, so a refresh keeps it open
 function replyText(r) { return r.replies ? `${r.replies} ${r.replies === 1 ? "reply" : "replies"}` : "No reply"; }
 async function loadRecordings() {
   try { recList = await api("/recordings"); } catch { return; }
@@ -1516,29 +1517,60 @@ function renderRecordings() {
     $("#recordings").replaceChildren(el("li", { className: "muted", textContent: "No recordings like that yet." }));
     return;
   }
-  $("#recordings").replaceChildren(...list.map((r) => {
+  const player = $("#rec-player");
+  if (recOpen && !list.some((r) => r.name === recOpen)) closeRecording();
+  $("#recordings").replaceChildren(...list.flatMap((r) => {
     const play = el("button", { className: "btn primary small", innerHTML: '<svg><use href="#i-play"/></svg>Play' });
-    play.addEventListener("click", async () => {
-      $("#rec-player").hidden = false;
+    const open = async () => {
+      recOpen = r.name;
+      const row = play.closest("li");
+      document.querySelectorAll("#recordings li.playing").forEach((li) => li.classList.remove("playing"));
+      row.classList.add("playing");
+      row.after(playerRow(player));
+      player.hidden = false;
+      $("#rec-video").poster = img.isConnected ? img.src : "";
       $("#rec-video").src = `/api/recordings/${r.name}`;
       $("#rec-video").play().catch(() => {});
+      $("#rec-transcript").replaceChildren();
+      row.scrollIntoView({ behavior: "smooth", block: "start" });
       const t = await api(`/recordings/${r.name}/transcript`).catch(() => []);
-      $("#rec-transcript").replaceChildren(...t.map(lineEl));
-      $("#rec-player").scrollIntoView({ behavior: "smooth", block: "center" });
-    });
+      if (recOpen === r.name) $("#rec-transcript").replaceChildren(...t.map(lineEl));
+    };
+    play.addEventListener("click", open);
     const dl = el("a", { className: "btn outline small", href: `/api/recordings/${r.name}?download=true`, textContent: "Download" });
     const del = el("button", { className: "btn outline small", textContent: "Delete" });
     del.addEventListener("click", () => {
       if (confirm("Delete this recording?")) run(del, async () => { await api(`/recordings/${r.name}`, undefined, "DELETE"); loadRecordings(); }, "Deleted");
     });
     const when = new Date(r.started * 1000).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-    return el("li", {},
-      el("div", { className: "who" }, el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-camera"/></svg>' }),
+    const img = el("img", { alt: "", loading: "lazy", src: `/api/recordings/${r.name}/thumb.jpg` });
+    img.addEventListener("error", () => img.remove());  // no picture: the camera icon underneath shows
+    const thumb = el("button", { className: "rec-thumb", title: "Play", ariaLabel: "Play this recording",
+      innerHTML: '<svg><use href="#i-camera"/></svg>' }, img, el("span", { className: "rec-dur", textContent: fmtDur(r.seconds) }));
+    thumb.addEventListener("click", open);
+    const li = el("li", { className: r.name === recOpen ? "playing" : "" },
+      el("div", { className: "who" }, thumb,
         el("div", {}, el("div", { className: "name", textContent: `${when} · ${fmtDur(r.seconds)}` }),
           el("div", { className: "meta" }, el("span", { className: `rec-kind ${r.kind || ""}`, textContent: replyText(r) }),
             r.preview ? ` “${r.preview}”` : ""))),
       el("div", { className: "end" }, play, dl, del));
+    return r.name === recOpen ? [li, playerRow(player)] : [li];
   }));
+}
+// The player opens right under the recording that was tapped, not at the top of the list.
+function playerRow(player) {
+  return player.closest("li.rec-open") || el("li", { className: "rec-open" }, player);
+}
+function closeRecording() {
+  recOpen = null;
+  const player = $("#rec-player");
+  player.hidden = true;
+  $("#rec-video").pause();
+  $("#rec-video").removeAttribute("src");
+  $("#rec-video").removeAttribute("poster");
+  $("#rec-video").load();
+  player.closest("li.rec-open")?.remove();
+  $("#recordings").before(player);
 }
 $("#rec-refresh").addEventListener("click", (ev) => run(ev.currentTarget, loadRecordings));
 loadRecordings();

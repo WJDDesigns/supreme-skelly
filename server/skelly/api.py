@@ -1021,6 +1021,14 @@ def create_app(
         except (OSError, ValueError):
             return []
 
+    @app.get("/api/recordings/{name}/thumb.jpg")
+    async def recording_thumb(name: str):
+        path = recorder.recording_path(name)
+        thumb = path and await asyncio.to_thread(recorder.thumbnail, path)
+        if not thumb:
+            raise HTTPException(404, "No picture for this recording")
+        return FileResponse(thumb, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=604800"})
+
     @app.get("/api/snaps/{name}")
     async def snap_file(name: str):
         path = app.state.snaps.path(name)
