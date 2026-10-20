@@ -17,6 +17,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from .conversation import said_something
 from .settings import data_dir
 
 log = logging.getLogger(__name__)
@@ -123,9 +124,18 @@ def info(path: Path) -> dict:
     except (OSError, ValueError):
         pass
     t = meta.get("transcript") or []
+    heard = [x["text"] for x in t if x.get("role") == "user" and said_something(x.get("text", ""))]
     return {"name": path.name, "size": path.stat().st_size, "started": meta.get("started", path.stat().st_mtime),
-            "seconds": meta.get("seconds"), "lines": len(t),
-            "preview": next((x["text"] for x in t if x.get("role") == "user"), "")[:120]}
+            "seconds": meta.get("seconds"), "lines": len(t), "replies": len(heard), "kind": kind(len(heard)),
+            "preview": (heard[0] if heard else "")[:120]}
+
+
+CHAT_REPLIES = 2  # visitor spoke at least this often: a real back-and-forth, not one "hi"
+
+
+def kind(replies: int) -> str:
+    """How much the visitor joined in: "chat", "brief" (said one thing) or "ignored" (said nothing)."""
+    return "chat" if replies >= CHAT_REPLIES else "brief" if replies else "ignored"
 
 
 def recordings() -> list[dict]:

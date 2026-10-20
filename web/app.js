@@ -1484,11 +1484,38 @@ loadPeople();
 
 // ---------- recordings ----------
 function fmtDur(s) { return s == null ? "" : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+// "chat": the visitor talked back and forth; "brief": said one thing; "ignored": walked on by.
+const REC_KINDS = [["all", "All"], ["chat", "💬 Conversations"], ["brief", "👋 Quick hellos"], ["ignored", "🚶 Ignored him"]];
+let recFilter = "all";
+try { recFilter = localStorage.getItem("recFilter") || "all"; } catch {}
+let recList = [];
+function replyText(r) { return r.replies ? `${r.replies} ${r.replies === 1 ? "reply" : "replies"}` : "No reply"; }
 async function loadRecordings() {
-  let list = [];
-  try { list = await api("/recordings"); } catch { return; }
-  const total = list.reduce((a, r) => a + r.size, 0);
-  $("#rec-sub").textContent = list.length ? `${list.length} saved · ${(total / 1024 / 1024).toFixed(0)} MB` : "None yet. Turn on Record conversations above.";
+  try { recList = await api("/recordings"); } catch { return; }
+  renderRecordings();
+}
+function renderRecordings() {
+  const all = recList;
+  if (!REC_KINDS.some(([k]) => k === recFilter)) recFilter = "all";
+  const total = all.reduce((a, r) => a + r.size, 0);
+  $("#rec-sub").textContent = all.length ? `${all.length} saved · ${(total / 1024 / 1024).toFixed(0)} MB` : "None yet. Turn on Record conversations above.";
+  $("#rec-filter").hidden = !all.length;
+  $("#rec-filter").replaceChildren(...REC_KINDS.map(([k, label]) => {
+    const n = k === "all" ? all.length : all.filter((r) => r.kind === k).length;
+    const c = el("button", { className: "chip", textContent: `${label} ${n}` });
+    c.setAttribute("aria-pressed", String(k === recFilter));
+    c.addEventListener("click", () => {
+      recFilter = k;
+      try { localStorage.setItem("recFilter", k); } catch {}
+      renderRecordings();
+    });
+    return c;
+  }));
+  const list = recFilter === "all" ? all : all.filter((r) => r.kind === recFilter);
+  if (all.length && !list.length) {
+    $("#recordings").replaceChildren(el("li", { className: "muted", textContent: "No recordings like that yet." }));
+    return;
+  }
   $("#recordings").replaceChildren(...list.map((r) => {
     const play = el("button", { className: "btn primary small", innerHTML: '<svg><use href="#i-play"/></svg>Play' });
     play.addEventListener("click", async () => {
@@ -1508,7 +1535,8 @@ async function loadRecordings() {
     return el("li", {},
       el("div", { className: "who" }, el("span", { className: "row-ico", innerHTML: '<svg><use href="#i-camera"/></svg>' }),
         el("div", {}, el("div", { className: "name", textContent: `${when} · ${fmtDur(r.seconds)}` }),
-          el("div", { className: "meta", textContent: r.preview ? `“${r.preview}”` : `${r.lines} lines` }))),
+          el("div", { className: "meta" }, el("span", { className: `rec-kind ${r.kind || ""}`, textContent: replyText(r) }),
+            r.preview ? ` “${r.preview}”` : ""))),
       el("div", { className: "end" }, play, dl, del));
   }));
 }
