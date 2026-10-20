@@ -156,6 +156,7 @@ class ConversationConfig:
     max_minutes: int = 5  # hard stop, so a stuck or self-talking chat can't burn credits all night
     record: bool = False  # save each conversation as a video with sound
     keep_days: int = 30  # delete recordings older than this
+    rec_sound: str = "clean"  # recorder.SOUNDS: his voice once, mic down while he talks; or "room" (mic only)
     mic: str = ""  # PipeWire source; empty = default
     mic_gain: int = 100  # percent, from Settings > Sound
     out_gain: int = 100  # percent cap on his voice, from Settings > Sound
@@ -331,6 +332,11 @@ class Conversation:
     @property
     def running(self) -> bool:
         return bool(self._task and not self._task.done())
+
+    @property
+    def echo_delay(self) -> float:
+        """Seconds his voice takes to come back through the mic (his speaker's lag), last measured."""
+        return self._echo_delay
 
     def snapshot(self) -> dict:
         return asdict(self.state)

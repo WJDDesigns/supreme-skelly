@@ -430,6 +430,11 @@
               <label class="switch-row"><span><strong>Record conversations</strong>
                 <span class="muted">Saves the camera picture with both voices. Needs the camera on.</span></span>
                 <input type="checkbox" data-cfg="record" role="switch"></label>
+              <label class="field-row">Recording sound<select data-cfg="rec_sound">
+                  <option value="clean">Clean</option>
+                  <option value="room">Room mic only</option>
+                </select></label>
+              <p class="muted small-note">Clean hears him once: the mic dips while he talks, so his speaker can't echo him.</p>
               <label class="field-row">Keep recordings (days)<input type="number" min="1" max="365" data-cfg="keep_days"></label>
             </div>
           </div>

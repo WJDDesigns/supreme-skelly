@@ -990,7 +990,8 @@ def create_app(
                 log.info("no Protect stream to record: %r", exc)
         frames = app.state.vision.frames() if not rtsp and app.state.vision.state.running else None
         await asyncio.to_thread(recorder.prune, cfg.keep_days)
-        path = await app.state.recorder.start(rtsp=rtsp, frames=frames, mic=cfg.mic or None, voice_sink=sink)
+        path = await app.state.recorder.start(rtsp=rtsp, frames=frames, mic=cfg.mic or None, voice_sink=sink,
+                                              sound=cfg.rec_sound, echo_delay=app.state.conv.echo_delay)
         if path:
             svc().bus.publish("recording", {"recording": True, "name": path.name})
 
