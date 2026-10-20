@@ -123,7 +123,11 @@ said his line and they walked on). Each one shows how many times the visitor rep
 their first words. Coughs, wind and passing cars that speech-to-text turns into "thank you"
 or "um" don't count as replies. Your choice of filter is remembered.
 
-<img src="docs/images/recordings-filter.png" alt="Recordings list with filter chips for Conversations, Quick hellos and Ignored him, and a reply count on each recording" width="720">
+Each recording has a small picture from its video on the left, with its length. Tap the
+picture or **Play** and the video opens right under that recording, with the chat bubbles
+below it, so you stay where you were in the list.
+
+<img src="docs/images/recordings-filter.png" alt="Recordings list with filter chips, a picture and reply count on each recording, and the video playing right under the one that was tapped" width="560">
 
 ## Seeing visitors (Vision)
 

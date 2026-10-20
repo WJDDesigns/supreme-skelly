@@ -85,3 +85,26 @@ def test_clean_sound_hears_him_once(tmp_path):
     assert level(1.1, 1.35) < 0.005  # the echo after he stopped is gone
     assert level(0.3, 0.9) > 0.1  # his voice is there
     assert level(2.7, 3.3) > 0.05  # and so is the visitor
+
+
+def test_thumbnail_made_once_and_deleted_with_the_video(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+
+    import pytest
+
+    if not shutil.which("ffmpeg"):
+        pytest.skip("needs ffmpeg")
+    monkeypatch.setenv("SKELLY_DATA_DIR", str(tmp_path))
+    d = recorder.rec_dir()
+    short, longer = d / "2026-10-20_18-00-00.mp4", d / "2026-10-20_18-05-00.mp4"
+    for p, secs in ((short, 1), (longer, 3)):  # recorded the way the recorder does: fragmented MP4
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", f"testsrc=size=640x360:rate=6:d={secs}",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+frag_keyframe+empty_moov",
+                        str(p)], check=True)
+    for p in (short, longer):
+        thumb = recorder.thumbnail(p)
+        assert thumb == p.with_suffix(".jpg") and thumb.read_bytes()[:2] == b"\xff\xd8"
+    mtime = longer.with_suffix(".jpg").stat().st_mtime_ns
+    assert recorder.thumbnail(longer).stat().st_mtime_ns == mtime  # not made again
+    assert recorder.delete(longer.name) and not longer.with_suffix(".jpg").exists()

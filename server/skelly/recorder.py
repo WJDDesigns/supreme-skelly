@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import shutil
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -144,6 +145,7 @@ class Recorder:
             return None
         meta = {"started": self.started, "seconds": round(time.time() - self.started), "transcript": transcript or []}
         path.with_suffix(".json").write_text(json.dumps(meta))
+        await asyncio.to_thread(thumbnail, path)
         return info(path)
 
 
@@ -168,6 +170,28 @@ def kind(replies: int) -> str:
     return "chat" if replies >= CHAT_REPLIES else "brief" if replies else "ignored"
 
 
+THUMB_AT_S = 2  # a moment in, once the visitor is in view and the picture has settled
+
+
+def thumbnail(path: Path) -> Path | None:
+    """A small picture from the recording for the list, made once and kept beside the video."""
+    thumb = path.with_suffix(".jpg")
+    if thumb.exists():
+        return thumb
+    for at in (THUMB_AT_S, 0):  # a recording shorter than THUMB_AT_S has no frame there
+        try:
+            subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", str(at), "-i", str(path),
+                            "-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "5", str(thumb)],
+                           capture_output=True, timeout=20, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log.info("thumbnail for %s failed: %r", path.name, exc)
+            return None
+        if thumb.exists() and thumb.stat().st_size:
+            return thumb
+    thumb.unlink(missing_ok=True)
+    return None
+
+
 def recordings() -> list[dict]:
     return sorted((info(p) for p in rec_dir().glob("*.mp4")), key=lambda r: -r["started"])
 
@@ -188,6 +212,7 @@ def delete(name: str) -> bool:
         return False
     p.unlink()
     p.with_suffix(".json").unlink(missing_ok=True)
+    p.with_suffix(".jpg").unlink(missing_ok=True)
     return True
 
 
