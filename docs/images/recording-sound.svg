@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="360" rx="18" fill="#111"/>
+  <text x="40" y="48" font-size="20" font-weight="700" fill="#f6f3ee">What a recording hears when Skelly talks</text>
+  <text x="40" y="74" font-size="13" fill="#a9a29a">His voice is taken straight from the mini PC. The mic beside him hears his speaker too, a moment later.</text>
+
+  <!-- Before -->
+  <text x="40" y="128" font-size="14" font-weight="700" fill="#a9a29a">BEFORE</text>
+  <g font-size="12" fill="#a9a29a">
+    <text x="140" y="108">His voice</text>
+    <rect x="220" y="96" width="300" height="18" rx="5" fill="#ff8c1a"/>
+    <text x="140" y="140">Mic</text>
+    <rect x="290" y="128" width="300" height="18" rx="5" fill="#d24b4b"/>
+    <text x="600" y="141" fill="#f6f3ee">his echo, about half a second late</text>
+    <text x="220" y="170" fill="#d24b4b" font-weight="700">= "Hello th-hello there" — doubled</text>
+  </g>
+
+  <!-- Now -->
+  <text x="40" y="238" font-size="14" font-weight="700" fill="#ff8c1a">NOW</text>
+  <g font-size="12" fill="#a9a29a">
+    <text x="140" y="218">His voice</text>
+    <rect x="220" y="206" width="300" height="18" rx="5" fill="#ff8c1a"/>
+    <text x="140" y="250">Mic</text>
+    <rect x="220" y="244" width="370" height="6" rx="3" fill="#333"/>
+    <text x="232" y="276" fill="#f6f3ee">turned down while he talks and for his speaker's lag after</text>
+    <rect x="600" y="238" width="160" height="18" rx="5" fill="#4caf7a"/>
+    <text x="640" y="230" fill="#4caf7a">visitor answers</text>
+    <text x="220" y="310" fill="#ff8c1a" font-weight="700">= "Hello there" once, crisp, and every word the visitors say</text>
+  </g>
+</svg>
