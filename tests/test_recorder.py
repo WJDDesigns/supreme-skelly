@@ -108,3 +108,41 @@ def test_thumbnail_made_once_and_deleted_with_the_video(tmp_path, monkeypatch):
     mtime = longer.with_suffix(".jpg").stat().st_mtime_ns
     assert recorder.thumbnail(longer).stat().st_mtime_ns == mtime  # not made again
     assert recorder.delete(longer.name) and not longer.with_suffix(".jpg").exists()
+
+
+def test_finished_recordings_are_rewritten_for_safari(tmp_path, monkeypatch):
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    if not shutil.which("ffmpeg"):
+        pytest.skip("needs ffmpeg")
+    monkeypatch.setenv("SKELLY_DATA_DIR", str(tmp_path))
+    p = recorder.rec_dir() / "2026-10-20_18-00-00.mp4"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=6:d=4",
+                    "-f", "lavfi", "-i", "sine=d=4", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                    "-movflags", "+frag_keyframe+empty_moov", str(p)], check=True)
+    p.with_suffix(".json").write_text(json.dumps({"started": 1, "seconds": 4, "transcript": []}))
+    old = time.time() - 3 * 86400
+    os.utime(p, (old, old))
+
+    def boxes(path):  # top-level MP4 boxes in order
+        data, out, i = path.read_bytes(), [], 0
+        while i + 8 <= len(data):
+            size = int.from_bytes(data[i:i + 4], "big")
+            out.append(data[i + 4:i + 8].decode())
+            i += size if size else len(data)
+        return out
+
+    assert "moof" in boxes(p)
+    recorder.finalize(p)
+    b = boxes(p)
+    assert "moof" not in b and b.index("moov") < b.index("mdat")
+    assert abs(p.stat().st_mtime - old) < 1  # still pruned on its real age
+    assert json.loads(p.with_suffix(".json").read_text())["faststart"] is True
+    assert not p.with_suffix(".part").exists()
+    mtime = p.stat().st_mtime_ns
+    recorder.finalize(p)  # only once
+    assert p.stat().st_mtime_ns == mtime
