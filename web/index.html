@@ -76,10 +76,11 @@
         <div class="more-sheet" id="more-sheet" hidden></div>
       </nav>
 
-      <div class="side-card">
-        <p class="side-title">Live Mode</p>
-        <p class="side-sub" id="side-live">Turns Skelly into a Bluetooth speaker for talking through him.</p>
-        <svg class="side-spark" viewBox="0 0 160 30" preserveAspectRatio="none" aria-hidden="true"><path d="M0 28 L60 26 L100 18 L130 12 L160 4"/></svg>
+      <div class="side-card" id="side-card" data-mood="offline">
+        <p class="side-status" title="What Skelly is doing right now"><span class="side-dot" aria-hidden="true"></span><span id="side-status">Offline</span>
+          <span class="side-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span></p>
+        <p class="side-sub" id="side-detail">Skelly isn't connected.</p>
+        <p class="side-foot" id="side-live">Live Mode is off</p>
       </div>
     </aside>
 

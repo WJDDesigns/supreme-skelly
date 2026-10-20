@@ -32,6 +32,17 @@ visitors and calls people over as that character.
 
 The moves, lights and eye choices on the Controls page always match the connected model.
 
+## See what he's up to at a glance
+
+The card at the bottom of the sidebar shows what Skelly is doing right now: **Chatting**,
+**Listening**, **Thinking**, **Singing**, **Performing** a sound, **Fogging**, **Waiting** for
+visitors (when Vision is on), **Someone's here**, **Resting**, or **Offline**. It updates live,
+with a little equalizer while he talks or sings, and still tells you whether Live Mode is on.
+
+<p align="center">
+  <img src="docs/images/live-status.png" alt="The sidebar status card: Chatting, Listening, Singing, Waiting and Resting" width="90%">
+</p>
+
 
 - **Your Skelly** (switched on, within Bluetooth range).
 - **A small Linux computer** that stays on: any mini PC (an Intel N100 box is plenty) or a
