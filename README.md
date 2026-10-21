@@ -136,7 +136,8 @@ or "um" don't count as replies. Your choice of filter is remembered.
 
 Each recording has a small picture from its video on the left, with its length. Tap the
 picture or **Play** and the video opens right under that recording, with the chat bubbles
-below it, so you stay where you were in the list.
+below it, so you stay where you were in the list. With UniFi Protect, recordings use the camera's
+Medium stream: the 4K High stream arrives too unevenly over Wi-Fi and played back choppy.
 
 <img src="docs/images/recordings-filter.png" alt="Recordings list with filter chips, a picture and reply count on each recording, and the video playing right under the one that was tapped" width="560">
 

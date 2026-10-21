@@ -69,6 +69,7 @@ from .vision import (
 )
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+RECORD_QUALITY = "medium"  # Protect stream recorded with each chat; see start_recording
 log = logging.getLogger(__name__)
 WEB_DIR = Path(os.environ.get("SKELLY_WEB_DIR", Path(__file__).resolve().parents[2] / "web"))
 
@@ -985,7 +986,9 @@ def create_app(
         rtsp = app.state.vault.get("rtsp_url") if vcfg.source == "rtsp" else None
         if vcfg.source == "protect" and vcfg.preview_camera:
             try:  # record the camera's own stream, opened only for this conversation
-                rtsp = await app.state.protect.rtsps(vcfg.preview_camera, "high")
+                # "medium", not "high": the 4K stream arrives in bursts over Wi-Fi, so recordings came
+                # out at ~4 frames a second with no key frames and the picture froze after a few seconds.
+                rtsp = await app.state.protect.rtsps(vcfg.preview_camera, RECORD_QUALITY)
             except Exception as exc:
                 log.info("no Protect stream to record: %r", exc)
         frames = app.state.vision.frames() if not rtsp and app.state.vision.state.running else None
