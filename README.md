@@ -139,6 +139,13 @@ picture or **Play** and the video opens right under that recording, with the cha
 below it, so you stay where you were in the list. With UniFi Protect, recordings use the camera's
 Medium stream: the 4K High stream arrives too unevenly over Wi-Fi and played back choppy.
 
+The picture and the sound are recorded separately and joined, lined up, when the chat ends.
+Recording them together let the sound hold the camera back, so videos came out in slow
+motion: a few seconds of picture stretched over a minute, then a frozen frame while the chat
+carried on. If the mini PC restarts mid-chat, the pieces are joined the next time it starts.
+
+<img src="docs/images/recording-split.svg" alt="Before: one recorder held the camera back behind the sound, so 8 seconds of picture stretched over 76 and froze. Now picture and sound are recorded apart and joined in step." width="720">
+
 <img src="docs/images/recordings-filter.png" alt="Recordings list with filter chips, a picture and reply count on each recording, and the video playing right under the one that was tapped" width="560">
 
 ## Seeing visitors (Vision)
