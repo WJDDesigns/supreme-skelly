@@ -281,6 +281,7 @@ def create_app(
         app.state.scene = scene.Scene()
         app.state.conv.scene_context = app.state.scene.context
         app.state.recorder = recorder.Recorder()
+        asyncio.get_running_loop().run_in_executor(None, recorder.recover)  # chats cut off by a restart
         app.state.costumes_mentioned = set()
         app.state.last_live_callout = 0.0
         costume_task = asyncio.create_task(costume_watch())

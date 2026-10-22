@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="380" rx="18" fill="#111"/>
+  <text x="40" y="48" font-size="20" font-weight="700" fill="#f6f3ee">Why recordings played in slow motion</text>
+  <text x="40" y="74" font-size="13" fill="#a9a29a">A 3½ minute chat. The bars show what ended up in the saved video.</text>
+
+  <!-- Before -->
+  <text x="40" y="128" font-size="14" font-weight="700" fill="#a9a29a">BEFORE</text>
+  <g font-size="12" fill="#a9a29a">
+    <text x="140" y="108">Picture</text>
+    <rect x="220" y="96" width="210" height="18" rx="5" fill="#d24b4b"/>
+    <text x="232" y="109" fill="#111" font-weight="700">8 s of camera over 76 s</text>
+    <rect x="430" y="96" width="390" height="18" rx="5" fill="#2a2a2a"/>
+    <text x="442" y="109" fill="#a9a29a">frozen, nothing saved</text>
+    <text x="140" y="140">Sound</text>
+    <rect x="220" y="128" width="600" height="18" rx="5" fill="#ff8c1a"/>
+    <text x="220" y="172" fill="#d24b4b" font-weight="700">One recorder for both: the sound kept holding the camera back.</text>
+  </g>
+
+  <!-- Now -->
+  <text x="40" y="248" font-size="14" font-weight="700" fill="#ff8c1a">NOW</text>
+  <g font-size="12" fill="#a9a29a">
+    <text x="140" y="228">Picture</text>
+    <rect x="220" y="216" width="600" height="18" rx="5" fill="#4caf7a"/>
+    <text x="232" y="229" fill="#111" font-weight="700">recorded on its own, at the camera's real speed</text>
+    <text x="140" y="260">Sound</text>
+    <rect x="220" y="248" width="600" height="18" rx="5" fill="#ff8c1a"/>
+    <text x="232" y="261" fill="#111" font-weight="700">recorded on its own</text>
+    <text x="220" y="296" fill="#f6f3ee">When the chat ends the two are joined, lined up to a fraction of a second.</text>
+    <text x="220" y="318" fill="#a9a29a">Nothing is re-encoded, so it costs the mini PC almost nothing.</text>
+  </g>
+</svg>

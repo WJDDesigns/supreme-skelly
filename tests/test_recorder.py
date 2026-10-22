@@ -49,14 +49,14 @@ def test_recordings_say_how_much_the_visitor_talked(tmp_path, monkeypatch):
 def test_clean_sound_turns_the_mic_down_for_his_voice_and_its_echo():
     f = recorder.audio_filter("clean", 0.4)
     assert "sidechaincompress" in f and "adelay=650:all=1" in f  # measured lag plus the margin
-    assert f.endswith("[a]") and "[1:a]" in f and "[2:a]" in f
+    assert f.endswith("[a]") and "[0:a]" in f and "[1:a]" in f
     assert "adelay=2000:" in recorder.audio_filter("clean", 9)  # a wild measurement is capped
     assert recorder.audio_filter("anything else", 0.4) == f  # unknown settings fall back to clean
 
 
 def test_room_sound_keeps_only_the_mic():
     f = recorder.audio_filter("room", 0.4)
-    assert "[1:a]" in f and "[2:a]" not in f and "sidechaincompress" not in f
+    assert "[0:a]" in f and "[1:a]" not in f and "sidechaincompress" not in f
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="needs ffmpeg")
@@ -73,7 +73,7 @@ def test_clean_sound_hears_him_once(tmp_path):
     for name, x in (("voice", voice), ("mic", mic)):
         (tmp_path / f"{name}.raw").write_bytes(x.astype(np.float32).tobytes())
     raw = ["-f", "f32le", "-ar", str(rate), "-ac", "1", "-i"]
-    out = subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=d=4",
+    out = subprocess.run(["ffmpeg", "-loglevel", "error",
                           *raw, str(tmp_path / "mic.raw"), *raw, str(tmp_path / "voice.raw"),
                           "-filter_complex", recorder.audio_filter("clean", 0.4), "-map", "[a]",
                           "-ac", "1", "-ar", str(rate), "-f", "f32le", "-"], capture_output=True, check=True).stdout
@@ -146,3 +146,40 @@ def test_finished_recordings_are_rewritten_for_safari(tmp_path, monkeypatch):
     mtime = p.stat().st_mtime_ns
     recorder.finalize(p)  # only once
     assert p.stat().st_mtime_ns == mtime
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="needs ffmpeg")
+def test_picture_and_sound_are_joined_in_step(tmp_path, monkeypatch):
+    """Recorded apart, as the recorder does; the sound began 1.5 s before the camera connected."""
+    import json
+
+    monkeypatch.setenv("SKELLY_DATA_DIR", str(tmp_path))
+    p = recorder.rec_dir() / "2026-10-22_10-04-37.mp4"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=30:d=6",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+frag_keyframe+empty_moov",
+                    "-f", "mp4", str(recorder.video_part(p))], check=True)
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=d=7.5", "-c:a", "aac",
+                    "-f", "adts", str(recorder.audio_part(p))], check=True)
+    assert recorder.join(p, -1.5)
+    assert not recorder.video_part(p).exists() and not recorder.audio_part(p).exists()
+
+    def probe(*a):
+        return json.loads(subprocess.run(["ffprobe", "-v", "error", "-of", "json", *a, str(p)],
+                                         capture_output=True, check=True).stdout)
+
+    streams = {s["codec_type"]: s for s in probe("-show_streams")["streams"]}
+    assert float(streams["video"]["duration"]) == pytest.approx(6, abs=0.1)  # real time, not slowed
+    assert float(streams["audio"]["duration"]) == pytest.approx(6, abs=0.1)  # the early 1.5 s cut off
+    assert int(streams["video"]["nb_frames"]) == 180
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="needs ffmpeg")
+def test_pieces_left_by_a_restart_become_a_recording(tmp_path, monkeypatch):
+    monkeypatch.setenv("SKELLY_DATA_DIR", str(tmp_path))
+    p = recorder.rec_dir() / "2026-10-22_10-04-37.mp4"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=6:d=3",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+frag_keyframe+empty_moov",
+                    "-f", "mp4", str(recorder.video_part(p))], check=True)
+    assert recorder.recover() == 1
+    assert [r["name"] for r in recorder.recordings()] == [p.name]
+    assert not recorder.video_part(p).exists()
