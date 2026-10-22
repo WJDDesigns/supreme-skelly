@@ -5,6 +5,11 @@ costs almost nothing; a USB camera's preview frames are encoded). Audio is the v
 mic and Skelly's voice, read from PipeWire and mixed. A JSON transcript is saved next to
 each video. Old recordings are pruned after the number of days chosen in Settings.
 
+Picture and sound are recorded by two separate ffmpeg processes and joined when the chat
+ends. In one process, ffmpeg (7+) holds back an input that runs ahead of the others; with
+the camera timed by arrival, that throttled the camera read until recordings came out in
+slow motion (8 s of picture spread over 76 s, the video track ending long before the sound).
+
 The mic stands next to Skelly, so it hears his speaker too, a moment after his voice was
 sent (Bluetooth lag). Mixed with his voice taken straight from the sound card, that made
 him sound doubled. In "clean" sound (the default) the mic is turned right down while he
@@ -36,7 +41,7 @@ MARGIN_S = 0.25  # extra time the mic stays down after his voice, on top of the 
 
 
 def audio_filter(sound: str, echo_delay: float) -> str:
-    """ffmpeg filter for input 1 (mic) and input 2 (his voice), giving [a].
+    """ffmpeg filter for input 0 (mic) and input 1 (his voice), giving [a].
 
     "clean": a copy of his voice, plus the same copy held back by the speaker's lag, works the
     mic's volume (a sidechain compressor), so the mic is down from the moment he starts to the
@@ -44,9 +49,9 @@ def audio_filter(sound: str, echo_delay: float) -> str:
     """
     fmt = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
     if sound == "room":
-        return f"[1:a]{fmt},volume=0.9,alimiter=limit=0.8[a]"
+        return f"[0:a]{fmt},volume=0.9,alimiter=limit=0.8[a]"
     lag_ms = round(1000 * max(0.0, min(2.0, echo_delay + MARGIN_S)))
-    return (f"[1:a]{fmt},volume=0.6[m];[2:a]{fmt},asplit=3[v][k1][k2];"
+    return (f"[0:a]{fmt},volume=0.6[m];[1:a]{fmt},asplit=3[v][k1][k2];"
             f"[k2]adelay={lag_ms}:all=1[k2d];[k1][k2d]amix=inputs=2:duration=first:normalize=0[key];"
             "[m][key]sidechaincompress=threshold=0.003:ratio=20:attack=5:release=200:level_sc=4[md];"
             "[v]volume=0.8[vv];"
@@ -60,74 +65,33 @@ def rec_dir() -> Path:
     return d
 
 
-class Recorder:
-    def __init__(self) -> None:
-        self._proc: asyncio.subprocess.Process | None = None
-        self._feeder: asyncio.Task | None = None
-        self.path: Path | None = None
-        self.started = 0.0
+class _Part:
+    """One ffmpeg process writing one track, and when its first moment happened."""
 
-    @property
-    def recording(self) -> bool:
-        return bool(self._proc and self._proc.returncode is None)
+    def __init__(self, proc: asyncio.subprocess.Process) -> None:
+        self.proc = proc
+        self.t0: float | None = None  # wall time of the track's 0 s
+        self._watch = asyncio.create_task(self._progress())
 
-    async def start(self, *, rtsp: str | None, frames=None, mic: str | None, voice_sink: str | None,
-                    sound: str = "clean", echo_delay: float = 0.5) -> Path | None:
-        """Begin recording. `frames` is an async iterator of JPEGs when there is no RTSP stream.
+    async def _progress(self) -> None:
+        """ffmpeg's -progress says how far the track has got; now minus that is when it began.
 
-        `echo_delay` is how long his voice takes to reach the mic through his speaker, in seconds.
+        Delays only ever make that later, so the earliest estimate is the best one.
         """
-        if self.recording:
-            return self.path
-        name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.path = rec_dir() / f"{name}.mp4"
-        args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
-        if rtsp:
-            args += ["-rtsp_transport", "tcp", "-use_wallclock_as_timestamps", "1", "-i", rtsp]
-        elif frames is not None:
-            args += ["-f", "image2pipe", "-framerate", "6", "-use_wallclock_as_timestamps", "1", "-i", "pipe:0"]
-        else:
-            return None
-        audio_inputs = 0
-        for src in (mic or "default", f"{voice_sink}.monitor" if voice_sink else None):
-            if src:
-                args += ["-f", "pulse", "-i", src]
-                audio_inputs += 1
-        maps = ["-map", "0:v:0"]
-        if audio_inputs == 2:
-            args += ["-filter_complex", audio_filter(sound, echo_delay)]
-            maps += ["-map", "[a]"]
-        elif audio_inputs == 1:
-            maps += ["-map", "1:a"]
-        vcodec = ["-c:v", "copy"] if rtsp else ["-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
-                                                "-pix_fmt", "yuv420p"]
-        args += [*maps, *vcodec, "-c:a", "aac", "-b:a", "96k", "-movflags", "+frag_keyframe+empty_moov",
-                 str(self.path)]
-        self._proc = await asyncio.create_subprocess_exec(
-            *args, stdin=asyncio.subprocess.PIPE if not rtsp else asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE)
-        self.started = time.time()
-        if not rtsp:
-            self._feeder = asyncio.create_task(self._feed(frames))
-        log.info("recording to %s", self.path.name)
-        return self.path
-
-    async def _feed(self, frames) -> None:
+        out = 0
         try:
-            async for jpg in frames:
-                if not self._proc or not self._proc.stdin:
-                    return
-                self._proc.stdin.write(jpg)
-                await self._proc.stdin.drain()
-        except (BrokenPipeError, ConnectionResetError):
+            while line := await self.proc.stdout.readline():
+                key, _, value = line.decode(errors="replace").strip().partition("=")
+                if key == "out_time_us" and value.lstrip("-").isdigit():
+                    out = int(value)
+                elif key == "progress" and out > 0:
+                    t0 = time.time() - out / 1e6
+                    self.t0 = t0 if self.t0 is None else min(self.t0, t0)
+        except (OSError, ValueError):
             pass
 
-    async def stop(self, transcript: list[dict] | None = None) -> dict | None:
-        if not self._proc:
-            return None
-        proc, self._proc = self._proc, None
-        if self._feeder:
-            self._feeder.cancel()
+    async def stop(self) -> str:
+        proc = self.proc
         try:
             if proc.stdin:
                 proc.stdin.close()
@@ -137,19 +101,142 @@ class Recorder:
             await asyncio.wait_for(proc.wait(), 10)
         except (TimeoutError, ProcessLookupError):
             proc.kill()
-        err = (await proc.stderr.read()).decode(errors="replace").strip() if proc.stderr else ""
-        if err:
-            log.info("recorder: %s", err.splitlines()[-1])
-        path = self.path
-        if not path or not path.exists() or path.stat().st_size < 10_000:
-            if path and path.exists():
-                path.unlink()
+            await proc.wait()
+        try:
+            await asyncio.wait_for(self._watch, 2)
+        except TimeoutError:
+            self._watch.cancel()
+        return (await proc.stderr.read()).decode(errors="replace").strip() if proc.stderr else ""
+
+
+async def _spawn(args: list[str], stdin=False) -> _Part:
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-stats_period", "0.2",
+        "-y", *args, stdin=asyncio.subprocess.PIPE if stdin else asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    return _Part(proc)
+
+
+def video_part(path: Path) -> Path:
+    return path.with_suffix(".video")
+
+
+def audio_part(path: Path) -> Path:
+    return path.with_suffix(".audio")
+
+
+class Recorder:
+    def __init__(self) -> None:
+        self._video: _Part | None = None
+        self._audio: _Part | None = None
+        self._feeder: asyncio.Task | None = None
+        self.path: Path | None = None
+        self.started = 0.0
+
+    @property
+    def recording(self) -> bool:
+        return bool(self._video and self._video.proc.returncode is None)
+
+    async def start(self, *, rtsp: str | None, frames=None, mic: str | None, voice_sink: str | None,
+                    sound: str = "clean", echo_delay: float = 0.5) -> Path | None:
+        """Begin recording. `frames` is an async iterator of JPEGs when there is no RTSP stream.
+
+        `echo_delay` is how long his voice takes to reach the mic through his speaker, in seconds.
+        """
+        if self.recording:
+            return self.path
+        if rtsp:
+            # The camera's own timestamps: frames that arrive in bunches over Wi-Fi still play evenly.
+            vin = ["-rtsp_transport", "tcp", "-i", rtsp]
+            vcodec = ["-c:v", "copy"]
+        elif frames is not None:
+            vin = ["-f", "image2pipe", "-framerate", "6", "-use_wallclock_as_timestamps", "1", "-i", "pipe:0"]
+            vcodec = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p"]
+        else:
             return None
-        meta = {"started": self.started, "seconds": round(time.time() - self.started), "transcript": transcript or []}
+        name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.path = rec_dir() / f"{name}.mp4"
+        # Fragmented, so a crash or power cut still leaves a playable picture.
+        self._video = await _spawn([*vin, "-map", "0:v:0", *vcodec, "-an", "-movflags", "+frag_keyframe+empty_moov",
+                                    "-f", "mp4", str(video_part(self.path))], stdin=not rtsp)
+        ain: list[str] = []
+        for src in (mic or "default", f"{voice_sink}.monitor" if voice_sink else None):
+            if src:
+                ain += ["-f", "pulse", "-i", src]
+        amap = ["-filter_complex", audio_filter(sound, echo_delay), "-map", "[a]"] if len(ain) > 4 else ["-map", "0:a"]
+        self._audio = await _spawn([*ain, *amap, "-c:a", "aac", "-b:a", "96k", "-f", "adts",
+                                    str(audio_part(self.path))])
+        self.started = time.time()
+        if not rtsp:
+            self._feeder = asyncio.create_task(self._feed(frames))
+        log.info("recording to %s", self.path.name)
+        return self.path
+
+    async def _feed(self, frames) -> None:
+        try:
+            async for jpg in frames:
+                if not self._video or not self._video.proc.stdin:
+                    return
+                self._video.proc.stdin.write(jpg)
+                await self._video.proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    async def stop(self, transcript: list[dict] | None = None) -> dict | None:
+        if not self._video:
+            return None
+        video, self._video = self._video, None
+        audio, self._audio = self._audio, None
+        if self._feeder:
+            self._feeder.cancel()
+            self._feeder = None
+        errs = await asyncio.gather(video.stop(), audio.stop() if audio else asyncio.sleep(0, ""))
+        for err in errs:
+            if err:
+                log.info("recorder: %s", err.splitlines()[-1])
+        path = self.path
+        if not path:
+            return None
+        lag = (audio.t0 - video.t0) if audio and audio.t0 is not None and video.t0 is not None else 0.0
+        if not await asyncio.to_thread(join, path, lag):
+            return None
+        meta = {"started": self.started, "seconds": round(time.time() - self.started), "transcript": transcript or [],
+                "faststart": True}
         path.with_suffix(".json").write_text(json.dumps(meta))
-        await asyncio.to_thread(finalize, path)
         await asyncio.to_thread(thumbnail, path)
         return info(path)
+
+
+def join(path: Path, lag: float) -> bool:
+    """Put the picture and the sound together in one MP4, index at the front, nothing re-encoded.
+
+    `lag` is how many seconds after the picture the sound began (negative: it began before,
+    usually, as the camera takes a moment to connect), so the two line up.
+    """
+    video, audio = video_part(path), audio_part(path)
+    try:
+        if not video.exists() or video.stat().st_size < 10_000:
+            return False
+        args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(video)]
+        has_audio = audio.exists() and audio.stat().st_size > 0
+        if has_audio:
+            lag = max(-30.0, min(30.0, lag))
+            shift = ["-ss", f"{-lag:.3f}"] if lag < 0 else ["-itsoffset", f"{lag:.3f}"]
+            args += [*shift, "-i", str(audio), "-map", "0:v:0", "-map", "1:a:0"]
+        args += ["-c", "copy", "-movflags", "+faststart", "-f", "mp4", str(path)]
+        try:
+            done = subprocess.run(args, capture_output=True, timeout=300, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log.info("couldn't join %s: %r", path.name, exc)
+            return False
+        if done.returncode or not path.exists() or path.stat().st_size < 10_000:
+            log.info("couldn't join %s: %s", path.name, done.stderr.decode(errors="replace")[-300:])
+            path.unlink(missing_ok=True)
+            return False
+        return True
+    finally:
+        video.unlink(missing_ok=True)
+        audio.unlink(missing_ok=True)
 
 
 def info(path: Path) -> dict:
@@ -256,6 +343,21 @@ def delete(name: str) -> bool:
     p.with_suffix(".jpg").unlink(missing_ok=True)
     p.with_suffix(".part").unlink(missing_ok=True)
     return True
+
+
+def recover() -> int:
+    """Join the pieces of recordings cut off by a crash or restart, so they show up in the list."""
+    joined = 0
+    for video in rec_dir().glob("*.video"):
+        path, began = video.with_suffix(".mp4"), video.stat().st_mtime
+        if SAFE.match(path.name) and not path.exists() and join(path, 0.0):
+            meta_path = path.with_suffix(".json")
+            if not meta_path.exists():
+                meta_path.write_text(json.dumps({"started": began, "transcript": [], "faststart": True}))
+            joined += 1
+        video.unlink(missing_ok=True)
+        video.with_suffix(".audio").unlink(missing_ok=True)
+    return joined
 
 
 def prune(keep_days: int) -> int:
