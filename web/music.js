@@ -44,6 +44,16 @@ export function initMusic({ $, el, api, run, toast }) {
     $("#mu-error").hidden = !p.error;
     $("#mu-error").textContent = p.error || "";
     document.querySelectorAll("#mu-songs li").forEach((li) => li.classList.toggle("playing", on && li.dataset.id === p.song));
+    const sync = (on && p.sync) || {};
+    const note = $("#mu-live-note");
+    note.hidden = !sync.state;
+    const gap = sync.gap_ms == null ? "" : ` (band ${Math.abs(sync.gap_ms)} ms ${sync.gap_ms > 0 ? "behind" : "ahead"})`;
+    note.textContent = {
+      listening: "Listening to line the speakers up…",
+      adjusting: `Lining the speakers up${gap}…`,
+      "in sync": `In sync: the band and Skelly's voice are heard together${gap}.`,
+      "can't hear": "Can't hear the speakers well enough on Skelly's mic to line them up. Turn them up a little.",
+    }[sync.state] || "";
   }
   $("#mu-play").addEventListener("click", (e) => {
     const p = m.player;
@@ -264,5 +274,5 @@ export function initMusic({ $, el, api, run, toast }) {
   });
 
   load().catch((e) => toast(e.message, true));
-  return { renderPlayer, renderLibrary };
+  return { renderPlayer, renderLibrary, renderConfig };
 }

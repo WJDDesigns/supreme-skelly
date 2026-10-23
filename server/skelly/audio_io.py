@@ -13,6 +13,7 @@ import json
 import logging
 import math
 import os
+import random
 import time
 
 log = logging.getLogger(__name__)
@@ -30,6 +31,25 @@ def scale(pcm: bytes, gain: float) -> bytes:
     a = array.array("h", pcm[: len(pcm) - len(pcm) % 2])
     for i, x in enumerate(a):
         a[i] = max(-32768, min(32767, int(x * gain)))
+    return a.tobytes()
+
+
+# Bluetooth speakers (Skelly's included) mute their amplifier when they're sent pure digital
+# silence and take a few hundred milliseconds to unmute when sound starts, which swallowed
+# Skelly's first word. A hush this faint (about -80 dB) is too quiet to hear or to move his
+# jaw, but it isn't silence, so the amplifier stays on.
+HUSH_LSB = 3
+# Played before Skelly starts talking after a pause, so the start of the first word isn't lost
+# while the stream gets going.
+LEAD_IN_S = 0.2
+# How much audio each music stream queues ahead (music.py), and Auto sync's test sound with it.
+MUSIC_BUFFER_MS = 750
+
+
+def hush(rate: int, seconds: float, channels: int = 1) -> bytes:
+    """Near-silent noise (triangular dither of a few steps) as 16-bit PCM."""
+    n = max(0, int(rate * seconds)) * channels
+    a = array.array("h", (random.randint(-HUSH_LSB, HUSH_LSB) for _ in range(n)))
     return a.tobytes()
 
 
@@ -184,6 +204,8 @@ class Speaker:
             await self._open(rate)
             last_sink = self.sink
         assert self._proc and self._proc.stdin
+        if not self.speaking:  # starting after a pause: a short hush first, so no word is clipped
+            pcm = hush(rate, LEAD_IN_S) + pcm
         self._proc.stdin.write(scale(pcm, self.gain))  # timeline below uses the same scaled audio
         try:
             await self._proc.stdin.drain()
@@ -296,15 +318,17 @@ def chime(rate: int = 16000) -> bytes:
 
 
 class KeepAwake:
-    """Plays silence to Bluetooth speakers so they never go idle.
+    """Plays a faint hush to Bluetooth speakers so they never go idle.
 
     PipeWire suspends a speaker a few seconds after the last sound, which drops the Bluetooth
     audio stream; many speakers (Skelly's included) then play their own wake-up chime the next
-    time sound starts. A silent stream keeps the link open, so he starts talking straight away.
+    time sound starts. Pure silence isn't enough either: the speaker mutes its amplifier on it and
+    clips the first word when sound comes back. The hush keeps the link open and the amp on.
     """
 
     def __init__(self) -> None:
         self._procs: dict[str, asyncio.subprocess.Process] = {}
+        self._feeds: dict[str, asyncio.Task] = {}
 
     @property
     def sinks(self) -> set[str]:
@@ -313,16 +337,32 @@ class KeepAwake:
     async def sync(self, sinks: set[str]) -> None:
         for sink in list(self._procs):
             if sink not in sinks or self._procs[sink].returncode is not None:
+                feed = self._feeds.pop(sink, None)
+                if feed:
+                    feed.cancel()
                 await _stop(self._procs.pop(sink))
         for sink in sinks - set(self._procs):
             try:
-                with open("/dev/zero", "rb") as zero:
-                    self._procs[sink] = await asyncio.create_subprocess_exec(
-                        "pacat", "--raw", "--format=s16le", "--rate=16000", "--channels=1", "--volume=0",
-                        "--latency-msec=500", "--client-name=Supreme Skelly keep-awake", f"--device={sink}",
-                        stdin=zero, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+                self._procs[sink] = proc = await asyncio.create_subprocess_exec(
+                    "pacat", "--raw", "--format=s16le", "--rate=16000", "--channels=1",
+                    "--latency-msec=500", "--client-name=Supreme Skelly keep-awake", f"--device={sink}",
+                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL)
             except (FileNotFoundError, OSError) as exc:
                 log.info("keep-awake for %s not started: %r", sink, exc)
+                continue
+            self._feeds[sink] = asyncio.create_task(_feed_hush(proc), name=f"keep-awake {sink}")
 
     async def stop(self) -> None:
         await self.sync(set())
+
+
+async def _feed_hush(proc: asyncio.subprocess.Process) -> None:
+    """Keep the hush flowing; pacat takes it in at the speaker's own pace."""
+    chunk = hush(16000, 1.0)
+    try:
+        while proc.returncode is None and proc.stdin:
+            proc.stdin.write(chunk)
+            await proc.stdin.drain()
+    except (BrokenPipeError, ConnectionResetError):
+        pass

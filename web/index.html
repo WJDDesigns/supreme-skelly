@@ -338,6 +338,10 @@
             <details class="more">
               <summary>Timing</summary>
               <div class="more-body">
+                <label class="switch-row"><span><strong>Keep in sync while singing</strong>
+                  <span class="muted">Skelly's mic listens during each song and keeps your other speakers in step with his voice, even when Bluetooth drifts. What it learns is saved for the next song.</span></span>
+                  <input type="checkbox" data-mcfg="live_sync" role="switch"></label>
+                <p class="muted small-note" id="mu-live-note" hidden></p>
                 <button id="mu-autosync" class="btn" type="button">Auto sync</button>
                 <p class="muted small-note" id="mu-autosync-note">Plays a few chirps on each speaker and listens with Skelly's mic, then sets both sliders. Stop the music and keep the room quiet first.</p>
                 <label class="slider">Moves and lights <output id="mu-sync-out">0 ms</output>
