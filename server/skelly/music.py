@@ -32,7 +32,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import beats, sources
+from . import audio_io, autosync, beats, sources
 from . import protocol as proto
 from .settings import data_dir
 
@@ -41,9 +41,15 @@ log = logging.getLogger(__name__)
 RATE = 48000
 MAX_SHIFT_MS = 3000  # timing sliders reach 3 s either way (Bluetooth speakers can lag a lot)
 CHUNK_S = 0.05
-# From handing audio to PipeWire to hearing it from Skelly: our 100 ms pacat buffer plus his
+# From handing audio to PipeWire to hearing it from Skelly: our pacat buffer (BUFFER_MS) plus his
 # Bluetooth (A2DP) delay. The owner fine-tunes the rest with the "Moves timing" slider.
-AUDIO_DELAY_S = float(os.environ.get("SKELLY_MUSIC_DELAY_S", "0.5"))
+AUDIO_DELAY_S = float(os.environ.get("SKELLY_MUSIC_DELAY_S", "1.0"))
+# Audio queued ahead in each music stream. It was 250 ms, and any moment the mini PC was busy for
+# longer than that (Vision, a page loading) ran the speaker dry: a skip or a pop. A song doesn't
+# need to start quickly, so it gets plenty; the 0.5 s added here is added to AUDIO_DELAY_S too.
+BUFFER_MS = audio_io.MUSIC_BUFFER_MS
+LEAD_IN_S = 0.3  # a near-silent hush before each song, so the speaker is on before the first note
+SYNC_EVERY_S = 3.0  # how often "Keep in sync" listens
 BLE_LEAD_S = 0.04  # a BLE command takes about this long to reach Skelly and act
 LATE_S = 0.3  # a light or move this late is skipped rather than sent out of time
 MAX_SONGS = 300
@@ -60,6 +66,7 @@ DEFAULTS = {
     "sync_ms": 0,  # moves and lights earlier (-) or later (+) than the estimated audio delay
     "speakers_offset_ms": 0,  # extra speakers later (+) or earlier (-) than Skelly
     "gap_s": 2.0,  # pause between songs
+    "live_sync": True,  # listen with Skelly's mic during songs and keep the other speakers in step
     # How the voice and music share Skelly's speaker: "mix" = both on both sides; "left"/"right" = the
     # voice alone on that side and the music on the other, for a jaw that listens to one side only.
     "voice_side": "mix",
@@ -470,6 +477,7 @@ class PlayerState:
     loop: bool = False
     shuffle: bool = False
     error: str | None = None
+    sync: dict = field(default_factory=dict)  # what "Keep in sync" hears: state, gap_ms, skelly_ms
 
 
 class _Out:
@@ -483,7 +491,7 @@ class _Out:
         if not self.enabled:
             return
         args = ["pacat", "--raw", "--format=s16le", f"--rate={RATE}", f"--channels={self.channels}",
-                "--latency-msec=250", "--volume=65536", "--client-name=Supreme Skelly music"]
+                f"--latency-msec={BUFFER_MS}", "--volume=65536", "--client-name=Supreme Skelly music"]
         if self.sink:
             args.append(f"--device={self.sink}")
         self.proc = await asyncio.create_subprocess_exec(*args, stdin=asyncio.subprocess.PIPE,
@@ -508,10 +516,13 @@ class _Out:
         if self.proc and self.proc.stdin and seconds > 0:
             self.proc.stdin.write(bytes(int(RATE * seconds) * self.channels * 2))
 
-    async def close(self) -> None:
-        from .audio_io import _stop
+    def hush(self, seconds: float) -> None:
+        """Queue a near-silent hush (see audio_io.hush) without waiting for it to play."""
+        if self.proc and self.proc.stdin and seconds > 0:
+            self.proc.stdin.write(audio_io.hush(RATE, seconds, self.channels))
 
-        await _stop(self.proc)
+    async def close(self) -> None:
+        await audio_io._stop(self.proc)
         self.proc = None
 
 
@@ -658,11 +669,17 @@ class Player:
         voice_dec = await _decoder(folder / "voice.ogg", 1)
         band_dec = await _decoder(folder / "band.ogg", 2)
         show: asyncio.Task | None = None
+        sync: autosync.LiveSync | None = None
+        syncing: asyncio.Task | None = None
+        auto = {"ms": 0.0}  # "Keep in sync"'s own correction to the other speakers, on top of the slider
         try:
             await voice_out.open()
             await band_out.open()
             n = int(RATE * CHUNK_S)
             await asyncio.sleep(0.4)  # give PipeWire a moment to hook the streams up before timing starts
+            # Wake the speakers' amplifiers before the first note (they mute on silence)
+            voice_out.hush(LEAD_IN_S)
+            band_out.hush(LEAD_IN_S)
             # Line the other speakers up with Skelly by starting one stream a little late. This goes
             # after the pause: silence queued before it would partly play away and shrink the offset.
             offset = cfg["speakers_offset_ms"] / 1000
@@ -671,10 +688,15 @@ class Player:
             elif offset < 0:
                 voice_out.pad(-offset)
             lead = AUDIO_DELAY_S + cfg["sync_ms"] / 1000 + max(0.0, -offset)
-            t0 = time.monotonic()
+            t0 = time.monotonic() + LEAD_IN_S
             written = 0.0
             clock = {"t0": t0, "lead": lead}
             show = asyncio.create_task(self._show(events, clock), name="music-show")
+            if band_out.enabled and cfg["live_sync"]:
+                sync = autosync.LiveSync(self.svc.settings.audio.get("mic") or None, RATE,
+                                         max_delay_s=AUDIO_DELAY_S + 2 * MAX_SHIFT_MS / 1000)
+                await sync.start(clock["t0"])
+                syncing = asyncio.create_task(self._keep_in_sync(sync, auto), name="music-live-sync")
             last_pub = 0.0
             live = {"sync_ms": cfg["sync_ms"], "offset_ms": cfg["speakers_offset_ms"]}
             last_cfg = 0.0
@@ -689,15 +711,17 @@ class Player:
                     clock["lead"] += (cfg["sync_ms"] - live["sync_ms"]) / 1000
                     live["sync_ms"] = cfg["sync_ms"]
                     # A new "other speakers" offset: hold back whichever stream should now be later,
-                    # a little at a time so neither speaker runs dry. Holding back the voice is
-                    # picked up by the clock below like any other delay.
-                    step = max(-100, min(100, cfg["speakers_offset_ms"] - live["offset_ms"]))
+                    # a little at a time so neither speaker runs dry. Holding back the voice moves
+                    # the song's clock with it, so the moves and lights wait for his voice too.
+                    target = max(-MAX_SHIFT_MS, min(MAX_SHIFT_MS, cfg["speakers_offset_ms"] + auto["ms"]))
+                    step = max(-100, min(100, target - live["offset_ms"]))
                     if band_out.enabled and step:
                         live["offset_ms"] += step
                         if step > 0:
                             band_out.pad(step / 1000)
                         else:
                             voice_out.pad(-step / 1000)
+                            clock["t0"] += -step / 1000
                 if not self._resume.is_set():
                     await self._halt_body()
                     await self._resume.wait()
@@ -717,6 +741,9 @@ class Player:
                 if band_out.enabled:
                     spk = b + (v[:, None] if cfg["speakers_voice"] else 0)
                     await band_out.write((spk * gain_spk).reshape(-1))
+                if sync:
+                    sync.t0 = clock["t0"]  # pauses and dropouts move the song's clock
+                    sync.played(v, b.mean(axis=1))
                 written += m / RATE
                 now = time.monotonic()
                 if self.simulate:  # no speaker to pace us: keep real time ourselves
@@ -737,12 +764,59 @@ class Player:
         finally:
             if show:
                 show.cancel()
+            if syncing:
+                syncing.cancel()
+            if sync:
+                await sync.stop()
+                self._remember_offset(auto["ms"])
             for proc in (voice_dec, band_dec):
                 if proc.returncode is None:
                     proc.kill()
             await voice_out.close()
             await band_out.close()
             await self._halt_body(restore=True)
+
+    async def _keep_in_sync(self, sync: autosync.LiveSync, auto: dict) -> None:
+        """Every few seconds, hear how late Skelly and the other speakers are and line them up."""
+        aligner = autosync.Aligner()
+        self._publish(sync={"state": "listening"})
+        settle_until = time.monotonic() + autosync.WINDOW_S + 1
+        while True:
+            await asyncio.sleep(SYNC_EVERY_S)
+            if time.monotonic() < settle_until or not self._resume.is_set():
+                continue
+            snap = sync.snapshot()
+            if not snap:
+                continue
+            m = await asyncio.to_thread(autosync.measure_live, snap, self.cfg()["speakers_voice"])
+            fix = aligner.step(m)
+            if fix:
+                auto["ms"] += fix * 1000
+                log.info("keep in sync: other speakers heard %+.0f ms from Skelly, moving them %+.0f ms",
+                         -fix * 1000, fix * 1000)
+                # The change is fed in 100 ms every quarter second, then has to come out of the speakers
+                settle_until = time.monotonic() + abs(fix) * 2.5 + BUFFER_MS / 1000 + autosync.WINDOW_S + 1
+            state = "in sync" if aligner.locked else "adjusting" if fix else (
+                "listening" if aligner.gap_s is None else self.state.sync.get("state", "listening"))
+            if m and m.get("voice") is None and m.get("band") is None and aligner.gap_s is None:
+                state = "can't hear"
+            self._publish(sync={"state": state,
+                                "gap_ms": None if aligner.gap_s is None else round(aligner.gap_s * 1000),
+                                "skelly_ms": None if not m or m.get("voice") is None else round(m["voice"] * 1000)})
+
+    def _remember_offset(self, auto_ms: float) -> None:
+        """Keep what "Keep in sync" worked out, so the next song starts lined up."""
+        if abs(auto_ms) < 10:
+            return
+        try:
+            settings = self.svc.settings
+            cur = config(settings.music)
+            offset = cur["speakers_offset_ms"] + round(auto_ms / 10) * 10
+            settings.music = config({**settings.music, "speakers_offset_ms": offset})
+            settings.save()
+            self.svc.bus.publish("music_config", settings.music)
+        except Exception as exc:
+            log.info("couldn't save the synced timing: %r", exc)
 
     async def _halt_body(self, restore: bool = False) -> None:
         """Stop moving; after a song, put his own lights and eyes back."""

@@ -271,3 +271,51 @@ def test_voice_can_have_a_side_of_its_own():
     assert music._skelly_mix(v, m, "left").tolist() == [1, 10, 2, 20]
     assert music._skelly_mix(v, m, "right").tolist() == [10, 1, 20, 2]
     assert music.config({"voice_side": "up"})["voice_side"] == "mix"
+
+
+async def test_keep_in_sync_lines_the_other_speakers_up_and_remembers(tmp_path, monkeypatch):
+    """The mic hears the band 0.8 s behind Skelly: the band is brought forward, and the next song starts there."""
+    from skelly import autosync
+
+    class Settings:
+        music = {"speakers_offset_ms": 100}
+        saved = 0
+
+        def save(self):
+            self.saved += 1
+
+    class Bus:
+        def publish(self, *a):
+            pass
+
+    class Svc:
+        settings = Settings()
+        bus = Bus()
+
+    monkeypatch.setattr(music, "SYNC_EVERY_S", 0.01)
+    monkeypatch.setattr(autosync, "WINDOW_S", 0.0)
+    monkeypatch.setattr(autosync, "measure_live", lambda snap, everywhere: {"voice": 0.6, "band": 1.4})
+
+    class Sync:
+        def snapshot(self):
+            return {"mic": []}
+
+    svc = Svc()
+    player = music.Player(svc, music.Library(tmp_path / "music"), None, lambda: music.config({}), simulate=True)
+    auto = {"ms": 0.0}
+    task = asyncio.create_task(player._keep_in_sync(Sync(), auto))
+    for _ in range(200):
+        await asyncio.sleep(0.01)
+        if auto["ms"]:
+            break
+    task.cancel()
+    assert round(auto["ms"]) == -800 and player.state.sync["state"] == "adjusting"
+    player._remember_offset(auto["ms"])
+    assert svc.settings.music["speakers_offset_ms"] == -700 and svc.settings.saved == 1
+
+
+def test_hush_is_too_faint_to_hear():
+    from skelly import audio_io
+
+    a = np.frombuffer(audio_io.hush(16000, 1.0), "<i2")
+    assert len(a) == 16000 and 0 < np.abs(a).max() <= audio_io.HUSH_LSB  # not silence, but about -80 dB

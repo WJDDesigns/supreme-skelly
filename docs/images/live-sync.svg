@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="380" rx="18" fill="#111"/>
+  <text x="40" y="48" font-size="20" font-weight="700" fill="#f6f3ee">Keep in sync while singing</text>
+  <text x="40" y="74" font-size="13" fill="#a9a29a">Every Bluetooth speaker plays a little late, and by a different amount. Skelly's mic hears both and lines them up.</text>
+
+  <!-- Before -->
+  <text x="40" y="128" font-size="14" font-weight="700" fill="#a9a29a">BEFORE</text>
+  <g font-size="12" fill="#a9a29a">
+    <text x="130" y="110">Skelly (voice)</text>
+    <rect x="250" y="98" width="70" height="16" rx="4" fill="#ff8c1a"/>
+    <rect x="335" y="98" width="110" height="16" rx="4" fill="#ff8c1a"/>
+    <rect x="460" y="98" width="80" height="16" rx="4" fill="#ff8c1a"/>
+    <text x="130" y="142">Other speaker</text>
+    <rect x="330" y="130" width="360" height="16" rx="4" fill="#d24b4b"/>
+    <path d="M250 160 H330" stroke="#d24b4b" stroke-width="2" marker-end="url(#a)"/>
+    <text x="250" y="180" fill="#d24b4b" font-weight="700">the band arrives late, and drifts as Bluetooth changes</text>
+  </g>
+
+  <!-- Listening -->
+  <g font-size="12" fill="#f6f3ee">
+    <circle cx="760" cy="150" r="34" fill="#1d1d1d" stroke="#ff8c1a" stroke-width="2"/>
+    <rect x="752" y="132" width="16" height="26" rx="8" fill="#ff8c1a"/>
+    <path d="M746 152 a14 14 0 0 0 28 0 M760 166 v8" stroke="#ff8c1a" stroke-width="2" fill="none"/>
+    <text x="712" y="206" fill="#a9a29a">Skelly's mic listens</text>
+    <text x="704" y="222" fill="#a9a29a">every few seconds</text>
+  </g>
+
+  <!-- Now -->
+  <text x="40" y="288" font-size="14" font-weight="700" fill="#ff8c1a">NOW</text>
+  <g font-size="12" fill="#a9a29a">
+    <text x="130" y="270">Skelly (voice)</text>
+    <rect x="250" y="258" width="70" height="16" rx="4" fill="#ff8c1a"/>
+    <rect x="335" y="258" width="110" height="16" rx="4" fill="#ff8c1a"/>
+    <rect x="460" y="258" width="80" height="16" rx="4" fill="#ff8c1a"/>
+    <text x="130" y="302">Other speaker</text>
+    <rect x="250" y="290" width="360" height="16" rx="4" fill="#5fb36b"/>
+    <text x="250" y="336" fill="#f6f3ee" font-weight="700">heard together: "In sync", saved for the next song</text>
+  </g>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#d24b4b"/>
+    </marker>
+  </defs>
+</svg>

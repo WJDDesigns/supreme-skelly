@@ -224,8 +224,13 @@ extra speakers you've added in Settings > Sound.
 
 ![How a song becomes a performance](docs/images/music-flow.svg)
 
-The **[music guide](docs/music.md)** covers which links work, playlists, the show settings
-and lining up the timing.
+While he sings, Skelly's mic listens to his speaker and your other speakers and keeps them in
+step (**Keep in sync while singing**), so the band never drifts away from his voice.
+
+<img src="docs/images/live-sync.svg" alt="Skelly's mic hears his voice and the band, and the band is lined up with his voice" width="720">
+
+The **[music guide](docs/music.md)** covers which links work, playlists, the show settings,
+lining up the timing, and fixing skips or a clipped first word.
 
 ## Fog on cue
 
