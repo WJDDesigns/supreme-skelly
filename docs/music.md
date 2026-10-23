@@ -80,12 +80,38 @@ with his mic, and sets both sliders below for you. The setting covers every song
 - **Moves and lights:** if he dances behind the beat, slide left; ahead of it, slide right.
 - **Other speakers:** if the band sounds behind Skelly's voice, slide left; ahead of it, slide right. Both sliders reach 3 seconds either way; a speaker on a different Bluetooth radio can lag by a second or more.
 
+**Keep in sync while singing** (on by default) does this for you during every song. Skelly's mic
+listens while he sings, picks his voice and the band out of what it hears, and lines your other
+speakers up with him a few seconds into the song. Bluetooth delays drift, especially after a
+speaker reconnects, so it keeps listening and fixes any drift as it goes. A line under the switch
+says what it hears ("In sync", "Lining the speakers up"). What it learns is saved to the
+**Other speakers** slider, so the next song starts lined up. It needs to hear both speakers: if it
+says it can't, turn them up a little or move the other speaker closer to Skelly.
+
+![Keep in sync: Skelly's mic hears both speakers and lines the band up with his voice](images/live-sync.svg)
+
+<img src="images/music-timing.png" alt="Music > Timing: the Keep in sync while singing switch, saying In sync, above Auto sync and the timing sliders" width="440">
+
 Your other speakers only play music. When the song stops, Skelly goes back to chatting on his own
 speaker, and the mini PC keeps the other speakers connected (it reconnects them about once a minute).
 
-If the music on your other speakers skips, check the mini PC has a second Bluetooth radio (most have
-one built in). Extra speakers pair on the radio Skelly isn't using. A speaker added before v0.7.8
-needs removing and adding again in **Settings > Sound** to move over.
+### Skips, pops and a clipped first word
+
+- **Skips and pops:** each song now keeps about three quarters of a second of music queued for every
+  speaker (it was a quarter of a second), so a moment when the mini PC is busy no longer runs a
+  speaker dry. Songs start that much later; the timing allows for it.
+- **The first word cut off:** most Bluetooth speakers, Skelly's included, switch their amplifier off
+  when they're sent pure silence and take a moment to switch it back on, which swallowed the start of
+  his first word. With **Keep speakers awake** on (Settings > Sound), the mini PC now sends a hush
+  too faint to hear instead of silence, and each reply and each song starts with a short hush, so the
+  amplifier is already on when he starts.
+- **Only the other speaker skips:** extra speakers pair on the mini PC's own Bluetooth radio, which
+  on most mini PCs shares its antenna with Wi-Fi. Busy 2.4 GHz Wi-Fi (camera video, for example)
+  starves the speaker. A network cable for the mini PC, or 5 GHz Wi-Fi, helps the most. A wired speaker
+  avoids Bluetooth altogether: a cheap USB sound card plugged into a spare port (including a USB
+  extender near Skelly) shows up in **Settings > Sound** as a speaker, and it never drifts.
+- Extra speakers pair on the radio Skelly isn't using. A speaker added before v0.7.8 needs removing
+  and adding again in **Settings > Sound** to move over.
 
 Small steps (20 to 50 ms) make a visible difference. Every slider changes the song that is playing straight away, so line things up while he sings. The settings are saved and used for every song.
 

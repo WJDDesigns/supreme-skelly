@@ -863,6 +863,7 @@ function connectEvents() {
     else if (msg.type === "fog") { renderFog(msg.data); liveUpdate("fog", msg.data); }
     else if (msg.type === "music") { musicUI?.renderPlayer(msg.data); liveUpdate("music", msg.data); }
     else if (msg.type === "music_library") musicUI?.renderLibrary(msg.data);
+    else if (msg.type === "music_config") musicUI?.renderConfig(msg.data);
     else if (msg.type === "fog_level") setFogLevel(msg.data.level);
     else if (msg.type === "visitor") onVisitor(msg.data);
     else if (msg.type === "meters") setMeters(msg.data);
