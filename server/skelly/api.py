@@ -61,11 +61,15 @@ from .vision import (
     Vision,
     VisionConfig,
     costume_names,
+    delivery,
     describe,
     find_skelly,
     list_cameras,
     notice,
+    opening_line,
     protect_verdict,
+    tags,
+    who_note,
 )
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -729,7 +733,7 @@ def create_app(
         later(app.state.fog.visitor("Calling someone over"))
 
         costumes, noticed = costume_names(verdict), notice(verdict)
-        line = call_out(costumes, noticed, svc().profile.character)
+        line = opening_line(verdict) or call_out(costumes, noticed, svc().profile.character)
         svc().bus.publish("calling_over", {"line": line, "costumes": costumes})
         conv = app.state.conv
         if conv.running:
@@ -738,6 +742,7 @@ def create_app(
         ctx = ("You just called out to someone walking past to come over and chat. When they come over, "
                "welcome them warmly." + costume_hint(costumes)
                + (f" You noticed their {noticed}; mention it in a friendly way." if noticed else "")
+               + (f" {who_note(verdict)}" if who_note(verdict) else "")
                + (" It's getting dark, so don't guess the colour of anything they're wearing."
                   if verdict.get("dark") else ""))
         try:
@@ -747,18 +752,51 @@ def create_app(
         except (MissingKey, ValueError) as exc:
             log.info("call-over not started: %s", exc)
 
-    async def on_visitor(description: str | None, cfg: VisionConfig) -> None:
-        costumes = list(app.state.vision.state.costumes)
+    async def personal_look(jpeg: bytes | None, zones: list) -> dict | None:
+        """One AI look just before a chat starts when the free Protect check let them in, so even
+        then the hello is about them. Gives up quickly: a canned hello beats keeping them waiting."""
+        if not jpeg:
+            return None
+        try:
+            return await asyncio.wait_for(describe(app.state.vault, jpeg, zones, svc().profile.character), 8)
+        except Exception as exc:
+            log.info("look before the hello failed: %r", exc)
+            return None
+
+    def visitor_context(description: str | None, costumes: list[str], verdict: dict | None) -> str | None:
+        if delivery(verdict):
+            return (f"{who_note(verdict)} Thank them in a fun way in one or two short sentences and wish "
+                    "them a good day. Don't ask them questions or keep them talking: they're working. "
+                    "Only chat more if they talk to you.")
+        if not description and not who_note(verdict):
+            return None
+        return " ".join(p for p in (
+            "Someone just walked up.",
+            f"What the camera sees: {description}{costume_hint(costumes)}" if description else "",
+            who_note(verdict)) if p)
+
+    async def on_visitor(description: str | None, cfg: VisionConfig, verdict: dict | None = None) -> None:
+        vision = app.state.vision
+        costumes = list(vision.state.costumes)
         svc().bus.publish("visitor", {"description": description, "costumes": costumes,
                                       "ts": __import__("time").time()})
         app.state.costumes_mentioned = set(c.lower() for c in costumes)
         later(app.state.fog.visitor())
         if cfg.auto_converse and not quiet():
-            ctx = (f"Someone just walked up. What the camera sees: {description}{costume_hint(costumes)}"
-                   if description else None)
+            picture = vision.frame
+            free = verdict is None or verdict.get("source") == "unifi"  # nobody has looked at them yet
+            if free and (looked := await personal_look(picture, cfg.active_zones)):
+                if delivery(looked) and cfg.deliveries == "skip":
+                    vision.sighting("Ignored: delivery driver (Deliveries is set to leave them be)", looked)
+                    return
+                verdict, description = looked, looked.get("description") or description
+                costumes = costume_names(looked)
+            if delivery(verdict) and cfg.deliveries == "chat":
+                verdict = {k: v for k, v in verdict.items() if k != "delivery"}  # greeted like anyone else
             try:
-                await app.state.conv.start(context=ctx, trigger=f"someone walked up ({app.state.vision.source})",
-                                           picture=app.state.vision.frame)
+                await app.state.conv.start(context=visitor_context(description, costumes, verdict),
+                                           opening=opening_line(verdict) or None,
+                                           trigger=f"someone walked up ({vision.source})", picture=picture)
             except (MissingKey, ValueError) as exc:
                 log.info("visitor conversation not started: %s", exc)
 
@@ -773,7 +811,7 @@ def create_app(
             return
         app.state.last_live_callout = now
         try:
-            verdict = await describe(app.state.vault, jpeg, zones)
+            verdict = await describe(app.state.vault, jpeg, zones, svc().profile.character)
         except Exception as exc:
             log.info("call-over check failed: %r", exc)
             return
@@ -782,7 +820,7 @@ def create_app(
             return
         from .callouts import call_out
 
-        line = call_out(costume_names(verdict), notice(verdict), svc().profile.character)
+        line = opening_line(verdict) or call_out(costume_names(verdict), notice(verdict), svc().profile.character)
         if conv.call_over(line):
             svc().bus.publish("calling_over", {"line": line, "costumes": costume_names(verdict)})
             app.state.vision.sighting("Mid-chat: called them over too", verdict, jpeg=jpeg, source=source)
@@ -1336,12 +1374,12 @@ def create_app(
             raise HTTPException(409, "Start the camera first")
         cfg = VisionConfig.from_dict(svc().settings.vision)
         try:
-            verdict = await describe(app.state.vault, app.state.vision.frame, cfg.active_zones)
+            verdict = await describe(app.state.vault, app.state.vision.frame, cfg.active_zones, svc().profile.character)
         except Exception as exc:
             raise HTTPException(502, f"The AI couldn't look: {exc}") from exc
         if verdict is None:
             raise HTTPException(400, "Add an Anthropic or OpenAI API key in Settings > API keys first.")
-        return verdict
+        return {**verdict, "tags": tags(verdict), "line": opening_line(verdict)}
 
     # -- fog machine -----------------------------------------------------------------
 
