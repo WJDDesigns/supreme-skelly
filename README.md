@@ -148,6 +148,18 @@ carried on. If the mini PC restarts mid-chat, the pieces are joined the next tim
 
 <img src="docs/images/recordings-filter.png" alt="Recordings list with filter chips, a picture and reply count on each recording, and the video playing right under the one that was tapped" width="560">
 
+### He learns from his chats
+
+Every chat is logged on the mini PC with who the camera saw and how it went (did they answer,
+how long they stayed). Once a night, Claude reads the new chats and keeps a short list of
+tips: openers that worked, questions kids love, things to stop doing. Skelly follows them in
+every conversation. **What Skelly has learned** on the Conversation page shows the tips; edit
+or delete any of them, add your own (yours are never dropped), or press **Review chats now**.
+It needs an Anthropic key and costs about a cent or two a night. Chats older than 30 days are
+deleted.
+
+<img src="docs/images/learning.png" alt="What Skelly has learned: tips like ask kids a riddle early, and ask dog owners the dog's name, each editable, plus a box to add your own" width="720">
+
 ## Seeing visitors (Vision)
 
 Open **Vision** and pick where the picture comes from: a USB webcam, an RTSP camera link,
