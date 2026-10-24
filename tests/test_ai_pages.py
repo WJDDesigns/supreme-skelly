@@ -138,7 +138,7 @@ def test_sightings_log_what_skelly_did(tmp_path, monkeypatch):
     verdicts = iter([{"people": 1, "approaching": False, "description": "a man in a blue shirt walking a dog"},
                      {"people": 0, "approaching": False}])
 
-    async def fake_describe(vault, jpeg, zones=None):
+    async def fake_describe(vault, jpeg, zones=None, character="skelly"):
         return next(verdicts)
 
     monkeypatch.setattr(vision_mod, "describe", fake_describe)
@@ -164,7 +164,7 @@ def test_sightings_log_what_skelly_did(tmp_path, monkeypatch):
 def test_cyclists_riding_past_are_not_called_over(tmp_path, monkeypatch):
     import skelly.vision as vision_mod
 
-    async def fake_describe(vault, jpeg, zones=None):
+    async def fake_describe(vault, jpeg, zones=None, character="skelly"):
         return {"people": 1, "bikes": 1, "approaching": False, "notice": "blue bike"}
 
     monkeypatch.setattr(vision_mod, "describe", fake_describe)

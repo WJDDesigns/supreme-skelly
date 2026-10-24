@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 330" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="330" rx="18" fill="#111"/>
+  <text x="40" y="48" font-size="20" font-weight="700" fill="#f6f3ee">A hello that's about who walked up</text>
+  <text x="40" y="74" font-size="13" fill="#a9a29a">One look at the camera picture, then Skelly's first words fit them</text>
+  <g font-size="13" fill="#f6f3ee">
+    <text x="40" y="122" font-size="14" font-weight="700" fill="#a9a29a">BEFORE</text>
+    <rect x="140" y="100" width="300" height="36" rx="10" fill="#1c1c1f" stroke="#333"/>
+    <text x="290" y="123" text-anchor="middle">Delivery driver with a box</text>
+    <rect x="460" y="100" width="400" height="36" rx="10" fill="#2a1414" stroke="#d24b4b"/>
+    <text x="660" y="123" text-anchor="middle">"Well hello there! Come closer, I don't bite… much."</text>
+
+    <text x="40" y="192" font-size="14" font-weight="700" fill="#ff8c1a">NOW</text>
+    <rect x="140" y="170" width="300" height="36" rx="10" fill="#1c1c1f" stroke="#333"/>
+    <text x="290" y="193" text-anchor="middle">Delivery driver with a box</text>
+    <rect x="460" y="170" width="400" height="36" rx="10" fill="#2a1d10" stroke="#ff8c1a"/>
+    <text x="660" y="193" text-anchor="middle">"Ooh, a parcel! Is it a new skull for me? Thank you!"</text>
+
+    <rect x="140" y="222" width="300" height="36" rx="10" fill="#1c1c1f" stroke="#333"/>
+    <text x="290" y="245" text-anchor="middle">Two grown-ups, a little witch, a dog</text>
+    <rect x="460" y="222" width="400" height="36" rx="10" fill="#2a1d10" stroke="#ff8c1a"/>
+    <text x="660" y="245" text-anchor="middle">"A witch AND her dog? My kind of crowd! Hi all!"</text>
+
+    <rect x="140" y="274" width="300" height="36" rx="10" fill="#1c1c1f" stroke="#333"/>
+    <text x="290" y="297" text-anchor="middle">Two joggers going past</text>
+    <rect x="460" y="274" width="400" height="36" rx="10" fill="#2a1d10" stroke="#ff8c1a"/>
+    <text x="660" y="297" text-anchor="middle">"Hey runners! Slow down, I can't chase you, no muscles!"</text>
+  </g>
+</svg>

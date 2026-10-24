@@ -1021,11 +1021,12 @@ function snapLink(name, caption) {
 function sightingEl(s) {
   const when = new Date(s.ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const caption = `${when}, ${s.camera}: ${s.outcome}${s.seen ? `. AI saw: ${s.seen}` : ""}`;
-  const good = /^(Called|Visitor|Mid-chat: called)/.test(s.outcome);
+  const good = /^(Called|Visitor|Delivery|Mid-chat: called)/.test(s.outcome);
   return el("li", { className: good ? "acted" : "" },
     s.snap ? snapLink(s.snap, caption) : el("span", { className: "snap-none" }),
     el("div", {},
       el("strong", { textContent: s.outcome }),
+      (s.tags ?? []).length ? el("span", { className: "chips sight-tags" }, ...s.tags.map((t) => el("span", { className: "chip costume", textContent: t }))) : "",
       el("span", { className: "muted", textContent: `${when} · ${s.camera}${s.seen ? ` · ${s.seen}` : ""}` })));
 }
 function addSighting(s) {
@@ -1227,7 +1228,8 @@ $("#cam-describe").addEventListener("click", (ev) =>
   run(ev.currentTarget, async () => {
     const r = await api("/vision/describe", {});
     $("#cam-desc").hidden = false;
-    $("#cam-desc").textContent = `${r.people ? `${r.people} ${r.people === 1 ? "person" : "people"}. ` : "Nobody there. "}${r.description ?? ""}`;
+    const tagText = (r.tags ?? []).length ? ` (${r.tags.join(", ")})` : "";
+    $("#cam-desc").textContent = `${r.people ? `${r.people} ${r.people === 1 ? "person" : "people"}${tagText}. ` : "Nobody there. "}${r.description ?? ""}${r.line ? ` He'd say: “${r.line}”` : ""}`;
     renderCostumes((r.costumes ?? []).map((c) => (typeof c === "string" ? c : c.costume)).filter(Boolean));
   }));
 let ignorable = {};
