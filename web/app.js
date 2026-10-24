@@ -1729,6 +1729,28 @@ $("#scene-file").addEventListener("change", async (e) => {
 });
 loadScene();
 
+// ---------- What Skelly has learned (nightly review of his chats) ----------
+function renderLearning(r) {
+  const when = r.last_review ? new Date(r.last_review * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "";
+  $("#learn-sub").textContent = `${r.chats_logged} chat${r.chats_logged === 1 ? "" : "s"} logged · ${r.chats_waiting} new since the last review${when ? ` · last review ${when}` : ""}`;
+  if (r.error) $("#learn-sub").textContent += ` · last review failed: ${r.error}`;
+  $("#learn-tips").replaceChildren(...(r.tips.length ? r.tips.map((t) => {
+    const input = el("input", { type: "text", value: t.text, maxLength: 200, ariaLabel: "Tip" });
+    let timer;
+    input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => api(`/learning/tips/${t.id}`, { text: input.value }, "PUT").catch((e) => toast(e.message, true)), 700); });
+    const del = el("button", { className: "btn outline small danger", textContent: "Delete" });
+    del.addEventListener("click", () => run(del, async () => renderLearning(await api(`/learning/tips/${t.id}`, undefined, "DELETE"))));
+    return el("li", {}, el("span", { className: `who ${t.by}`, textContent: t.by === "you" ? "You" : "Learned" }), input, del);
+  }) : [el("li", { className: "muted", textContent: "No tips yet. After a few chats, tonight's review writes the first ones." })]));
+}
+const loadLearning = () => api("/learning").then(renderLearning).catch(() => {});
+$("#learn-review").addEventListener("click", (ev) => run(ev.currentTarget, async () => { renderLearning(await api("/learning/review", {})); toast("Tips updated from the latest chats"); }));
+$("#learn-add").addEventListener("click", (ev) => run(ev.currentTarget, async () => {
+  renderLearning(await api("/learning/tips", { text: $("#learn-new").value }));
+  $("#learn-new").value = "";
+}));
+loadLearning();
+
 // ---------- UniFi Protect ----------
 let protectCams = [];
 function renderProtectState(p) {

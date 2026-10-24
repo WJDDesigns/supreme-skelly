@@ -19,7 +19,9 @@ from pydantic import BaseModel, Field
 from . import (
     audio,
     audio_io,
+    clock,
     ears,
+    learning,
     music,
     music_api,
     protect,
@@ -129,6 +131,10 @@ class PlaylistBody(BaseModel):
     items: list[PlaylistItem]
     loop: bool = False
     shuffle: bool = False
+
+
+class TipBody(BaseModel):
+    text: str = Field(max_length=200)
 
 
 class KeepLookBody(BaseModel):
@@ -283,7 +289,11 @@ def create_app(
         app.state.conv.snap = lambda: app.state.snaps.save(
             app.state.vision.frame if app.state.vision.state.running else None)
         app.state.scene = scene.Scene()
-        app.state.conv.scene_context = app.state.scene.context
+        app.state.learning = learning.Learning()
+        app.state.chat_seen = []  # what the camera saw on whoever the current chat is with
+        app.state.conv.scene_context = lambda: " ".join(
+            c for c in (app.state.scene.context(), app.state.learning.context()) if c)
+        learning_task = asyncio.create_task(learning_watch())
         app.state.recorder = recorder.Recorder()
         asyncio.get_running_loop().run_in_executor(None, recorder.recover)  # chats cut off by a restart
         app.state.costumes_mentioned = set()
@@ -326,6 +336,7 @@ def create_app(
                 log.info("camera not started: %s", exc)
         yield
         costume_task.cancel()
+        learning_task.cancel()
         awake_task.cancel()
         await app.state.keep_awake.stop()
         fog_cam_task.cancel()
@@ -709,6 +720,11 @@ def create_app(
 
     async def chat_ended(transcript: list[dict]) -> None:
         conv = app.state.conv
+        try:
+            app.state.learning.log_chat(transcript, conv.state.trigger, app.state.chat_seen)
+        except Exception:
+            log.exception("Couldn't log the chat")
+        app.state.chat_seen = []
         if conv.state.trigger and conv.state.trigger.startswith("someone talked") and not conv.state.answered:
             # What the mic heard wasn't someone talking to him (wind, a car, the neighbours): rest the ears
             app.state.ears_paused_until = time.time() + ears.UNANSWERED_PAUSE_S
@@ -745,6 +761,7 @@ def create_app(
                + (f" {who_note(verdict)}" if who_note(verdict) else "")
                + (" It's getting dark, so don't guess the colour of anything they're wearing."
                   if verdict.get("dark") else ""))
+        app.state.chat_seen = tags(verdict)
         try:
             await conv.start(context=ctx, opening=line,
                              trigger=f"called over someone walking past ({app.state.vision.source})",
@@ -793,6 +810,7 @@ def create_app(
                 costumes = costume_names(looked)
             if delivery(verdict) and cfg.deliveries == "chat":
                 verdict = {k: v for k, v in verdict.items() if k != "delivery"}  # greeted like anyone else
+            app.state.chat_seen = tags(verdict)
             try:
                 await app.state.conv.start(context=visitor_context(description, costumes, verdict),
                                            opening=opening_line(verdict) or None,
@@ -924,6 +942,23 @@ def create_app(
                 vision.state.costumes = costume_names(verdict)
                 vision._publish()
                 conv.add_context(f"New costume spotted: {', '.join(new)}. Work it into the conversation.")
+
+    async def learning_watch() -> None:
+        """Once a night, Claude reads the day's chats and rewrites Skelly's tips."""
+        from .vision import PERSONAS
+
+        while True:
+            await asyncio.sleep(1800)
+            lr = app.state.learning
+            try:
+                if not lr.due(clock.now().hour) or app.state.conv.running:
+                    continue
+                persona = PERSONAS.get(svc().profile.character, PERSONAS["skelly"])
+                await lr.review(app.state.vault, persona)
+                log.info("nightly review done: %d tips", len(lr.load()["tips"]))
+            except Exception as exc:
+                log.info("nightly review failed: %r", exc)
+                lr.failed(str(exc))
 
     def known_here() -> list[str]:
         return sorted({f.name for f in app.state.vision.seen if f.name})
@@ -1697,6 +1732,47 @@ def create_app(
         return app.state.playlist.skip()
 
     # -- the yard and display, from photos ------------------------------------
+
+    # -- learning ---------------------------------------------------------------------------
+
+    @app.get("/api/learning")
+    async def learning_state():
+        return app.state.learning.public()
+
+    @app.post("/api/learning/review")
+    async def learning_review():
+        """Review the chats now instead of waiting for tonight."""
+        from .vision import PERSONAS
+
+        try:
+            await app.state.learning.review(
+                app.state.vault, PERSONAS.get(svc().profile.character, PERSONAS["skelly"]))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, f"The review didn't work: {exc}") from exc
+        return app.state.learning.public()
+
+    @app.post("/api/learning/tips")
+    async def learning_add(body: TipBody):
+        try:
+            app.state.learning.add(body.text)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return app.state.learning.public()
+
+    @app.put("/api/learning/tips/{tip_id}")
+    async def learning_edit(tip_id: str, body: TipBody):
+        try:
+            app.state.learning.update(tip_id, body.text)
+        except KeyError as exc:
+            raise HTTPException(404, "No such tip") from exc
+        return app.state.learning.public()
+
+    @app.delete("/api/learning/tips/{tip_id}")
+    async def learning_remove(tip_id: str):
+        app.state.learning.remove(tip_id)
+        return app.state.learning.public()
 
     @app.get("/api/scene")
     async def scene_list():

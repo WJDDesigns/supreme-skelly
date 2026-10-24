@@ -460,6 +460,13 @@
             <ul id="scene-list" class="scene-list"></ul>
           </div>
           <div class="card">
+            <div class="card-head"><div><h2>What Skelly has learned</h2><p class="muted" id="learn-sub">Nothing yet</p></div>
+              <button id="learn-review" class="btn outline small"><svg><use href="#i-refresh"/></svg>Review chats now</button></div>
+            <p class="muted small">Every night Claude reads the day's chats and keeps a short list of tips: what got visitors talking and what fell flat. Skelly follows them in every chat. Edit or delete any tip, or add your own. Chats stay on the mini PC.</p>
+            <ul id="learn-tips" class="learn-tips"></ul>
+            <div class="row learn-add"><input type="text" id="learn-new" maxlength="200" placeholder="Add a tip, e.g. Ask kids what they're dressed as"><button id="learn-add" class="btn outline small">Add</button></div>
+          </div>
+          <div class="card">
             <div class="card-head"><div><h2>Voice test</h2><p class="muted">Hear the same line in each voice, through Skelly</p></div></div>
             <label class="field-row stack">Line<input type="text" id="vt-text" value="Well hello there! Come closer, I don't bite... much."></label>
             <label class="slider">Kokoro speed <output id="vt-speed-out">1.15×</output>
