@@ -160,6 +160,19 @@ for costume compliments. It costs a little per look. Switch it off for a free mo
 Protect, Skelly then goes by UniFi's own person detection. **Recent sightings** lists everyone
 the cameras spotted, with their picture and what Skelly did about it.
 
+**Greetings made for them.** That one look also notices delivery drivers (and the company,
+when the uniform or van shows it), how many grown-ups and kids there are, and what they're
+doing: carrying a parcel, walking a dog, pushing a stroller. Skelly's first words are written
+about them instead of a stock hello, and the whole chat knows the details. In the free mode
+he takes one look only when he's about to start a chat. **Delivery drivers** lets you pick a
+quick thank-you (the default, he won't hold them up), a normal chat, or leaving them be.
+
+<img src="docs/images/personal-greetings.svg" alt="Before: every visitor got the same stock hello. Now a delivery driver, a family with a dog and two joggers each get a line about them." width="720">
+
+Each sighting shows what made those visitors different:
+
+<img src="docs/images/sightings-tags.png" alt="Recent sightings with chips such as Delivery: UPS, 2 adults, 1 kid, Walking a dog and Costume: witch" width="720">
+
 **Answer when spoken to** (on by default) keeps Skelly listening between chats for two
 minutes after a camera sees someone. A visitor who talks to him then gets an answer, even
 if he just said goodbye or was resting between visitors. A chat he started himself waits

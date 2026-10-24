@@ -589,7 +589,7 @@
               <label class="slider">Motion sensitivity <output id="sens-out">50</output>
                 <input type="range" min="0" max="100" data-vcfg="sensitivity"></label>
               <label class="switch-row"><span><strong>Check with AI</strong>
-                <span class="muted">An AI looks at each picture to confirm a person and describe them (costumes, clothes). Costs a little per look. Off: Skelly goes by UniFi's own free person detection instead.</span></span>
+                <span class="muted">An AI looks at each picture to confirm a person and describe them (costumes, delivery drivers, groups, what they're doing) so Skelly's hello is about them. Costs a little per look. Off: Skelly goes by UniFi's own free person detection, and takes one look only when he starts a chat.</span></span>
                 <input type="checkbox" data-vcfg="ai_check" role="switch"></label>
               <div class="field ignore-field"><span class="muted">Don't react to</span>
                 <div class="chips small" id="ignore-chips"></div></div>
@@ -602,6 +602,8 @@
               <label class="switch-row"><span><strong>Talk to visitors</strong>
                 <span class="muted">Starts a conversation when someone walks up.</span></span>
                 <input type="checkbox" data-vcfg="auto_converse" role="switch"></label>
+              <label class="field-row">Delivery drivers<select data-vcfg="deliveries">
+                <option value="brief">Quick thank-you</option><option value="chat">Chat like anyone</option><option value="skip">Leave them be</option></select></label>
               <label class="switch-row"><span><strong>Answer when spoken to</strong>
                 <span class="muted">After someone's been seen, Skelly keeps listening between chats. Talk to him and he answers, even if he just said goodbye.</span></span>
                 <input type="checkbox" data-vcfg="answer_voices" role="switch"></label>

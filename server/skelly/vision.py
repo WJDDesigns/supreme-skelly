@@ -45,6 +45,7 @@ class VisionConfig:
     faces: bool = False  # recognise faces and remember people who say their name
     call_over: bool = True  # call out to people walking past to come and chat
     answer_voices: bool = True  # between chats, someone talking to Skelly starts one (see ears.py)
+    deliveries: str = "brief"  # delivery drivers: "brief" (a quick thank-you) | "chat" (like anyone) | "skip"
     # UniFi Protect: use its person/face detections on these cameras (sharper faces, no extra load)
     protect: bool = False
     protect_host: str = ""
@@ -451,7 +452,7 @@ class Vision:
         v = verdict or {}
         row = {"ts": time.time(), "camera": source or self.source, "outcome": outcome, "snap": snap,
                "people": int(v.get("people") or 0), "approaching": v.get("approaching"),
-               "seen": str(v.get("description") or "")[:200]}
+               "seen": str(v.get("description") or "")[:200], "tags": tags(v)}
         self.sightings.append(row)
         if not outcome.startswith(NOBODY_THERE):  # someone may be standing near Skelly
             self.last_person_at = row["ts"]
@@ -465,10 +466,11 @@ class Vision:
             self.sighting(f"Skipped: still resting after the last one ({left:.0f} s left)")
             return
         self.state.last_visitor_at = now  # claim the slot before the (slow) AI check
-        description = None
+        description, verdict = None, None
         if local is not None or (cfg.ai_check and self.frame):
             try:
-                verdict = local if local is not None else await describe(self.vault, self.frame, cfg.active_zones)
+                who = getattr(getattr(self.svc, "profile", None), "character", "skelly")
+                verdict = local if local is not None else await describe(self.vault, self.frame, cfg.active_zones, who)
             except Exception as exc:
                 log.info("visitor check failed: %r", exc)
                 verdict = None
@@ -477,12 +479,17 @@ class Vision:
                 self.sighting("Skipped: the AI look at the picture failed")
                 return
             people = int(verdict.get("people") or 0)
+            if people and delivery(verdict) and cfg.deliveries == "skip":
+                self.sighting("Ignored: delivery driver (Deliveries is set to leave them be)", verdict)
+                return  # the gap stays claimed, so the same driver isn't looked at again on the way back
             if people and verdict.get("approaching") is False and int(verdict.get("bikes") or 0) >= people:
                 # Riding past: gone before Skelly finishes his first sentence, so don't call after them.
                 self.state.last_visitor_at = None
                 self.sighting("Ignored: riding past on a bike (too quick to call over)", verdict)
                 return
-            if people and verdict.get("approaching") is False or (people and not worth_a_visit(verdict, cfg.ignore)):
+            busy = people and delivery(verdict)  # drivers are greeted where they are, never called over
+            if not busy and (people and verdict.get("approaching") is False
+                             or (people and not worth_a_visit(verdict, cfg.ignore))):
                 if cfg.call_over and self._on_passerby:
                     # Walking past rather than coming up: Skelly calls them over. Passers-by come in
                     # streams, so the next one may be called a short while later.
@@ -491,7 +498,7 @@ class Vision:
                     self.sighting("Called them over (walking past)", verdict)
                     await self._on_passerby(verdict, cfg)
                     return
-            if not worth_a_visit(verdict, cfg.ignore):
+            if not busy and not worth_a_visit(verdict, cfg.ignore):
                 self.state.last_visitor_at = None  # a car, leaves blowing about...: stay ready
                 why = "walking past (calling over is off)" if people else "nobody in the picture"
                 self.sighting(f"Ignored: {why}", verdict)
@@ -502,13 +509,13 @@ class Vision:
             if costumes and description and not any(c.lower() in description.lower() for c in costumes):
                 description = f"{description} Costumes: {', '.join(costumes)}."
             off = "" if cfg.auto_converse else " (talking on its own is off)"
-            self.sighting(f"Visitor walking up{off}", verdict)
+            self.sighting(f"{'Delivery driver' if busy else 'Visitor walking up'}{off}", verdict)
         else:
             self.sighting("Visitor (no AI check)")
         self.state.visitor = True
         self.state.description = description
         self._publish()
-        await self._on_visitor(description, cfg)
+        await self._on_visitor(description, cfg, verdict)
         await asyncio.sleep(10)
         self.state.visitor = False
         self._publish()
@@ -561,6 +568,15 @@ SEE_PROMPT = (
     'as a short noun phrase that fits after the words love the, e.g. blue shirt, cute dog, red stroller, '
     'running shoes, cool hat; only something you can clearly see on a real person in this picture, '
     'empty if nobody is there or you aren\'t sure>", '
+    '"adults": <number of grown-ups>, "kids": <number of children>, '
+    '"delivery": "<if someone is a delivery driver (uniform, parcel, delivery van or food bag), the company '
+    'when you can clearly tell, e.g. UPS, FedEx, USPS, Amazon, DHL, DoorDash, Uber Eats; delivery if you '
+    'can\'t tell which; empty otherwise>", '
+    '"doing": "<what they are doing in a few words, e.g. carrying a parcel, walking a dog, pushing a stroller, '
+    'holding a candy bucket, on the phone, jogging; empty if they are just walking>", '
+    '"line": "<the first thing the character should say to them out loud: one short, fun, family-friendly '
+    'sentence that is clearly about these people (how many there are, kids, a costume, what they are doing '
+    'or holding, a delivery); if they are walking past, call them over; never guess names or ages>", '
     '"dark": <true if the picture is dim, grainy, dusk or black-and-white night vision, so colours '
     'can\'t be trusted>, '
     '"description": "<one short sentence about the people (or animals) a skeleton could joke about: '
@@ -568,6 +584,13 @@ SEE_PROMPT = (
     "Only name a colour when the picture is clearly lit and in colour; at dusk or night say "
     '"running shorts", not "black running shorts".'
 )
+
+# Who writes "line" in SEE_PROMPT, per character (profiles.Profile.character)
+PERSONAS = {
+    "skelly": "Skelly, a friendly, funny talking skeleton who likes bone puns",
+    "lily": "Lethal Lily, a cackling, friendly Halloween witch with a glowing lantern",
+    "santa": "Santa Claus, jolly and warm",
+}
 
 COLOURS = re.compile(
     r"\b(?:(?:light|dark|bright|neon|pale|hot)[ -])?(?:red|orange|yellow|green|blue|purple|pink|black|white|"
@@ -584,6 +607,69 @@ def notice(verdict: dict | None) -> str:
     if (verdict or {}).get("dark"):  # dusk and night vision get colours wrong
         text = COLOURS.sub("", text).strip()
     return text[:40]
+
+
+def _text(verdict: dict | None, key: str, limit: int) -> str:
+    text = str((verdict or {}).get(key) or "").strip().strip('"').strip()
+    if (verdict or {}).get("dark"):
+        text = re.sub(r"\s{2,}", " ", COLOURS.sub("", text)).strip()
+    return text[:limit]
+
+
+def _count(verdict: dict | None, key: str) -> int:
+    try:
+        return max(0, int((verdict or {}).get(key) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def delivery(verdict: dict | None) -> str:
+    """The delivery company when a driver is dropping something off ("UPS"), "delivery" when it
+    can't tell which, "" when nobody is delivering."""
+    text = _text(verdict, "delivery", 30).strip(".")
+    return "" if text.lower() in ("", "none", "no", "false", "null", "n/a") else text
+
+
+def opening_line(verdict: dict | None) -> str:
+    """What the AI suggests Skelly says first, written about the people it saw ("" if nothing)."""
+    line = _text(verdict, "line", 220)
+    return line if len(line) > 8 else ""
+
+
+def group(verdict: dict | None) -> str:
+    """Who's there, e.g. "2 adults and 1 kid" ("" when it's just one grown-up, or unknown)."""
+    adults, kids = _count(verdict, "adults"), _count(verdict, "kids")
+    if not kids and adults < 2:
+        return ""
+    parts = [f"{n} {word}{'s' if n > 1 else ''}" for n, word in ((adults, "adult"), (kids, "kid")) if n]
+    return " and ".join(parts)
+
+
+def tags(verdict: dict | None) -> list[str]:
+    """Short chips for the Vision page: what made these visitors different."""
+    out = []
+    if d := delivery(verdict):
+        out.append("Delivery driver" if d.lower() == "delivery" else f"Delivery: {d}")
+    if g := group(verdict):
+        out.append(g.replace(" and ", ", "))
+    if doing := _text(verdict, "doing", 40):
+        out.append(doing[:1].upper() + doing[1:])
+    out += [f"Costume: {c}" for c in costume_names(verdict)[:2]]
+    return out
+
+
+def who_note(verdict: dict | None) -> str:
+    """The details for the conversation's context, so the whole chat (not just hello) fits them."""
+    parts = []
+    if d := delivery(verdict):
+        who = "a delivery driver" + ("" if d.lower() == "delivery" else f" from {d}")
+        parts.append(f"This is {who} dropping something off.")
+    if g := group(verdict):
+        kids = ", and keep it simple for the kids." if "kid" in g else "."
+        parts.append(f"There are {g}; talk to all of them{kids}")
+    if doing := _text(verdict, "doing", 60):
+        parts.append(f"What they're doing: {doing}.")
+    return " ".join(parts)
 
 
 def costume_names(verdict: dict | None) -> list[str]:
@@ -677,9 +763,11 @@ def night_vision(jpeg: bytes) -> bool:
         return False
 
 
-async def describe(vault, jpeg: bytes, zones: list[list[float]] | None = None) -> dict | None:
+async def describe(vault, jpeg: bytes, zones: list[list[float]] | None = None,
+                   character: str = "skelly") -> dict | None:
     """Ask Claude (or OpenAI) whether people are in the frame and what they look like."""
-    verdict = await _ask_vision(vault, await blackout(jpeg, zones or []), SEE_PROMPT)
+    verdict = await _ask_vision(vault, await blackout(jpeg, zones or []),
+                                 SEE_PROMPT + f' Write "line" as {PERSONAS.get(character, PERSONAS["skelly"])}.')
     if verdict is not None and not verdict.get("dark") and await asyncio.to_thread(night_vision, jpeg):
         verdict["dark"] = True  # the model sometimes reads colours into a night-vision frame
     return verdict
@@ -692,7 +780,7 @@ async def _ask_vision(vault, jpeg: bytes, prompt: str, *, precise: bool = False)
             r = await http.post("https://api.anthropic.com/v1/messages", headers={
                 "x-api-key": key, "anthropic-version": "2023-06-01"}, json={
                 "model": "claude-sonnet-5-5" if precise else "claude-haiku-4-5-20251001",
-                "max_tokens": 1000 if precise else 150, "messages": [{"role": "user", "content": [
+                "max_tokens": 1000 if precise else 350, "messages": [{"role": "user", "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
                     {"type": "text", "text": prompt}]}]})
             r.raise_for_status()
@@ -704,7 +792,7 @@ async def _ask_vision(vault, jpeg: bytes, prompt: str, *, precise: bool = False)
         elif key := vault.get("openai_api_key"):
             r = await http.post("https://api.openai.com/v1/chat/completions", headers={
                 "Authorization": f"Bearer {key}"}, json={
-                "model": "gpt-4o" if precise else "gpt-4o-mini", "max_tokens": 150,
+                "model": "gpt-4o" if precise else "gpt-4o-mini", "max_tokens": 1000 if precise else 350,
                 "messages": [{"role": "user", "content": [
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                     {"type": "text", "text": prompt}]}]})
