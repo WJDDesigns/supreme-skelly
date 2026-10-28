@@ -12,6 +12,7 @@ import base64
 import json
 import logging
 import os
+import random
 import re
 import threading
 import time
@@ -29,7 +30,10 @@ RECOGNIZER = "face_recognition_sface_2021dec.onnx"
 MATCH = 0.40  # SFace cosine similarity; OpenCV suggests 0.363, a bit stricter avoids mix-ups
 MIN_FACE_PX = 16  # below this there's nothing to recognise
 SHARPEN_BELOW_PX = 64  # small faces are enlarged and re-found before fingerprinting
+LOOKALIKE = 0.25  # same first name and at least this similar: the same person, from a new angle
 MAX_SAMPLES = 12  # fingerprints kept per person (different angles and light)
+MAX_GREETING = 400  # characters in a person's special greeting
+MAX_ABOUT = 300  # characters of notes about a person
 
 
 @dataclass
@@ -175,7 +179,8 @@ class FaceMemory:
 
     def public(self) -> list[dict]:
         return [{"id": p["id"], "name": p["name"], "thumb": p.get("thumb", ""), "samples": len(p["embeddings"]),
-                 "first_seen": p.get("first_seen"), "last_seen": p.get("last_seen"), "visits": p.get("visits", 0)}
+                 "first_seen": p.get("first_seen"), "last_seen": p.get("last_seen"), "visits": p.get("visits", 0),
+                 "greeting": p.get("greeting", ""), "about": p.get("about", ""), "fog": bool(p.get("fog"))}
                 for p in sorted(self.people, key=lambda p: -(p.get("last_seen") or 0))]
 
     def match(self, embedding: list[float]) -> tuple[dict | None, float]:
@@ -187,14 +192,32 @@ class FaceMemory:
                     best, best_sim = p, sim
         return (best, best_sim) if best_sim >= MATCH else (None, best_sim)
 
-    def remember(self, name: str, seen: Seen) -> dict:
-        """Add this face under a name: to the existing person of that name, or a new one."""
+    def named(self, name: str, embedding: list[float] | None = None) -> dict | None:
+        """The person with this name. A first name alone finds "Morticia Addams" too, if she's the
+        only one and (given a face) it looks a bit like her, so another Morticia isn't mixed in."""
+        key = name.strip().casefold()
+        exact = [p for p in self.people if p["name"].casefold() == key]
+        if exact:
+            return exact[0]
+        first = [p for p in self.people if p["name"].split()[0].casefold() == key] if " " not in key else []
+        if len(first) != 1:
+            return None
+        if embedding is not None and max((sum(a * b for a, b in zip(embedding, e, strict=False))
+                                          for e in first[0]["embeddings"]), default=0) < LOOKALIKE:
+            return None
+        return first[0]
+
+    def remember(self, name: str, seen: Seen, visit: bool = True) -> dict:
+        """Add this face under a name: to the existing person of that name, or a new one.
+
+        `visit` False (a face from a photo) doesn't count as them having been here."""
         name = name.strip()[:40]
-        person = next((p for p in self.people if p["name"].casefold() == name.casefold()), None)
+        person = self.named(name, seen.embedding)
         now = time.time()
         if person is None:
             person = {"id": uuid.uuid4().hex[:10], "name": name, "embeddings": [], "thumb": seen.thumb,
-                      "first_seen": now, "last_seen": now, "visits": 1}
+                      "first_seen": now if visit else None, "last_seen": now if visit else None,
+                      "visits": 1 if visit else 0}
             self.people.append(person)
         self.add_sample(person, seen)
         return person
@@ -219,9 +242,21 @@ class FaceMemory:
         return new_visit
 
     def rename(self, person_id: str, name: str) -> None:
+        self.update(person_id, {"name": name})
+
+    def update(self, person_id: str, changes: dict) -> None:
+        """Change a person's name, special greeting, notes, or fog-on-arrival."""
         for p in self.people:
-            if p["id"] == person_id:
-                p["name"] = name.strip()[:40]
+            if p["id"] != person_id:
+                continue
+            if (name := str(changes.get("name") or "").strip()[:40]):
+                p["name"] = name
+            if "greeting" in changes:
+                p["greeting"] = str(changes["greeting"] or "").strip()[:MAX_GREETING]
+            if "about" in changes:
+                p["about"] = str(changes["about"] or "").strip()[:MAX_ABOUT]
+            if "fog" in changes:
+                p["fog"] = bool(changes["fog"])
         self.save()
 
     def forget(self, person_id: str | None = None) -> None:
@@ -235,6 +270,19 @@ class FaceMemory:
         with os.fdopen(fd, "w") as f:
             json.dump({"people": self.people}, f)
         tmp.replace(self.path)
+
+
+def special_greeting(person: dict) -> str:
+    """One of the person's own greeting lines (one per line, picked at random), with {name} filled in."""
+    lines = [ln.strip() for ln in (person.get("greeting") or "").splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    first = person["name"].split()[0]
+    return random.choice(lines).replace("{name}", first).replace("{n}", first)
+
+
+def biggest(seen: list[Seen]) -> Seen | None:
+    return max(seen, key=lambda s: s.area, default=None)
 
 
 # -- hearing a name -------------------------------------------------------------------

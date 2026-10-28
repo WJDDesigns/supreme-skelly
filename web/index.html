@@ -629,7 +629,11 @@
           <div class="card" id="people-card">
             <div class="card-head">
               <div><h2>People Skelly knows</h2><p class="muted" id="people-sub">Nobody yet</p></div>
-              <button id="people-forget-all" class="btn outline small">Forget everyone</button>
+              <div class="p-actions">
+                <button id="people-photo" class="btn small">Add from a photo</button>
+                <button id="people-forget-all" class="btn outline small">Forget everyone</button>
+              </div>
+              <input type="file" id="people-photo-file" accept="image/jpeg,image/png,image/webp" multiple hidden>
             </div>
             <ul id="people" class="people"></ul>
           </div>
@@ -866,6 +870,26 @@
     <img id="snap-view-img" alt="Camera at this moment">
     <p id="snap-view-cap"></p>
     <button class="btn outline small" type="button" id="snap-view-close">Close</button>
+  </dialog>
+  <dialog class="snap-view person-edit" id="person-edit" aria-label="Special greeting">
+    <form method="dialog" id="person-form">
+      <div class="person-head"><img id="pe-thumb" alt=""><h2 id="pe-title">Special greeting</h2></div>
+      <label class="field-row stack">Name<input id="pe-name" maxlength="40" required></label>
+      <label class="field-row stack">Special greeting
+        <textarea id="pe-greeting" rows="4" maxlength="400"
+          placeholder="Well well well, if it isn't {name}! The finest neighbor on the street! Come closer, I've been saving my best bones for you!"></textarea>
+        <span class="muted small">What Skelly says the moment he recognises them. Put a few on separate lines and he picks one each visit. {name} becomes their first name. Leave it empty for his usual welcome back.</span></label>
+      <label class="field-row stack">About them
+        <textarea id="pe-about" rows="2" maxlength="300" placeholder="Lives next door. Loves the Colts. Promised to come say hi."></textarea>
+        <span class="muted small">Skelly keeps this in mind while he chats with them.</span></label>
+      <label class="switch-row"><span><strong>Fog when they arrive</strong>
+        <span class="muted">A puff from the fog machine for a grand entrance (if one is set up).</span></span>
+        <input type="checkbox" id="pe-fog" role="switch"></label>
+      <div class="p-actions end">
+        <button class="btn outline small" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn small" value="save" id="pe-save">Save</button>
+      </div>
+    </form>
   </dialog>
   <script type="module" src="/static/gate.js"></script>
 </body>

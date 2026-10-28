@@ -370,6 +370,17 @@ class Vision:
         self._recognise(self.seen)
         return person
 
+    async def learn_photo(self, name: str, picture: bytes) -> dict | None:
+        """Save the biggest face in a photo (a profile picture, say) under a name. None if no face."""
+        from .faces import biggest
+
+        pick = biggest(await asyncio.to_thread(self.engine.process, picture, []))
+        if pick is None:
+            return None
+        person = self.memory.remember(name, pick, visit=False)
+        self.svc.bus.publish("face_learned", {"id": person["id"], "name": person["name"], "thumb": pick.thumb})
+        return person
+
     async def _read_motion(self, cfg: VisionConfig, stream: asyncio.StreamReader) -> None:
         size = THUMB_W * THUMB_H
         keep = _mask(cfg.active_zones)
