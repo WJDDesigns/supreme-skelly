@@ -964,18 +964,27 @@ def create_app(
         return sorted({f.name for f in app.state.vision.seen if f.name})
 
     async def on_known(person: dict) -> None:
-        """Someone Skelly has met before just showed up."""
+        """Someone Skelly has met before just showed up. People with a special greeting get it,
+        plus a puff of fog if that's ticked for them."""
+        from .faces import special_greeting
+
         name = person["name"]
         svc().bus.publish("known_visitor", {"id": person["id"], "name": name, "visits": person.get("visits")})
+        special = special_greeting(person)
+        about = f" About them: {person['about']}" if person.get("about") else ""
         conv = app.state.conv
+        if person.get("fog") and not quiet():
+            later(app.state.fog.auto(f"{name} arrived"))
         if conv.running:
-            conv.add_context(f"{name} just joined; you've met them before ({person.get('visits', 1)} visits).")
+            hello = f" Give them your special welcome, something like: \"{special}\"" if special else ""
+            conv.add_context(f"{name} just joined; you know them ({person.get('visits', 1)} visits).{about}{hello}")
         elif VisionConfig.from_dict(svc().settings.vision).auto_converse and not quiet():
             try:
                 from .callouts import greeting
 
-                await conv.start(context=f"Your friend {name} just walked up; you've met before.",
-                                 opening=greeting(name, svc().profile.character), trigger=f"recognised {name}'s face")
+                await conv.start(context=f"Your friend {name} just walked up; you know them.{about}",
+                                 opening=special or greeting(name.split()[0], svc().profile.character),
+                                 trigger=f"recognised {name}'s face")
             except (MissingKey, ValueError) as exc:
                 log.info("greeting %s not started: %s", name, exc)
 
@@ -1036,9 +1045,31 @@ def create_app(
             raise HTTPException(404, "No face to name right now")
         return app.state.vision.memory.public()
 
+    @app.post("/api/faces/photo")
+    async def faces_photo(file: Annotated[list[UploadFile], File()], name: Annotated[str, Form()] = ""):
+        """Teach Skelly a face from photos (a profile picture works). Kept on the mini PC only."""
+        name = name.strip()
+        if not name:
+            raise HTTPException(400, "Give a name")
+        v = app.state.vision
+        if not v.engine.available():
+            raise HTTPException(503, "Face memory isn't installed on this box")
+        found = 0
+        for f in file[:8]:
+            raw = await f.read(WALLPAPER_MAX + 1)
+            if len(raw) > WALLPAPER_MAX:
+                raise HTTPException(413, "That picture is too big (15 MB max)")
+            if not _image_type(raw):
+                raise HTTPException(400, "That isn't a picture Skelly can read (use JPG, PNG or WebP)")
+            found += bool(await v.learn_photo(name, raw))
+        if not found:
+            raise HTTPException(422, "No face found. Try a photo where the face is big and looking at the camera.")
+        return v.memory.public()
+
     @app.put("/api/faces/{person_id}")
-    async def faces_rename(person_id: str, body: dict):
-        app.state.vision.memory.rename(person_id, str(body.get("name", "")))
+    async def faces_update(person_id: str, body: dict):
+        """Rename someone, or set their special greeting, notes, or fog when they arrive."""
+        app.state.vision.memory.update(person_id, body)
         return app.state.vision.memory.public()
 
     @app.delete("/api/faces/{person_id}")

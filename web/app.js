@@ -1503,7 +1503,7 @@ const ago = (t) => {
   return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
 };
 function renderPeople() {
-  $("#people-sub").textContent = people.length ? `${people.length} ${people.length === 1 ? "person" : "people"}` : "Nobody yet. People who tell Skelly their name show up here.";
+  $("#people-sub").textContent = people.length ? `${people.length} ${people.length === 1 ? "person" : "people"}` : "Nobody yet. People who tell Skelly their name show up here, or add someone from a photo.";
   $("#people-forget-all").disabled = !people.length;
   $("#people").replaceChildren(...people.map((p) => {
     const rename = el("button", { className: "btn outline small", textContent: "Rename" });
@@ -1515,11 +1515,16 @@ function renderPeople() {
     forget.addEventListener("click", () => {
       if (confirm(`Forget ${p.name}'s face?`)) run(forget, async () => { people = await api(`/faces/${p.id}`, undefined, "DELETE"); renderPeople(); }, "Forgotten");
     });
+    const greet = el("button", { className: "btn outline small", textContent: "Greeting" });
+    greet.addEventListener("click", () => editPerson(p));
+    const special = p.greeting || p.about || p.fog;
     return el("li", {},
       p.thumb ? el("img", { src: `data:image/jpeg;base64,${p.thumb}`, alt: "" }) : el("span", { className: "no-thumb" }),
       el("div", { className: "p-name", textContent: p.name }),
-      el("div", { className: "meta", textContent: `${p.visits || 1} ${p.visits === 1 ? "visit" : "visits"} · ${ago(p.last_seen)}` }),
-      el("div", { className: "p-actions" }, rename, forget));
+      special ? el("div", { className: "vip", textContent: p.greeting ? "★ Special greeting" : "★ Special guest" }) : "",
+      el("div", { className: "meta", textContent: p.visits
+        ? `${p.visits} ${p.visits === 1 ? "visit" : "visits"} · ${ago(p.last_seen)}` : "From a photo · not seen yet" }),
+      el("div", { className: "p-actions" }, greet, rename, forget));
   }));
 }
 async function loadPeople() {
@@ -1530,6 +1535,52 @@ async function loadPeople() {
     renderFaceBoxes(r.seen);
   } catch {}
 }
+// A person's special greeting, notes and fog-on-arrival.
+let editing = null;
+function editPerson(p) {
+  editing = p;
+  $("#pe-thumb").src = p.thumb ? `data:image/jpeg;base64,${p.thumb}` : "";
+  $("#pe-thumb").hidden = !p.thumb;
+  $("#pe-title").textContent = `When Skelly sees ${p.name}`;
+  $("#pe-name").value = p.name;
+  $("#pe-greeting").value = p.greeting || "";
+  $("#pe-about").value = p.about || "";
+  $("#pe-fog").checked = !!p.fog;
+  $("#person-edit").returnValue = "";
+  $("#person-edit").showModal();
+}
+$("#person-edit").addEventListener("close", () => {
+  const p = editing;
+  editing = null;
+  if (!p || $("#person-edit").returnValue !== "save") return;
+  const body = { name: $("#pe-name").value.trim(), greeting: $("#pe-greeting").value, about: $("#pe-about").value, fog: $("#pe-fog").checked };
+  run(null, async () => { people = await api(`/faces/${p.id}`, body, "PUT"); renderPeople(); }, "Saved");
+});
+
+// Teach a face from photos: a profile picture is fine, the bigger the face the better.
+$("#people-photo").addEventListener("click", () => { $("#people-photo-file").value = ""; $("#people-photo-file").click(); });
+$("#people-photo-file").addEventListener("change", (ev) => {
+  const files = [...ev.target.files];
+  if (!files.length) return;
+  const name = prompt(files.length > 1 ? "Whose face is in these photos?" : "Whose face is this?");
+  if (!name?.trim()) return;
+  run($("#people-photo"), async () => {
+    const form = new FormData();
+    files.forEach((f) => form.append("file", f));
+    form.append("name", name.trim());
+    const res = await fetch("/api/faces/photo", { method: "POST", body: form });
+    if (!res.ok) {
+      let msg = `Couldn't add the photo (${res.status})`;
+      try { const j = await res.json(); if (typeof j.detail === "string") msg = j.detail; } catch {}
+      throw new Error(msg);
+    }
+    people = await res.json();
+    renderPeople();
+    const p = people.find((x) => x.name.toLowerCase() === name.trim().toLowerCase());
+    if (p && !p.greeting) editPerson(p);
+  }, `Skelly will know ${name.trim()} when he sees them`);
+});
+
 $("#people-forget-all").addEventListener("click", (ev) => {
   if (confirm("Forget every face Skelly knows? This can't be undone.")) run(ev.currentTarget, async () => { people = await api("/faces", undefined, "DELETE"); renderPeople(); }, "Forgot everyone");
 });

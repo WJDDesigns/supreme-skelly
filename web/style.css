@@ -640,6 +640,14 @@ body:not(.online) .disabled-when-offline { opacity: .45; pointer-events: none; }
 .people .p-name { font-weight: 600; color: var(--bone); }
 .people .meta { color: var(--muted); font-size: .78rem; }
 .p-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.p-actions.end { justify-content: flex-end; margin-top: 12px; }
+.people .vip { color: var(--accent); font-size: .74rem; font-weight: 600; letter-spacing: .02em; }
+.person-edit { width: min(520px, calc(100vw - 32px)); }
+.person-edit form { display: grid; gap: 10px; }
+.person-edit .person-head { display: flex; align-items: center; gap: 12px; }
+.person-edit .person-head img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,138,0,.5); }
+.person-edit h2 { margin: 0; }
+.person-edit .small { font-size: .8rem; }
 
 .chips.small .chip { font-size: .85rem; padding: 8px 14px; }
 .chips.small .chip:disabled { opacity: .4; cursor: not-allowed; }

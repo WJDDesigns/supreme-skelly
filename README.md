@@ -192,6 +192,24 @@ if he just said goodbye or was resting between visitors. A chat he started himse
 
 <img src="docs/images/answer-when-spoken-to.svg" alt="Before: Skelly gave up after 15 seconds and ignored kids talking to him. Now he keeps listening and answers." width="720">
 
+**Special guests.** Want a big welcome for a neighbor or a friend? On the Vision page, press
+**Add from a photo** under **People Skelly knows** and pick a clear picture of their face (a
+profile picture works; add a few for better odds). Then press **Greeting** on their card and
+write what Skelly should say the moment he recognises them. Put a few lines and he picks a
+different one each visit; `{name}` becomes their first name. **About them** is kept in mind for
+the rest of the chat, and **Fog when they arrive** gives them a puff from the fog machine. Anyone
+Skelly has met can get a special greeting too, not just people added from photos.
+
+<p align="center">
+  <img src="docs/images/special-guests.png" alt="People Skelly knows: four people, one added from a photo with a Special greeting badge, and an Add from a photo button" width="56%">
+  &nbsp;
+  <img src="docs/images/special-greeting.png" alt="The Greeting window: two special greeting lines, notes about them, and Fog when they arrive switched on" width="40%">
+</p>
+
+A photo is a starting point: a camera at night sees a face differently than a bright profile
+picture does. Each time Skelly does spot them, he keeps the new angle, so he gets surer with
+every visit. If they tell him their name at the door, that face is added to the same person.
+
 **Face memory stays on the mini PC:** faces are recognised on the mini PC itself and never
 sent anywhere. You can rename or forget anyone, or everyone, on the Vision page. Recording
 faces may be regulated where you live; check your local rules and consider a sign telling
