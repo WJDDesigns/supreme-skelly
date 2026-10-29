@@ -1,6 +1,7 @@
 """Special greetings for people Skelly knows, and teaching him a face from a photo."""
 
 import random
+import time
 
 from fastapi.testclient import TestClient
 
@@ -68,6 +69,10 @@ def test_known_neighbor_gets_their_special_greeting_and_fog(monkeypatch, tmp_pat
         c.portal.call(state.vision._on_known, person)
         assert started[0]["opening"] == "The legend himself, Gomez!"
         assert "Lives next door" in started[0]["context"]
+        for _ in range(50):  # the fog is started alongside the hello, not before it
+            if fogged:
+                break
+            time.sleep(0.02)
         assert fogged == ["Gomez Addams arrived"]
 
         # without one he gets the usual welcome back, by first name
