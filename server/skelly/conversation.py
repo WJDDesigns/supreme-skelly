@@ -107,11 +107,12 @@ def talk_rule(amount: int) -> str:
 
 
 # Added to every personality: without it the agent ends each reply on the question it asked last,
-# even after the visitor has answered it ("Green." -> "...Orange or purple?").
+# even after the visitor has answered it ("Green." -> "...Orange or purple?"), and opens on a pun.
 CHAT_RULES = (
     "Listen to the visitor. If they ask you something, answer it. When they answer your question, react "
     "to what they said and move on to something new: never ask a question they've already answered, and "
-    "never ask the same question twice in one chat. Not every reply needs a question."
+    "never ask the same question twice in one chat. Not every reply needs a question. Go easy on puns: "
+    "never in your first line, and at most one in a whole chat."
 )
 
 

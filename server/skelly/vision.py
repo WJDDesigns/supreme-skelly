@@ -598,7 +598,7 @@ SEE_PROMPT = (
 
 # Who writes "line" in SEE_PROMPT, per character (profiles.Profile.character)
 PERSONAS = {
-    "skelly": "Skelly, a friendly, funny talking skeleton who likes bone puns",
+    "skelly": "Skelly, a friendly, funny talking skeleton (plain, warm words, not bone puns)",
     "lily": "Lethal Lily, a cackling, friendly Halloween witch with a glowing lantern",
     "santa": "Santa Claus, jolly and warm",
 }
