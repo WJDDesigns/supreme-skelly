@@ -106,6 +106,33 @@ def talk_rule(amount: int) -> str:
     return TALK_RULES.get(max(1, min(5, int(amount or 2))), TALK_RULES[2])
 
 
+# Added to every personality: without it the agent ends each reply on the question it asked last,
+# even after the visitor has answered it ("Green." -> "...Orange or purple?").
+CHAT_RULES = (
+    "Listen to the visitor. If they ask you something, answer it. When they answer your question, react "
+    "to what they said and move on to something new: never ask a question they've already answered, and "
+    "never ask the same question twice in one chat. Not every reply needs a question."
+)
+
+
+def question_in(said: str) -> str | None:
+    """The last question in one of Skelly's lines ("...What's yours: orange or purple?")."""
+    found = re.findall(r"[^.!?]*\?", said or "")
+    q = re.sub(r"^\W+", "", found[-1]).strip() if found else ""
+    q = q.split(":")[-1].strip() if len(q.split(":")[-1].split()) >= 2 else q
+    return q or None
+
+
+def turn_reminder(rule: str, asked: list[str]) -> str:
+    """Sent before each of the agent's turns: the length rule fades as the chat grows, and so does
+    remembering which questions have had their answer."""
+    text = f"Reminder: {rule}"
+    if asked:
+        text += (" You've already asked: " + " | ".join(f'"{q}"' for q in asked[-4:])
+                 + ". Don't ask any of those again; react to their answer and talk about something new.")
+    return text
+
+
 # Added to every Claude prompt: whatever the personality says, the reply is read aloud.
 SPOKEN_RULES = (
     "Your words are spoken aloud by a speaker inside an animatronic figure, to someone standing in front of you. "
@@ -788,15 +815,16 @@ class Conversation:
                 # The rule goes first and last: one line in the middle of a long personality
                 # prompt gets ignored.
                 init["conversation_config_override"] = {"agent": {"prompt": {
-                    "prompt": f"{rule}\n\n{cfg.prompt}\n\n{rule}"}}}
+                    "prompt": f"{rule}\n\n{cfg.prompt}\n\n{CHAT_RULES}\n\n{rule}"}}}
                 if self._opening:
                     init["conversation_config_override"]["agent"]["first_message"] = self._opening
             await ws.send(json.dumps(init))
             if not self._override_ok:  # second best: tell it as context
-                await ws.send(json.dumps({"type": "contextual_update", "text": f"Speaking style: {rule}"}))
+                await ws.send(json.dumps({"type": "contextual_update", "text": f"Speaking style: {rule} {CHAT_RULES}"}))
             in_rate = out_rate = 16000
             self._set("listening")
             last_said = ""  # what Skelly was saying, for picking up after a false interruption
+            asked: list[str] = []  # questions he's put to them this chat, so he moves on once answered
             cut_off: dict = {}  # {"at": time, "text": what he didn't get to say}
 
             async def resume_watch():
@@ -841,8 +869,10 @@ class Conversation:
                     elif kind == "agent_response":
                         last_said = msg["agent_response_event"]["agent_response"]
                         self._say("skelly", last_said)
-                        # A reminder before every next turn; the rule fades as the chat grows.
-                        await ws.send(json.dumps({"type": "contextual_update", "text": f"Reminder: {rule}"}))
+                        if (q := question_in(last_said)) and q.lower() not in (a.lower() for a in asked):
+                            asked.append(q)
+                        # A reminder before every next turn; the rules fade as the chat grows.
+                        await ws.send(json.dumps({"type": "contextual_update", "text": turn_reminder(rule, asked)}))
                     elif kind == "agent_response_correction":
                         ev = msg.get("agent_response_correction_event", {})
                         said = ev.get("corrected_agent_response") or ""
@@ -891,7 +921,7 @@ class Conversation:
         async with connect(url, additional_headers=headers, max_size=None, open_timeout=15) as ws:
             await ws.send(json.dumps({"type": "session.update", "session": {
                 "type": "realtime",
-                "instructions": (f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n"
+                "instructions": (f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n{CHAT_RULES}\n\n"
                                  f"{talk_rule(cfg.talk_amount)}"),
                 "audio": {
                     "input": {"format": {"type": "audio/pcm", "rate": rate},
@@ -1025,7 +1055,7 @@ class Conversation:
                       history: list[dict]) -> str:
         """Streams Claude's reply and speaks it sentence by sentence as it arrives."""
         body = {"model": cfg.claude_model, "max_tokens": MAX_TOKENS.get(cfg.talk_amount, 200),
-                "system": (f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n{SPOKEN_RULES} "
+                "system": (f"{talk_rule(cfg.talk_amount)}\n\n{cfg.prompt}\n\n{CHAT_RULES} {SPOKEN_RULES} "
                            f"{talk_rule(cfg.talk_amount)}"),
                 "messages": history, "stream": True}
         headers = {"x-api-key": self.vault.get("anthropic_api_key"), "anthropic-version": "2023-06-01",
