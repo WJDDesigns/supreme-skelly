@@ -751,7 +751,7 @@ def create_app(
         later(app.state.fog.visitor("Calling someone over"))
 
         costumes, noticed = costume_names(verdict), notice(verdict)
-        line = opening_line(verdict) or call_out(costumes, noticed, svc().profile.character)
+        line = opening_line(verdict, svc().profile.character) or call_out(costumes, noticed, svc().profile.character)
         svc().bus.publish("calling_over", {"line": line, "costumes": costumes})
         conv = app.state.conv
         if conv.running:
@@ -815,7 +815,7 @@ def create_app(
             app.state.chat_seen = tags(verdict)
             try:
                 await app.state.conv.start(context=visitor_context(description, costumes, verdict),
-                                           opening=opening_line(verdict) or None,
+                                           opening=opening_line(verdict, svc().profile.character) or None,
                                            trigger=f"someone walked up ({vision.source})", picture=picture)
             except (MissingKey, ValueError) as exc:
                 log.info("visitor conversation not started: %s", exc)
@@ -840,7 +840,8 @@ def create_app(
             return
         from .callouts import call_out
 
-        line = opening_line(verdict) or call_out(costume_names(verdict), notice(verdict), svc().profile.character)
+        line = (opening_line(verdict, svc().profile.character)
+                or call_out(costume_names(verdict), notice(verdict), svc().profile.character))
         if conv.call_over(line):
             svc().bus.publish("calling_over", {"line": line, "costumes": costume_names(verdict)})
             app.state.vision.sighting("Mid-chat: called them over too", verdict, jpeg=jpeg, source=source)
