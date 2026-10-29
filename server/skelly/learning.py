@@ -30,7 +30,8 @@ MAX_CHATS = 60  # newest chats sent to one review
 REVIEW_PROMPT = """You coach {persona}, an animatronic Halloween character in a front yard who chats \
 with visitors out loud. Below are its recent conversations, each with who the camera saw and how it \
 went (how many times the visitor answered, how long it lasted). Long chats where visitors kept \
-answering went well; chats nobody answered, or that ended after one reply, went badly.
+answering went well; chats nobody answered, or that ended after one reply, went badly. Asking a \
+question the visitor had just answered, or asking the same question again, also went badly.
 
 Current tips:
 {tips}
@@ -41,7 +42,8 @@ Recent chats:
 Rewrite the tips list: keep tips that still hold, drop ones the chats show are wrong, and add new \
 ones the chats teach. Each tip is one short, concrete instruction for future chats (an opener that \
 worked, a question kids love, something to stop doing), at most 25 words. Never put visitors' names, \
-addresses or other personal details in a tip. At most {max_tips} tips, best first. Reply with JSON \
+addresses or other personal details in a tip. Tips are followed in every reply, so never write one \
+that makes every reply end on a question or repeats a question. At most {max_tips} tips, best first. Reply with JSON \
 only: {{"tips": ["...", "..."]}}"""
 
 
@@ -147,7 +149,8 @@ class Learning:
         tips = [t["text"] for t in self.load()["tips"] if t.get("text")]
         if not tips:
             return ""
-        return "Tips learned from your past chats with visitors (follow them when they fit): " + " | ".join(tips)
+        return ("Tips learned from your past chats with visitors (follow them when they fit; a tip about asking "
+                "a question never means asking one they've already answered): ") + " | ".join(tips)
 
     # -- the review ----------------------------------------------------------------------
 
