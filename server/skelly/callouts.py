@@ -8,7 +8,7 @@ from __future__ import annotations
 import random
 
 PLAIN = [
-    "Psst! Hey you! Yes, you! Come here, I've got a bone to pick with you!",
+    "Psst! Hey you! Yes, you! Got a second for a lonely skeleton?",
     "Hellooo out there! Don't be shy, come say hi to a lonely skeleton!",
     "Excuse me! You there! Got a minute for a three-hundred-year-old?",
     "Hey! Over here! Nobody ever stops to chat with the skeleton!",
@@ -18,7 +18,7 @@ PLAIN = [
     "Psst! Come here, I want to tell you a secret… it's spine-tingling!",
     "Oi! Fancy a chat with the most handsome skeleton on the street?",
     "Hello down there! Come visit, I won't bite… I don't have the lips for it!",
-    "Hey! You look like someone who appreciates a good bone pun. Come here!",
+    "Hey! You look like someone who loves Halloween. Come here!",
     "Ahoy, passer-by! Stop and chat, I'm dying to talk to someone!",
 ]
 
@@ -43,7 +43,7 @@ NOTICE = [
 DOG = [
     "Is that a dog? Bring them over! My dog Bonez would love to meet them!",
     "Hey! What a good pup! Come say hi, I love dogs!",
-    "Ooh, a doggo! Come over here, I've got a bone… well, I am one!",
+    "Ooh, a doggo! Come over here, I'd love to say hi!",
     "Psst! Your dog looks like my kind of friend! Come say hello!",
 ]
 
@@ -71,7 +71,7 @@ GREETINGS = [
     "Well, well, well, look who came to visit the most handsome skeleton on the street!",
     "Oh hello! Don't mind me, just standing here looking spooky and fabulous.",
     "Boo! Ha, gotcha. Just kidding, I'm the friendliest skeleton you'll ever meet.",
-    "Hello, hello! You look like someone who appreciates a good bone pun.",
+    "Hello, hello! You look like someone who loves Halloween.",
     "A visitor! Quick, Bonez, look alive! Well… you know what I mean.",
     "Welcome, welcome! Pull up a pumpkin, let's chat.",
     "Oh, hi there! I'd shake your hand, but mine might fall off.",

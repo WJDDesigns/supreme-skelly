@@ -159,7 +159,8 @@ It needs an Anthropic key and costs about a cent or two a night. Chats older tha
 deleted.
 
 Whatever the tips say, Skelly keeps track of the questions he has asked in each chat. Once a
-visitor answers one, he reacts to their answer and moves on instead of asking it again.
+visitor answers one, he reacts to their answer and moves on instead of asking it again. He also keeps bone puns rare:
+none in his opening line, and at most one a chat.
 
 <img src="docs/images/learning.png" alt="What Skelly has learned: tips like ask kids a riddle early, and ask dog owners the dog's name, each editable, plus a box to add your own" width="720">
 
