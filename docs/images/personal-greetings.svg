@@ -21,8 +21,8 @@
     <text x="660" y="245" text-anchor="middle">"A witch AND her dog? My kind of crowd! Hi all!"</text>
 
     <rect x="140" y="274" width="300" height="36" rx="10" fill="#1c1c1f" stroke="#333"/>
-    <text x="290" y="297" text-anchor="middle">Two joggers going past</text>
+    <text x="290" y="297" text-anchor="middle">Two neighbors walking past</text>
     <rect x="460" y="274" width="400" height="36" rx="10" fill="#2a1d10" stroke="#ff8c1a"/>
-    <text x="660" y="297" text-anchor="middle">"Hey runners! Slow down, I can't chase you, no muscles!"</text>
+    <text x="660" y="297" text-anchor="middle">"Hey, you two! Got a minute for a lonely skeleton?"</text>
   </g>
 </svg>

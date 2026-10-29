@@ -77,3 +77,24 @@ def test_free_protect_check_still_looks_once_before_the_hello(monkeypatch):
         started, row = _visit(c, cfg, vision_mod.protect_verdict({"type": "smartDetectLoiterZone"}))
     assert started[0]["opening"] == FAMILY["line"]
     assert "2 adults and 1 kid" in started[0]["context"] and "witch" in started[0]["context"]
+
+
+def test_walkers_are_never_greeted_as_runners():
+    look = vision_mod.on_foot({"people": 1, "doing": "jogging", "notice": "running shoes",
+                               "line": "Hey runner, slow down and say hi!",
+                               "description": "A man walks down the sidewalk. He looks like he's out for a run."})
+    assert look["doing"] == look["notice"] == look["line"] == ""
+    assert look["description"] == "A man walks down the sidewalk."
+    assert tags(look) == [] and who_note(look) == "" and opening_line(look) == ""
+    kept = vision_mod.on_foot(dict(FAMILY))
+    assert kept["doing"] == "walking a dog" and kept["line"] == FAMILY["line"]
+    assert "running" not in vision_mod.SEE_PROMPT.split("never say")[0]
+
+
+def test_the_hello_knows_the_date():
+    from datetime import datetime
+
+    assert "2 days away" in vision_mod.today_note(datetime(2026, 10, 29, 12))
+    assert "1 day away" in vision_mod.today_note(datetime(2026, 10, 30, 12))
+    assert vision_mod.today_note(datetime(2026, 10, 31, 12)).endswith("Halloween.")
+    assert "isn't Halloween season" in vision_mod.today_note(datetime(2026, 3, 1, 12))

@@ -112,7 +112,9 @@ CHAT_RULES = (
     "Listen to the visitor. If they ask you something, answer it. When they answer your question, react "
     "to what they said and move on to something new: never ask a question they've already answered, and "
     "never ask the same question twice in one chat. Not every reply needs a question. Go easy on puns: "
-    "never in your first line, and at most one in a whole chat."
+    "never in your first line, and at most one in a whole chat. Don't guess what visitors are up to, "
+    "such as calling them runners or asking about their run or workout; only talk about it if they "
+    "tell you."
 )
 
 
@@ -269,7 +271,7 @@ def season_note(now=None, character: str = "skelly") -> str:
     halloween = now.replace(year=now.year + (now.month > 10), month=10, day=31).date()
     days = (halloween - now.date()).days
     return (f"{day} Halloween is {days} days away, so the people passing by are neighbours out for a walk, "
-            "a jog or with their dog, not trick-or-treaters. Don't ask about candy, trick-or-treating or "
+            "or with their dog, not trick-or-treaters. Don't ask about candy, trick-or-treating or "
             "costumes unless they're actually dressed up; compliment something you can see instead, like "
             "their shirt, their dog or what they're doing.")
 

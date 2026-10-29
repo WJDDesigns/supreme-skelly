@@ -202,24 +202,25 @@ def greeting(name: str | None = None, character: str = "skelly") -> str:
     return line
 
 
-# Someone spoke to him while no chat was running: he heard a voice but not the words.
+# Someone spoke to him while no chat was running: he heard a voice but not the words. Asking them
+# to say it again got no answers, so he just says hello and asks something easy.
 PARDON = {
     "skelly": [
-        "Oh! Did somebody say something? Sorry, my ears are just holes. Say that again!",
-        "Hello? I heard a voice! Come closer and say that again, my ears aren't what they used to be.",
-        "Was that you talking to me? Hi! Say it again, I missed it!",
-        "Oh hi! Sorry, I was miles away. What did you say?",
-        "Did I hear my name? Hello there! What was that?",
+        "Oh, hello there! Were you talking to me? How's your day going?",
+        "Hi! I thought I heard a friend. How are you today?",
+        "Well hello! Nice to have some company. What's your name?",
+        "Oh hi there! I love visitors. How's your day been?",
+        "Hello, hello! Thanks for stopping by. Doing anything fun today?",
     ],
     "lily": [
-        "Oh! Did someone speak, dearie? Say that again, my old ears are full of cobwebs!",
-        "Hello? I heard a voice! Come closer and tell me again!",
-        "Was that you, dearie? Sorry, I was stirring my cauldron. What did you say?",
+        "Oh, hello, dearie! Were you talking to me? How's your day?",
+        "Well hello there! A visitor for Lily! What's your name, dearie?",
+        "Hello, my dear! I love company. How are you today?",
     ],
     "santa": [
-        "Ho ho! Did someone say something? Say it again for Santa!",
-        "Hello there! Sorry, the sleigh bells were ringing. What did you say?",
-        "Ho ho ho! Was that you talking to me? Tell me again!",
+        "Ho ho ho! Hello there! Were you talking to Santa? How are you?",
+        "Well hello! Santa loves visitors. What's your name?",
+        "Ho ho! Hello, friend! How's your day been?",
     ],
 }
 

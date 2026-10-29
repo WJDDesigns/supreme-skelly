@@ -182,7 +182,14 @@ about them instead of a stock hello, and the whole chat knows the details. In th
 he takes one look only when he's about to start a chat. **Delivery drivers** lets you pick a
 quick thank-you (the default, he won't hold them up), a normal chat, or leaving them be.
 
-<img src="docs/images/personal-greetings.svg" alt="Before: every visitor got the same stock hello. Now a delivery driver, a family with a dog and two joggers each get a line about them." width="720">
+<img src="docs/images/personal-greetings.svg" alt="Before: every visitor got the same stock hello. Now a delivery driver, a family with a dog and two neighbors walking past each get a line about them." width="720">
+
+Skelly only mentions what someone is doing when the picture plainly shows it. A single
+camera frame can't tell a brisk walk from a jog, so he never calls anyone a runner or asks
+about their run unless they tell him. His first line also knows the date, so nobody is wished
+a happy Halloween (or offered candy) before the 31st.
+
+<img src="docs/images/walkers-not-runners.svg" alt="Before: a neighbor out for a walk was greeted as a runner. Now Skelly compliments something he can see instead." width="720">
 
 Each sighting shows what made those visitors different:
 
@@ -191,7 +198,10 @@ Each sighting shows what made those visitors different:
 **Answer when spoken to** (on by default) keeps Skelly listening between chats for two
 minutes after a camera sees someone. A visitor who talks to him then gets an answer, even
 if he just said goodbye or was resting between visitors. A chat he started himself waits
-30 seconds for an answer, and stays open while voices are reaching his mic.
+30 seconds for an answer, and stays open while voices are reaching his mic. If nobody answers
+his hello (they kept walking), the mic rests until a camera sees someone again, so people
+chatting as they walk away don't set off a new chat. When he does hear a voice, he says hello
+and asks something easy instead of asking them to say it again.
 
 <img src="docs/images/answer-when-spoken-to.svg" alt="Before: Skelly gave up after 15 seconds and ignored kids talking to him. Now he keeps listening and answers." width="720">
 
