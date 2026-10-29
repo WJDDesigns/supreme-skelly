@@ -225,5 +225,10 @@ PARDON = {
 }
 
 
+def dog_hello(character: str = "skelly") -> str:
+    """A hello for someone who brought a dog along."""
+    return random.choice(LINES.get(character, LINES["skelly"])["dog"])
+
+
 def pardon(character: str = "skelly") -> str:
     return random.choice(PARDON.get(character, PARDON["skelly"]))

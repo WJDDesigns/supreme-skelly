@@ -571,7 +571,8 @@ SEE_PROMPT = (
     "inflatables and other Halloween decorations are props, not people; black areas are hidden on purpose. "
     "Reply with JSON only: "
     '{"people": <number of real people>, "approaching": <true if any of them is coming towards the camera or '
-    'standing near it, false if they are only walking or driving past>, "animals": <number>, "vehicles": '
+    'standing near it, false if they are only walking or driving past>, "animals": <number>, '
+    '"dogs": <number of dogs with the people, e.g. on a lead>, "vehicles": '
     '<number of moving or arriving cars/trucks>, "bikes": <number of bikes or scooters>, '
     '"costumes": [<for each person in a Halloween costume, a short name for it, e.g. "vampire", "witch", '
     '"Spider-Man", "princess", "zombie", "inflatable dinosaur"; empty if nobody is dressed up>], '
@@ -589,14 +590,16 @@ SEE_PROMPT = (
     '"line": "<the first thing the character should say to them out loud: one short, fun, family-friendly '
     'sentence that is clearly about these people (how many there are, kids, a costume, what they are doing '
     'or holding, a delivery); under 15 words, ending with one easy question they can answer from where they '
-    'are; no puns about bones or being dead; if they are walking past, call them over; never guess names or '
-    'ages>", '
+    'are; no puns about bones or being dead; if they have a dog, say hi to the dog too; if they are walking '
+    'past, call them over; never guess names or ages>", '
     '"dark": <true if the picture is dim, grainy, dusk or black-and-white night vision, so colours '
     'can\'t be trusted>, '
     '"description": "<one short sentence about the people (or animals) a skeleton could joke about: '
     'costumes, clothes colours, pets, what they hold>"}. '
     "One still picture can't show how fast anyone moves: treat everyone on foot as walking, and never "
     "say or guess that someone is running, jogging, exercising or out for a run. "
+    "Things that are always in the picture (a basketball hoop, a parked car, the driveway, a mailbox) aren't "
+    "what people are doing: never say anyone is playing basketball, shooting hoops or playing a game. "
     "Only name a colour when the picture is clearly lit and in colour; at dusk or night say "
     '"shorts", not "black shorts".'
 )
@@ -613,13 +616,15 @@ def today_note(now=None) -> str:
 
 
 # A still frame can't tell a brisk walk from a jog, and calling a neighbour out for a stroll a
-# "runner" is the guess people notice. Anything about running is dropped from a look.
+# "runner" is the guess people notice. A hoop on the driveway turned dog walkers into "hoopsters"
+# the same way. Anything about running or a ball game is dropped from a look.
 EXERCISE = re.compile(r"\b(?:run|runs|running|runner|runners|jog|jogs|jogging|jogger|joggers|sprint\w*|"
-                      r"exercis\w*|work(?:ing)? ?out|workouts?|fitness|marathon\w*)\b", re.I)
+                      r"exercis\w*|work(?:ing)? ?out|workouts?|fitness|marathon\w*|"
+                      r"hoops?|hoopsters?|basketball\w*|dribbl\w*|slam dunk\w*|free throws?)\b", re.I)
 
 
 def on_foot(verdict: dict | None) -> dict | None:
-    """The look without any guess that people are running: such a "doing", "notice" or "line" is
+    """The look without any guess that people are running or playing ball: such a "doing", "notice" or "line" is
     left out (a plain hello is used instead), and so are sentences of the description that say it."""
     if not verdict:
         return verdict
@@ -676,10 +681,27 @@ def delivery(verdict: dict | None) -> str:
     return "" if text.lower() in ("", "none", "no", "false", "null", "n/a") else text
 
 
-def opening_line(verdict: dict | None) -> str:
-    """What the AI suggests Skelly says first, written about the people it saw ("" if nothing)."""
+def dogs(verdict: dict | None) -> int:
+    """How many dogs came with them (one when the AI only mentions a dog)."""
+    n = _count(verdict, "dogs")
+    if not n and DOG_WORDS.search(" ".join(str((verdict or {}).get(k) or "") for k in ("doing", "notice"))):
+        return 1
+    return n
+
+
+DOG_WORDS = re.compile(r"\b(?:dogs?|pupp(?:y|ies)|pups?|doggos?|leash)\b", re.I)
+
+
+def opening_line(verdict: dict | None, character: str = "skelly") -> str:
+    """What the AI suggests Skelly says first, written about the people it saw ("" if nothing).
+    With a dog along and no line of its own, a hello for the dog."""
     line = _text(verdict, "line", 220)
-    return line if len(line) > 8 else ""
+    if len(line) > 8:
+        return line
+    if dogs(verdict):
+        from .callouts import dog_hello
+        return dog_hello(character)
+    return ""
 
 
 def group(verdict: dict | None) -> str:
@@ -700,6 +722,8 @@ def tags(verdict: dict | None) -> list[str]:
         out.append(g.replace(" and ", ", "))
     if doing := _text(verdict, "doing", 40):
         out.append(doing[:1].upper() + doing[1:])
+    if (n := dogs(verdict)) and not DOG_WORDS.search(doing):
+        out.append("Dog" if n == 1 else f"{n} dogs")
     out += [f"Costume: {c}" for c in costume_names(verdict)[:2]]
     return out
 
@@ -715,6 +739,9 @@ def who_note(verdict: dict | None) -> str:
         parts.append(f"There are {g}; talk to all of them{kids}")
     if doing := _text(verdict, "doing", 60):
         parts.append(f"What they're doing: {doing}.")
+    if n := dogs(verdict):
+        parts.append(f"They have {'a dog' if n == 1 else f'{n} dogs'} with them: say hi to the "
+                     f"{'dog' if n == 1 else 'dogs'} too, and ask the dog's name. Owners love that.")
     return " ".join(parts)
 
 

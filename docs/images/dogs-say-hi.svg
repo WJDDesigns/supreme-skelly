@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 230" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="230" rx="18" fill="#111"/>
+  <text x="40" y="48" font-size="20" font-weight="700" fill="#f6f3ee">Dogs get a hello too</text>
+  <text x="40" y="74" font-size="13" fill="#a9a29a">A hoop on the driveway isn't a ball game, and a dog on a lead is the best part</text>
+  <g font-size="13" fill="#f6f3ee">
+    <text x="40" y="122" font-size="14" font-weight="700" fill="#a9a29a">BEFORE</text>
+    <rect x="140" y="100" width="300" height="36" rx="10" fill="#1c1c1f" stroke="#333"/>
+    <text x="290" y="123" text-anchor="middle">Family walking their dog past the hoop</text>
+    <rect x="460" y="100" width="400" height="36" rx="10" fill="#2a1414" stroke="#d24b4b"/>
+    <text x="660" y="123" text-anchor="middle">"Hey hoopsters! Is the kid winning?"</text>
+
+    <text x="40" y="192" font-size="14" font-weight="700" fill="#ff8c1a">NOW</text>
+    <rect x="140" y="170" width="300" height="36" rx="10" fill="#1c1c1f" stroke="#333"/>
+    <text x="290" y="193" text-anchor="middle">Family walking their dog past the hoop</text>
+    <rect x="460" y="170" width="400" height="36" rx="10" fill="#2a1d10" stroke="#ff8c1a"/>
+    <text x="660" y="193" text-anchor="middle">"Hi pup! Hi folks! What's this good dog's name?"</text>
+  </g>
+</svg>

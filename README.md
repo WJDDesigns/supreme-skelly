@@ -191,6 +191,13 @@ a happy Halloween (or offered candy) before the 31st.
 
 <img src="docs/images/walkers-not-runners.svg" alt="Before: a neighbor out for a walk was greeted as a runner. Now Skelly compliments something he can see instead." width="720">
 
+**Dogs get a hello too.** When someone walks by with a dog, Skelly says hi to the dog as well
+as its owner, and asks the dog's name. Sightings show a **Dog** chip. Things that are always in
+the picture, like a basketball hoop on the driveway, don't count as what people are doing, so
+a family walking past the hoop isn't greeted as a basketball team.
+
+<img src="docs/images/dogs-say-hi.svg" alt="Before: a family walking their dog past the hoop was called hoopsters. Now Skelly says hi to the dog and asks its name." width="720">
+
 Each sighting shows what made those visitors different:
 
 <img src="docs/images/sightings-tags.png" alt="Recent sightings with chips such as Delivery: UPS, 2 adults, 1 kid, Walking a dog and Costume: witch" width="720">

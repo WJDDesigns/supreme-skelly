@@ -98,3 +98,24 @@ def test_the_hello_knows_the_date():
     assert "1 day away" in vision_mod.today_note(datetime(2026, 10, 30, 12))
     assert vision_mod.today_note(datetime(2026, 10, 31, 12)).endswith("Halloween.")
     assert "isn't Halloween season" in vision_mod.today_note(datetime(2026, 3, 1, 12))
+
+
+def test_a_hoop_on_the_driveway_isnt_a_ball_game():
+    look = vision_mod.on_foot({"people": 2, "doing": "shooting hoops", "line": "Hey hoopsters, is the kid winning?",
+                               "description": "Two people walk a dog past a basketball hoop. They walk on."})
+    assert look["doing"] == look["line"] == ""
+    assert look["description"] == "They walk on."
+    assert "never say anyone is playing basketball" in vision_mod.SEE_PROMPT
+
+
+def test_dogs_get_a_hello_too():
+    look = {"people": 2, "dogs": 1, "adults": 2, "line": ""}
+    assert vision_mod.dogs(look) == 1 and vision_mod.dogs({"doing": "walking a puppy"}) == 1
+    assert vision_mod.dogs({"doing": "carrying a parcel"}) == 0
+    assert "Dog" in tags(look) and tags(FAMILY).count("Walking a dog") == 1 and "Dog" not in tags(FAMILY)
+    assert "say hi to the dog" in who_note(look)
+    from skelly.callouts import LINES
+
+    assert opening_line(look) in LINES["skelly"]["dog"]
+    assert opening_line(look, "santa") in LINES["santa"]["dog"]
+    assert opening_line({"people": 1}) == ""
