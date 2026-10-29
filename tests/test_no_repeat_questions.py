@@ -17,3 +17,12 @@ def test_reminder_lists_questions_already_asked():
 
 def test_chat_rules_forbid_repeating_questions():
     assert "never ask the same question twice" in CHAT_RULES
+
+
+def test_go_easy_on_puns():
+    from skelly.callouts import COSTUME, DOG, GREETINGS, NOTICE, PLAIN
+    from skelly.vision import PERSONAS
+
+    assert "Go easy on puns" in CHAT_RULES
+    assert "likes bone puns" not in PERSONAS["skelly"]
+    assert not [line for line in PLAIN + COSTUME + NOTICE + DOG + GREETINGS if "pun" in line or "bone to pick" in line]

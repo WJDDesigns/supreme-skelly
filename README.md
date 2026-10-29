@@ -26,7 +26,7 @@ visitors and calls people over as that character.
   <img src="docs/images/character-santa.png" alt="Ultra Santa" width="30%">
 </p>
 
-- **Skelly** (Ultra Skelly v2, Animated Skelly, 12 ft Skelly): a spooky, punny skeleton.
+- **Skelly** (Ultra Skelly v2, Animated Skelly, 12 ft Skelly): a spooky, funny skeleton (the odd pun, never as a hello).
 - **Lethal Lily**: a cackling witch who calls visitors "dearie". Her lantern glows in the drawing.
 - **Ultra Santa**: a jolly Santa who counts down to Christmas instead of Halloween.
 
