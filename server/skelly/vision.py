@@ -21,7 +21,7 @@ from pathlib import Path
 
 import httpx
 
-from . import usage
+from . import clock, usage
 
 log = logging.getLogger(__name__)
 
@@ -577,24 +577,59 @@ SEE_PROMPT = (
     '"Spider-Man", "princess", "zombie", "inflatable dinosaur"; empty if nobody is dressed up>], '
     '"notice": "<one friendly thing about a passer-by a skeleton could compliment to get their attention, '
     'as a short noun phrase that fits after the words love the, e.g. blue shirt, cute dog, red stroller, '
-    'running shoes, cool hat; only something you can clearly see on a real person in this picture, '
+    'cool hat; only something you can clearly see on a real person in this picture, '
     'empty if nobody is there or you aren\'t sure>", '
     '"adults": <number of grown-ups>, "kids": <number of children>, '
     '"delivery": "<if someone is a delivery driver (uniform, parcel, delivery van or food bag), the company '
     'when you can clearly tell, e.g. UPS, FedEx, USPS, Amazon, DHL, DoorDash, Uber Eats; delivery if you '
     'can\'t tell which; empty otherwise>", '
     '"doing": "<what they are doing in a few words, e.g. carrying a parcel, walking a dog, pushing a stroller, '
-    'holding a candy bucket, on the phone, jogging; empty if they are just walking>", '
+    'holding a candy bucket, on the phone; only what the picture plainly shows, empty if they are just '
+    'walking or you aren\'t sure>", '
     '"line": "<the first thing the character should say to them out loud: one short, fun, family-friendly '
     'sentence that is clearly about these people (how many there are, kids, a costume, what they are doing '
-    'or holding, a delivery); if they are walking past, call them over; never guess names or ages>", '
+    'or holding, a delivery); under 15 words, ending with one easy question they can answer from where they '
+    'are; no puns about bones or being dead; if they are walking past, call them over; never guess names or '
+    'ages>", '
     '"dark": <true if the picture is dim, grainy, dusk or black-and-white night vision, so colours '
     'can\'t be trusted>, '
     '"description": "<one short sentence about the people (or animals) a skeleton could joke about: '
     'costumes, clothes colours, pets, what they hold>"}. '
+    "One still picture can't show how fast anyone moves: treat everyone on foot as walking, and never "
+    "say or guess that someone is running, jogging, exercising or out for a run. "
     "Only name a colour when the picture is clearly lit and in colour; at dusk or night say "
-    '"running shorts", not "black running shorts".'
+    '"shorts", not "black shorts".'
 )
+
+def today_note(now=None) -> str:
+    """The date for "line", so nobody is wished a happy Halloween two days early."""
+    now = now or clock.now()
+    note = f"Today is {now:%A, %B} {now.day}"
+    if now.month == 10 and now.day == 31:
+        return note + ", Halloween."
+    days = (now.replace(year=now.year + (now.month > 10), month=10, day=31).date() - now.date()).days
+    return note + (f"; Halloween is {days} day{'s' * (days > 1)} away, so don't say it's Halloween or offer candy."
+                   if days <= 60 else "; it isn't Halloween season, so leave Halloween and candy out of it.")
+
+
+# A still frame can't tell a brisk walk from a jog, and calling a neighbour out for a stroll a
+# "runner" is the guess people notice. Anything about running is dropped from a look.
+EXERCISE = re.compile(r"\b(?:run|runs|running|runner|runners|jog|jogs|jogging|jogger|joggers|sprint\w*|"
+                      r"exercis\w*|work(?:ing)? ?out|workouts?|fitness|marathon\w*)\b", re.I)
+
+
+def on_foot(verdict: dict | None) -> dict | None:
+    """The look without any guess that people are running: such a "doing", "notice" or "line" is
+    left out (a plain hello is used instead), and so are sentences of the description that say it."""
+    if not verdict:
+        return verdict
+    for key in ("doing", "notice", "line"):
+        if EXERCISE.search(str(verdict.get(key) or "")):
+            verdict[key] = ""
+    text = str(verdict.get("description") or "")
+    if EXERCISE.search(text):
+        verdict["description"] = " ".join(s for s in re.split(r"(?<=[.!?])\s+", text) if not EXERCISE.search(s))
+    return verdict
 
 # Who writes "line" in SEE_PROMPT, per character (profiles.Profile.character)
 PERSONAS = {
@@ -778,10 +813,11 @@ async def describe(vault, jpeg: bytes, zones: list[list[float]] | None = None,
                    character: str = "skelly") -> dict | None:
     """Ask Claude (or OpenAI) whether people are in the frame and what they look like."""
     verdict = await _ask_vision(vault, await blackout(jpeg, zones or []),
-                                 SEE_PROMPT + f' Write "line" as {PERSONAS.get(character, PERSONAS["skelly"])}.')
+                                 SEE_PROMPT + f' Write "line" as {PERSONAS.get(character, PERSONAS["skelly"])}. '
+                                 + today_note())
     if verdict is not None and not verdict.get("dark") and await asyncio.to_thread(night_vision, jpeg):
         verdict["dark"] = True  # the model sometimes reads colours into a night-vision frame
-    return verdict
+    return on_foot(verdict)
 
 
 async def _ask_vision(vault, jpeg: bytes, prompt: str, *, precise: bool = False) -> dict | None:

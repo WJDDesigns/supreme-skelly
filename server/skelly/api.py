@@ -710,7 +710,7 @@ def create_app(
         vision.sighting("Heard someone talking to Skelly: chatting", source="Skelly's mic")
         vision.state.last_visitor_at = time.time()  # a camera seeing them now mustn't start a second chat
         ctx = ("Someone standing right by you just spoke to you, but you didn't catch what they said. "
-               "Answer them warmly and invite them to say it again.")
+               "Greet them warmly and ask something easy; don't ask them to repeat themselves.")
         try:
             await app.state.conv.start(context=ctx, opening=pardon(svc().profile.character),
                                        trigger="someone talked to Skelly (heard on his mic)",
@@ -725,8 +725,10 @@ def create_app(
         except Exception:
             log.exception("Couldn't log the chat")
         app.state.chat_seen = []
-        if conv.state.trigger and conv.state.trigger.startswith("someone talked") and not conv.state.answered:
-            # What the mic heard wasn't someone talking to him (wind, a car, the neighbours): rest the ears
+        if conv.state.trigger and not conv.state.answered:
+            # Nobody answered: what the mic heard wasn't someone talking to him (wind, a car, the
+            # neighbours), or whoever he greeted walked on. Rest the ears until a camera sees someone
+            # again, or the street's chatter starts a "Say that again!" chat after every passer-by.
             app.state.ears_paused_until = time.time() + ears.UNANSWERED_PAUSE_S
         await stop_recording(transcript)
 

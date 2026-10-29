@@ -117,3 +117,22 @@ def test_app_starts_a_chat_when_someone_talks(monkeypatch):
             time.sleep(0.1)
         assert started and "talked to Skelly" in started[0]["trigger"]
         assert state.vision.sightings[-1]["outcome"].startswith("Heard someone")
+
+
+def test_ears_rest_after_a_greeting_nobody_answered(monkeypatch):
+    """A passer-by who walked on mustn't leave the mic open for the street's chatter."""
+    from fastapi.testclient import TestClient
+
+    from skelly import api
+    from skelly.link import SimulatedLink
+
+    monkeypatch.setattr(api, "is_quiet", lambda *a: False)
+    with TestClient(api.create_app(SimulatedLink(), autoconnect=False)) as client:
+        state = client.app.state
+        state.conv.state.trigger, state.conv.state.answered = "someone walked up (Front camera)", False
+        client.portal.call(state.conv.on_ended, [{"role": "skelly", "text": "Hi!", "ts": time.time()}])
+        assert state.ears_paused_until > time.time() + 60
+        state.ears_paused_until = 0.0
+        state.conv.state.answered = True
+        client.portal.call(state.conv.on_ended, [{"role": "skelly", "text": "Hi!", "ts": time.time()}])
+        assert state.ears_paused_until == 0.0

@@ -74,3 +74,25 @@ def test_chats_are_logged_and_tips_reach_the_conversation():
         assert r["tips"][0]["by"] == "you"
         assert "dressed as" in state.conv.scene_context()
         assert c.post("/api/learning/review").status_code == 400  # no API key yet
+
+
+def test_a_cut_off_review_says_why(tmp_path, monkeypatch):
+    import asyncio
+
+    lr = Learning(tmp_path)
+    lr.log_chat(CHAT, "someone walked up")
+
+    async def fake_post(self, url, headers=None, json=None):
+        assert json["max_tokens"] >= 4000
+        return httpx.Response(200, request=httpx.Request("POST", url), json={
+            "model": "claude-sonnet-5-5", "stop_reason": "max_tokens", "usage": {},
+            "content": [{"type": "text", "text": '{"tips": ["Riddles keep kids'}]})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    vault = Vault(tmp_path / "vault.json")
+    vault.set("anthropic_api_key", "sk-test")
+    try:
+        asyncio.run(lr.review(vault))
+        raise AssertionError("expected a failure")
+    except ValueError as exc:
+        assert "max_tokens" in str(exc)

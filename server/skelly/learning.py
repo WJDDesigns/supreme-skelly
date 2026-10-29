@@ -42,7 +42,8 @@ Recent chats:
 Rewrite the tips list: keep tips that still hold, drop ones the chats show are wrong, and add new \
 ones the chats teach. Each tip is one short, concrete instruction for future chats (an opener that \
 worked, a question kids love, something to stop doing), at most 25 words. Never put visitors' names, \
-addresses or other personal details in a tip. Tips are followed in every reply, so never write one \
+addresses or other personal details in a tip. The camera can't tell a walker from a jogger, so \
+never call visitors joggers or runners in a tip. Tips are followed in every reply, so never write one \
 that makes every reply end on a question or repeats a question. At most {max_tips} tips, best first. Reply with JSON \
 only: {{"tips": ["...", "..."]}}"""
 
@@ -178,7 +179,7 @@ class Learning:
         async with httpx.AsyncClient(timeout=90) as http:
             r = await http.post("https://api.anthropic.com/v1/messages", headers={
                 "x-api-key": key, "anthropic-version": "2023-06-01"}, json={
-                "model": "claude-sonnet-5-5", "max_tokens": 1200,
+                "model": "claude-sonnet-5-5", "max_tokens": 4000,  # 1200 cut a long night's reply off mid-JSON
                 "messages": [{"role": "user", "content": prompt}]})
             r.raise_for_status()
             body = r.json()
@@ -187,7 +188,9 @@ class Learning:
                   tokens_out=u.get("output_tokens", 0))
         text = "".join(b.get("text", "") for b in body.get("content", []) if b.get("type") == "text")
         start, end = text.find("{"), text.rfind("}")
-        new = json.loads(text[start:end + 1]).get("tips", []) if start != -1 else []
+        if start == -1 or end < start:
+            raise ValueError(f"The review came back without a tips list (stop reason: {body.get('stop_reason')}).")
+        new = json.loads(text[start:end + 1]).get("tips", [])
         mine_text = {t["text"].lower() for t in mine}
         learned = [{"id": uuid.uuid4().hex[:10], "text": str(t).strip()[:200], "by": "skelly", "added": time.time()}
                    for t in new if str(t).strip() and str(t).strip().lower() not in mine_text][:MAX_TIPS]
