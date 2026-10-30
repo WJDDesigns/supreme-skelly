@@ -114,8 +114,25 @@ CHAT_RULES = (
     "never ask the same question twice in one chat. Not every reply needs a question. Go easy on puns: "
     "never in your first line, and at most one in a whole chat. Don't guess what visitors are up to, "
     "such as calling them runners or asking about their run or workout; only talk about it if they "
-    "tell you."
+    "tell you. Don't lean on catchphrases: mention your 300 years (or centuries, or how old you are) at "
+    "most once in a whole chat, and usually not at all, and never use the same compliment twice; find "
+    "something new and specific to say. Anyone who says they live here is family, not a neighbour or a "
+    "visitor: it's their house and their yard, you live there because of them, so never call them neighbour."
 )
+
+# Lines he wears out if nothing stops him, as (what to say in the reminder, how to spot it).
+CATCHPHRASES = [
+    ("anything about 300 years or centuries",
+     re.compile(r"\b(?:three hundred|300|hundreds? of|a few hundred)\b[ -]years?\b|\bcentur(?:y|ies)\b", re.I)),
+    ("\"spookiest\" or \"most terrifying\"", re.compile(r"\bspookiest\b|\bmost (?:terrifying|frightening)\b", re.I)),
+]
+
+# "I live here", "this is our house": the person is family, not a neighbour.
+LIVES_HERE = re.compile(
+    r"\b(?:i|we) live (?:here|in this house|in that house)\b|\b(?:this|it)(?:'s| is) (?:my|our) (?:house|home|yard)\b"
+    r"|\bi'?m (?:his|your) (?:owner|family)\b|\bwe own (?:you|this house)\b", re.I)
+FAMILY_NOTE = ("They just told you they live here: this is their house and they're your family. Talk to them "
+               "like the people you live with, never call them neighbour, and don't treat them like a visitor.")
 
 
 def question_in(said: str) -> str | None:
@@ -126,13 +143,21 @@ def question_in(said: str) -> str | None:
     return q or None
 
 
-def turn_reminder(rule: str, asked: list[str]) -> str:
+def catchphrases_in(said: str) -> list[str]:
+    """Which of the worn-out CATCHPHRASES one of Skelly's lines uses."""
+    return [name for name, spot in CATCHPHRASES if spot.search(said or "")]
+
+
+def turn_reminder(rule: str, asked: list[str], used: list[str] | None = None) -> str:
     """Sent before each of the agent's turns: the length rule fades as the chat grows, and so does
-    remembering which questions have had their answer."""
+    remembering which questions have had their answer and which catchphrases he's used up."""
     text = f"Reminder: {rule}"
     if asked:
         text += (" You've already asked: " + " | ".join(f'"{q}"' for q in asked[-4:])
                  + ". Don't ask any of those again; react to their answer and talk about something new.")
+    if used:
+        text += (" You've already said " + " and ".join(used)
+                 + " this chat. Don't say that again; use fresh words.")
     return text
 
 
@@ -271,9 +296,10 @@ def season_note(now=None, character: str = "skelly") -> str:
     halloween = now.replace(year=now.year + (now.month > 10), month=10, day=31).date()
     days = (halloween - now.date()).days
     return (f"{day} Halloween is {days} days away, so the people passing by are neighbours out for a walk, "
-            "or with their dog, not trick-or-treaters. Don't ask about candy, trick-or-treating or "
-            "costumes unless they're actually dressed up; compliment something you can see instead, like "
-            "their shirt, their dog or what they're doing.")
+            "or with their dog, not trick-or-treaters (anyone who says they live here is family, not a "
+            "neighbour). Don't ask about candy, trick-or-treating or costumes unless they're actually "
+            "dressed up; compliment something you can see instead, like their shirt, their dog or what "
+            "they're doing.")
 
 
 # What speech-to-text often "hears" in wind, traffic or a quiet yard.
@@ -828,6 +854,8 @@ class Conversation:
             self._set("listening")
             last_said = ""  # what Skelly was saying, for picking up after a false interruption
             asked: list[str] = []  # questions he's put to them this chat, so he moves on once answered
+            used: list[str] = []  # catchphrases he's said this chat, so he doesn't say them again
+            told_family = False
             cut_off: dict = {}  # {"at": time, "text": what he didn't get to say}
 
             async def resume_watch():
@@ -858,7 +886,7 @@ class Conversation:
                     await ws.send(json.dumps({"user_audio_chunk": base64.b64encode(pcm).decode()}))
 
             async def receive():
-                nonlocal out_rate, last_said
+                nonlocal out_rate, last_said, told_family
                 async for raw in ws:
                     msg = json.loads(raw)
                     kind = msg.get("type")
@@ -874,8 +902,10 @@ class Conversation:
                         self._say("skelly", last_said)
                         if (q := question_in(last_said)) and q.lower() not in (a.lower() for a in asked):
                             asked.append(q)
+                        used.extend(c for c in catchphrases_in(last_said) if c not in used)
                         # A reminder before every next turn; the rules fade as the chat grows.
-                        await ws.send(json.dumps({"type": "contextual_update", "text": turn_reminder(rule, asked)}))
+                        await ws.send(json.dumps({"type": "contextual_update",
+                                                  "text": turn_reminder(rule, asked, used)}))
                     elif kind == "agent_response_correction":
                         ev = msg.get("agent_response_correction_event", {})
                         said = ev.get("corrected_agent_response") or ""
@@ -889,6 +919,9 @@ class Conversation:
                         if len(heard.strip(" .…-")) >= 2:
                             cut_off.clear()  # they did say something; the agent answers that
                         self._say("user", heard)
+                        if not told_family and LIVES_HERE.search(heard):
+                            told_family = True
+                            await ws.send(json.dumps({"type": "contextual_update", "text": FAMILY_NOTE}))
                         self._set("thinking")
                     elif kind == "interruption":
                         await speaker.interrupt()
