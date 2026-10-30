@@ -8,6 +8,10 @@ him, change his eyes and lights, play sounds, have him **talk with visitors usin
 Works with the Skelly-family Bluetooth animatronics: Ultra Skelly v2, Animated Skelly,
 12 ft Skelly, Lethal Lily and Ultra Santa.
 
+Supreme Skelly is **free and open source** under the [MIT license](LICENSE): use it, change
+it, share it, build on it. Ideas, fixes and new features are welcome; see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 <p align="center">
   <img src="docs/images/controls.png" alt="The Controls page: a live drawing of Skelly and one-tap looks" width="72%">
   &nbsp;
@@ -403,7 +407,13 @@ Protocol knowledge builds on the community reverse engineering in
 models come from [OpenCV Zoo](https://github.com/opencv/opencv_zoo), the free local voice
 from [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx), the singer/band separation
 model from [Ultimate Vocal Remover](https://github.com/Anjok07/ultimatevocalremovergui), and
-song downloads use [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+song downloads use [yt-dlp](https://github.com/yt-dlp/yt-dlp). None of these are copied into
+this repository: they're installed or downloaded when you set Supreme Skelly up, under their
+own licenses.
 
-MIT licensed (see [LICENSE](LICENSE)). Not affiliated with Home Depot or the makers of any
-other Skelly app. Use at your own risk.
+Supreme Skelly is open source under the [MIT license](LICENSE). You're free to use, copy,
+modify, merge, publish, share, sublicense and even sell it, for any purpose; just keep the
+copyright notice and license text with it. It comes with no warranty. Want to help? Read
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+Not affiliated with Home Depot or the makers of any other Skelly app. Use at your own risk.
