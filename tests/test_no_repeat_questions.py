@@ -43,9 +43,17 @@ def test_catchphrases_are_spotted_and_retired():
 def test_people_who_live_here_are_family():
     from skelly.conversation import LIVES_HERE, season_note
 
-    for heard in ("I live here, Skelly!", "We live here.", "This is my house", "it's our house"):
+    for heard in ("I live here, Skelly!", "We live here.", "This is my house", "it's our house",
+                  "Skelly, I actually live here.", "I actually live in that house behind you.",
+                  "I wanna remind you, I am the owner of the house."):
         assert LIVES_HERE.search(heard), heard
     for heard in ("I live down the street", "Where do you live?", "Nice house"):
         assert not LIVES_HERE.search(heard), heard
     assert "never call them neighbour" in CHAT_RULES
     assert "live here is family" in season_note(__import__("datetime").datetime(2026, 10, 8, 19))
+
+
+def test_greeting_writer_skips_worn_openers():
+    from skelly.vision import SEE_PROMPT
+
+    assert "night owl" in SEE_PROMPT and 'don\'t start with "Hey there"' in SEE_PROMPT

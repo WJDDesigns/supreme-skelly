@@ -129,7 +129,8 @@ CATCHPHRASES = [
 
 # "I live here", "this is our house": the person is family, not a neighbour.
 LIVES_HERE = re.compile(
-    r"\b(?:i|we) live (?:here|in this house|in that house)\b|\b(?:this|it)(?:'s| is) (?:my|our) (?:house|home|yard)\b"
+    r"\b(?:i|we)(?: (?:actually|really|do|just))? live (?:here|in (?:this|that|the) house)\b"
+    r"|\b(?:this|it)(?:'s| is) (?:my|our) (?:house|home|yard)\b|\bowners? of (?:this|the) house\b"
     r"|\bi'?m (?:his|your) (?:owner|family)\b|\bwe own (?:you|this house)\b", re.I)
 FAMILY_NOTE = ("They just told you they live here: this is their house and they're your family. Talk to them "
                "like the people you live with, never call them neighbour, and don't treat them like a visitor.")
