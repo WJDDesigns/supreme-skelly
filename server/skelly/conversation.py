@@ -31,7 +31,7 @@ import httpx
 
 from . import clock, usage
 from .audio_io import ECHO_DELAY_S, FRAME_MS, Mic, Speaker, rms
-from .ears import VOICE_LEVEL, SpeechDetector
+from .ears import VOICE_LEVEL
 
 log = logging.getLogger(__name__)
 
@@ -259,20 +259,6 @@ def call_over_prompt(line: str) -> str:
             f"over and chat, in your own words, something like: \"{line}\" One short line only.")
 
 
-# Someone talked back from the street, but too far from the mic for the speech-to-text to make
-# words of it: Skelly answers anyway instead of standing there silent.
-HEARD_AFTER_S = 2.5  # this long after they stop, with no words from the speech-to-text
-HEARD_MAX = 2  # times per chat
-HEARD_GAP_S = 12.0
-
-
-def heard_no_words_prompt() -> str:
-    """Hidden nudge: someone nearby called out to Skelly but the words didn't come through."""
-    return (f"{RESUME_MARK} you could make out; someone nearby just called out to you, but they're too far "
-            "away for you to catch the words.) Answer them anyway in one short, warm line: say hello back "
-            "and invite them to come closer so you can hear them. Don't ask them to repeat themselves.")
-
-
 def resume_prompt(unsaid: str) -> str:
     return (f"{RESUME_MARK}; that was just a noise.) Carry on where you were cut off. Start with a quick "
             "\"As I was saying...\" or a playful variation, then finish your point in your own words. "
@@ -396,8 +382,6 @@ class Conversation:
         self._eleven_out_at: float | None = None  # when ElevenLabs last said it's out of credits
         self._voice_at = 0.0  # last time the open mic heard something as loud as someone talking
         self._loudest = 0.0  # loudest the open mic has been this chat, for the logs
-        self._talk_at = 0.0  # someone talking at the open mic (not a clap) that no words came from yet
-        self._talked_at = 0.0  # last time the open mic heard someone talking, words or not
         self.ended_at: float | None = None  # time.time() the last chat finished
 
     # -- public ---------------------------------------------------------------
@@ -474,10 +458,6 @@ class Conversation:
         self.state.level = 0.0
         self._publish()
         return self.snapshot()
-
-    def heard_talking_within(self, seconds: float) -> bool:
-        """Whether the open mic heard someone talking in the last `seconds` (words caught or not)."""
-        return bool(self._talked_at) and time.monotonic() - self._talked_at < seconds
 
     @property
     def quiet_for(self) -> float:
@@ -556,7 +536,6 @@ class Conversation:
         self.svc.bus.publish("transcript", entry)
         if role == "user" and said_something(text):  # not a cough or a mis-heard car going by
             self._last_heard = time.monotonic()
-            self._talk_at = 0.0  # the words came through; the AI answers those
             self.state.answered = True
             if self.on_user_text:
                 try:
@@ -573,7 +552,6 @@ class Conversation:
         mover: asyncio.Task | None = None
         self._last_heard = time.monotonic()
         self._voice_at, self._loudest = 0.0, 0.0
-        self._talk_at = self._talked_at = 0.0
         try:
             sink = cfg.speaker or await self._sink_for_skelly()
             self.output_sink = sink
@@ -719,26 +697,6 @@ class Conversation:
                 log.info("conversation idle for %ss; ending", cfg.idle_timeout_s)
                 return
 
-    async def _heard_watch(self, speaker: Speaker) -> None:
-        """Someone talked back but no words came through: nudge Skelly to answer them anyway.
-
-        Passers-by call out "hey!" from the street, well away from the mic. It's loud enough to
-        hear but too faint for the speech-to-text, so the AI never gets a turn and Skelly stands
-        there silent until the chat gives up. Only before anyone has been understood this chat.
-        """
-        sent, last = 0, 0.0
-        while True:  # never returns: the first task to finish ends the chat
-            await asyncio.sleep(0.5)
-            now = time.monotonic()
-            if (sent >= HEARD_MAX or not self._talk_at or self.state.answered or self._nudges is None
-                    or speaker.speaking or now - self._voice_at < HEARD_AFTER_S or now - last < HEARD_GAP_S):
-                continue
-            self._talk_at = 0.0
-            sent, last = sent + 1, now
-            log.info("heard someone talking but no words came through (loudest %.3f); answering anyway",
-                     self._loudest)
-            self._nudges.put_nowait(heard_no_words_prompt())
-
     async def _mic_frames(self, cfg: ConversationConfig, rate: int, speaker: Speaker) -> AsyncIterator[bytes]:
         """Mic chunks, with Skelly's own voice blanked out if asked, and the level published.
 
@@ -755,7 +713,6 @@ class Conversation:
         talk_started = 0.0
         hearing_self = False
         hist: deque = deque(maxlen=400)  # (time, mic level) for the last 8 s, to measure the echo delay
-        talking = SpeechDetector()  # someone talking at the open mic, not a clap or a car door
         # 0 = only shouting gets through, 100 = talking a bit louder than him does
         factor = 3.0 - 1.6 * (max(0, min(100, cfg.interrupt_sensitivity)) / 100)
         frame_s = FRAME_MS / 1000
@@ -765,9 +722,6 @@ class Conversation:
                 now = time.monotonic()
                 level = mic.level
                 was_hearing, hearing_self = hearing_self, speaker.echoing
-                if hearing_self and not was_hearing:
-                    talking.reset()
-                    self._talk_at = 0.0  # he's talking now: whatever came before has had its answer
                 if not hearing_self:
                     if was_hearing:
                         log.info("Skelly finished; mic open (his peak %.3f, mic now %.3f)", peak, level)
@@ -831,11 +785,6 @@ class Conversation:
                     self._loudest = max(self._loudest, level)
                     if level >= VOICE_LEVEL:
                         self._voice_at = now
-                    if talking.feed(level):
-                        talking.reset()
-                        self._talked_at = now
-                        if not self.state.answered:
-                            self._talk_at = self._talk_at or now
                 if now - last_pub > 0.15:
                     last_pub = now
                     self.svc.bus.publish("conversation_level", {"level": round(self.state.level, 3)})
@@ -986,7 +935,7 @@ class Conversation:
                         self._set("listening")
 
             try:
-                await _first_done(send_mic(), receive(), resume_watch(), send_nudges(), self._heard_watch(speaker),
+                await _first_done(send_mic(), receive(), resume_watch(), send_nudges(),
                                   self._idle_watch(cfg, speaker), self._speaking_watch(speaker))
             except ConnectionClosed as exc:
                 reason = exc.rcvd.reason if exc.rcvd else ""

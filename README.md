@@ -216,14 +216,6 @@ and asks something easy instead of asking them to say it again.
 
 <img src="docs/images/answer-when-spoken-to.svg" alt="Before: Skelly gave up after 15 seconds and ignored kids talking to him. Now he keeps listening and answers." width="720">
 
-People often call back from the street, too far from the mic for the speech-to-text to catch
-the words. Skelly still hears that someone is talking, so once they stop he answers anyway: he
-says hello back and invites them to come closer so he can hear them (at most twice a chat). And
-since someone was clearly there, the mic doesn't rest after that chat; it keeps listening for
-them.
-
-<img src="docs/images/heard-from-the-street.svg" alt="Before: a family on the street said Happy Halloween and Skelly stayed silent. Now he answers and invites them closer." width="720">
-
 **Special guests.** Want a big welcome for a neighbor or a friend? On the Vision page, press
 **Add from a photo** under **People Skelly knows** and pick a clear picture of their face (a
 profile picture works; add a few for better odds). Then press **Greeting** on their card and
