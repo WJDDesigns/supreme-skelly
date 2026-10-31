@@ -1,6 +1,6 @@
 [project]
 name = "supreme-skelly"
-version = "0.7.33"
+version = "0.7.34"
 description = "Headless controller for Skelly-family animatronics with a web UI"
 license = "MIT"
 requires-python = ">=3.11"
