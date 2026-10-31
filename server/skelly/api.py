@@ -725,7 +725,7 @@ def create_app(
         except Exception:
             log.exception("Couldn't log the chat")
         app.state.chat_seen = []
-        if conv.state.trigger and not conv.state.answered:
+        if conv.state.trigger and not conv.state.answered and not conv.heard_talking_within(ears.RECENT_S / 4):
             # Nobody answered: what the mic heard wasn't someone talking to him (wind, a car, the
             # neighbours), or whoever he greeted walked on. Rest the ears until a camera sees someone
             # again, or the street's chatter starts a "Say that again!" chat after every passer-by.
